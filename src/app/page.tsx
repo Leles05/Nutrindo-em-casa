@@ -29,7 +29,7 @@ export default function LoginPage() {
             priority 
           />
         </div>
-        <h1 className="text-2xl font-bold text-[#4C6C54] mt-2">Bem-vindo(a)!</h1>
+        <h1 className="text-3xl font-bold text-[#4C6C54] mt-2">Bem-vindo(a)!</h1>
       </div>
 
       {/* Card do Formulário */}
@@ -98,7 +98,7 @@ export default function LoginPage() {
           </div>
 
           <div className="flex justify-start">
-            <a href="#" className="text-sm font-medium text-[#2A546D] hover:opacity-80 transition-opacity">
+            <a href="/esqueci-senha" className="text-sm font-medium text-[#2A546D] hover:opacity-80 transition-opacity">
               Esqueci minha senha
             </a>
           </div>

@@ -79,15 +79,15 @@ export default function RedefinirSenhaPage() {
         ) : (
           <>
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-extrabold text-[#4C6C54] mb-3 tracking-tight">Criar nova senha</h2>
-              <p className="text-slate-600 text-base leading-relaxed px-2">
+              <h2 className="text-4xl font-extrabold text-[#4C6C54] mb-3 tracking-tight">Criar nova senha</h2>
+              <p className="text-slate-600 text-lg leading-relaxed px-2">
                 Sua nova senha deve ser forte e diferente das utilizadas anteriormente.
               </p>
             </div>
 
             <form onSubmit={handleSalvar} className="space-y-5">
               <div>
-                <label className="block text-base font-semibold text-[#4C6C54] mb-2">Nova Senha</label>
+                <label className="block text-lg font-semibold text-[#4C6C54] mb-2">Nova Senha</label>
                 <div className="relative">
                   <input
                     type={mostrarSenha1 ? "text" : "password"}
@@ -111,7 +111,7 @@ export default function RedefinirSenhaPage() {
 
                 {/* Feedback visual em tempo real da força da senha */}
                 <div className="mt-4 space-y-2">
-                  <p className="text-sm font-semibold text-slate-700">A senha precisa ter:</p>
+                  <p className="text-base font-semibold text-slate-700">A senha precisa ter:</p>
                   <ul className="text-sm space-y-1.5">
                     <li className={`flex items-center gap-2 ${temTamanho ? "text-[#4C6C54]" : "text-slate-400"}`}>
                       {temTamanho ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
@@ -130,7 +130,7 @@ export default function RedefinirSenhaPage() {
               </div>
 
               <div>
-                <label className="block text-base font-semibold text-[#4C6C54] mb-2 mt-2">Confirmar Senha</label>
+                <label className="block text-lg font-semibold text-[#4C6C54] mb-2 mt-2">Confirmar Senha</label>
                 <div className="relative">
                   <input
                     type={mostrarSenha2 ? "text" : "password"}
@@ -155,7 +155,7 @@ export default function RedefinirSenhaPage() {
                 </div>
                 
                 {erro && (
-                  <p className="text-red-500 text-sm font-medium mt-2 ml-1 animation-fade-in">
+                  <p className="text-red-500 text-base font-medium mt-2 ml-1 animation-fade-in">
                     {erro}
                   </p>
                 )}
@@ -163,7 +163,7 @@ export default function RedefinirSenhaPage() {
 
               <button
                 type="submit"
-                className="w-full h-12 flex items-center justify-center bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-colors shadow-sm mt-8 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 flex items-center justify-center bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-colors shadow-sm mt-8 text-xl disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!senhaValida} // Desativa o botão se a senha for fraca
               >
                 Salvar nova senha

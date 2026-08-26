@@ -22,10 +22,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Barra Lateral (Sidebar) - Foco em Desktop */}
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
         {/* Logo Menor no Topo */}
-        <div className="h-24 flex items-center justify-center border-b border-slate-100">
-          <div className="relative h-16 w-32">
-            <Image src="/logo-transparente.png" alt="Nutrindo em Casa" fill className="object-contain" priority />
-          </div>
+        <div className="h-24 flex items-center justify-center border-b border-slate-100 p-4">
+          <Link href="/dashboard" className="relative h-full w-full max-w-[140px] block hover:opacity-80 transition-opacity">
+            <Image 
+              src="/logo-transparente.png" 
+              alt="Nutrindo em Casa" 
+              fill 
+              className="object-contain" 
+              priority 
+            />
+          </Link>
         </div>
 
         {/* Menu de Navegação */}

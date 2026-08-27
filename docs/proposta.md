@@ -1,7 +1,7 @@
 # Proposta do Projeto: Nutrindo em casa
 
 ## 1. Nome da aplicação
-Nutrindo em casa (Nome provisório)
+Nutrindo em casa 
 
 ## 2. Descrição do problema que pretende resolver
 Pais de crianças com necessidades especiais (como TEA ou seletividade alimentar severa) chegam a gastar cerca de 3 mil reais por mês para manter acompanhamentos nutricionais presenciais contínuos. Esse alto custo financeiro afasta muitas famílias do tratamento adequado. Além disso, falta no mercado uma ferramenta unificada que vá além da consulta e eduque a família. Há uma carência de soluções acessíveis que centralizem o cuidado clínico e o ensino. O projeto visa preencher essa lacuna através de uma plataforma online econômica onde, após a entrada no programa, o usuário tem acesso centralizado ao seu prontuário, agendamento de consultas de alinhamento e trilhas de aprendizagem, capacitando os pais a cuidarem da alimentação de seus filhos com independência.

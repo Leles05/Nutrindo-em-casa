@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, Calendar as CalendarIcon, UserCircle } from "lucide-react";
+import { BookOpen, Calendar as CalendarIcon, UserCircle, Clock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardInicio() {
@@ -31,7 +31,7 @@ export default function DashboardInicio() {
           <p className="text-slate-500 mt-1 text-base">Aqui está o resumo da jornada do seu pequeno hoje.</p>
         </div>
         
-        {/* Ícone de Perfil / Conta no topo direito (Melhoria de UX) */}
+        {/* Ícone de Perfil / Conta no topo direito */}
         <button className="h-12 w-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#4C6C54] hover:border-[#4C6C54] transition-colors shadow-sm">
           <UserCircle className="h-7 w-7" />
         </button>
@@ -69,20 +69,75 @@ export default function DashboardInicio() {
             </div>
           </section>
 
-          {/* Área do Calendário Gigante (Placeholder) */}
-          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 min-h-[400px] hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-            <div className="flex items-center gap-3 mb-6">
-              <CalendarIcon className="h-5 w-5 text-[#2A546D]" />
-              <h3 className="text-xl font-bold text-slate-800">Seu Calendário</h3>
+          {/* Área do Calendário (Front-end com Dados Simulados/Mock) */}
+          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <CalendarIcon className="h-5 w-5 text-[#2A546D]" />
+                <h3 className="text-xl font-bold text-slate-800">Seu Calendário</h3>
+              </div>
+              {/* Botão visual de sincronização */}
+              <button className="text-xs font-semibold text-[#2A546D] bg-[#2A546D]/10 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-[#2A546D]/20 transition-colors">
+                <CheckCircle2 className="h-3 w-3" />
+                Sincronizado
+              </button>
             </div>
-            <div className="flex items-center justify-center h-64 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-              <p className="text-slate-400 font-medium text-center">
-                Visualização do Calendário entrará aqui.<br/>
-                <span className="text-sm font-normal">(Integração futura com Google Calendar)</span>
-              </p>
+            
+            {/* Lista de Eventos (Mock Data) */}
+            <div className="space-y-4">
+              
+              {/* Evento 1 - Hoje */}
+              <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group">
+                <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
+                  <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Ago</span>
+                  <span className="text-lg font-extrabold text-[#2A546D] group-hover:text-white">27</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 group-hover:text-[#2A546D] transition-colors">Consulta Nutricional (Retorno)</h4>
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" /> 
+                    14:00 - 15:00 • Google Meet
+                  </p>
+                </div>
+              </div>
+
+              {/* Evento 2 - Amanhã */}
+              <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group">
+                <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
+                  <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Ago</span>
+                  <span className="text-lg font-extrabold text-[#2A546D] group-hover:text-white">28</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 group-hover:text-[#2A546D] transition-colors">Introduzir nova fruta (Maçã)</h4>
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" /> 
+                    09:00 - Lembrete
+                  </p>
+                </div>
+              </div>
+
+              {/* Evento 3 - Futuro */}
+              <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group opacity-75">
+                <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
+                  <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Set</span>
+                  <span className="text-lg font-extrabold text-[#2A546D] group-hover:text-white">02</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 group-hover:text-[#2A546D] transition-colors">Mentoria ao vivo (Curso)</h4>
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" /> 
+                    19:00 - 20:30 • Zoom
+                  </p>
+                </div>
+              </div>
+
             </div>
+            
+            <button className="w-full mt-4 py-3 text-sm font-bold text-slate-500 hover:text-[#2A546D] hover:bg-slate-50 rounded-xl transition-colors">
+              Ver calendário completo
+            </button>
           </section>
-        </div>
+        </div> {/* <-- FECHAMENTO DA COLUNA DA ESQUERDA ARRUMADO AQUI */}
 
         {/* Coluna da Direita (Espaço reservado para o Diário/Mapa) */}
         <div className="col-span-1 space-y-8">

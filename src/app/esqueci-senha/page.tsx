@@ -60,6 +60,7 @@ export default function EsqueciSenhaPage() {
               <div>
                 <label className="block text-base font-semibold text-[#4C6C54] mb-2">Email</label>
                 <input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

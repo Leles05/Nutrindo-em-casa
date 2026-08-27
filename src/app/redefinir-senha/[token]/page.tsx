@@ -90,6 +90,7 @@ export default function RedefinirSenhaPage() {
                 <label className="block text-lg font-semibold text-[#4C6C54] mb-2">Nova Senha</label>
                 <div className="relative">
                   <input
+                    id="novaSenha"
                     type={mostrarSenha1 ? "text" : "password"}
                     value={novaSenha}
                     onChange={(e) => {
@@ -133,6 +134,7 @@ export default function RedefinirSenhaPage() {
                 <label className="block text-lg font-semibold text-[#4C6C54] mb-2 mt-2">Confirmar Senha</label>
                 <div className="relative">
                   <input
+                    id="confirmarSenha"
                     type={mostrarSenha2 ? "text" : "password"}
                     value={confirmarSenha}
                     onChange={(e) => {

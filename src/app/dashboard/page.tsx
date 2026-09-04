@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, Calendar as CalendarIcon, UserCircle, Clock, CheckCircle2 } from "lucide-react";
+import { BookOpen, Calendar as CalendarIcon, UserCircle, Clock, CheckCircle2, Apple, Droplet, Carrot, PlusCircle, Trophy } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardInicio() {
@@ -76,17 +76,14 @@ export default function DashboardInicio() {
                 <CalendarIcon className="h-5 w-5 text-[#2A546D]" />
                 <h3 className="text-xl font-bold text-slate-800">Seu Calendário</h3>
               </div>
-              {/* Botão visual de sincronização */}
               <button className="text-xs font-semibold text-[#2A546D] bg-[#2A546D]/10 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-[#2A546D]/20 transition-colors">
                 <CheckCircle2 className="h-3 w-3" />
                 Sincronizado
               </button>
             </div>
             
-            {/* Lista de Eventos (Mock Data) */}
             <div className="space-y-4">
               
-              {/* Evento 1 - Hoje */}
               <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group">
                 <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
                   <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Ago</span>
@@ -101,7 +98,6 @@ export default function DashboardInicio() {
                 </div>
               </div>
 
-              {/* Evento 2 - Amanhã */}
               <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group">
                 <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
                   <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Ago</span>
@@ -116,7 +112,6 @@ export default function DashboardInicio() {
                 </div>
               </div>
 
-              {/* Evento 3 - Futuro */}
               <div className="flex gap-4 items-start p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#2A546D]/30 transition-colors cursor-pointer group opacity-75">
                 <div className="flex flex-col items-center justify-center bg-white h-14 w-14 rounded-xl shadow-sm border border-slate-100 shrink-0 group-hover:bg-[#2A546D] group-hover:text-white transition-colors">
                   <span className="text-xs font-bold uppercase text-slate-400 group-hover:text-white/80">Set</span>
@@ -137,20 +132,21 @@ export default function DashboardInicio() {
               Ver calendário completo
             </button>
           </section>
-        </div> {/* <-- FECHAMENTO DA COLUNA DA ESQUERDA ARRUMADO AQUI */}
+        </div>
 
-        {/* Coluna da Direita (Espaço reservado para o Diário/Mapa) */}
+        {/* Coluna da Direita (Diário Alimentar e Registro Rápido) */}
         <div className="col-span-1 space-y-8">
           
-          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 h-full min-h-[600px] flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Diário Alimentar</h3>
-            <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl bg-[#F0EAE1]/30">
-              <p className="text-slate-400 font-medium text-center px-4">
-                O Mapa de Nutrição da criança entrará aqui futuramente.
-              </p>
+          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+            
+            {/* Cabeçalho do Diário */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">Diário Alimentar</h3>
+              <span className="text-xs font-bold text-[#4C6C54] bg-[#4C6C54]/10 px-3 py-1 rounded-full">
+                Hoje
+              </span>
             </div>
           </section>
-          
         </div>
       </div>
     </div>

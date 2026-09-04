@@ -7,28 +7,15 @@ export default function CursosPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 animation-fade-in pb-10">
       
-      {/* Cabeçalho do Curso */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
-        <div>
-          <Link href="/dashboard" className="text-sm font-semibold text-slate-400 hover:text-[#4C6C54] flex items-center gap-1 mb-2 transition-colors">
-            <ChevronLeft className="h-4 w-4" /> Voltar ao Início
-          </Link>
-          <h1 className="text-3xl font-extrabold text-[#4C6C54]">
-            Introdução Alimentar Descomplicada
-          </h1>
-          <p className="text-slate-500 mt-1 text-base">Módulo 1: Entendendo a Seletividade</p>
-        </div>
-
-        {/* Progresso Geral */}
-        <div className="bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm min-w-[200px]">
-          <div className="flex justify-between text-sm font-bold mb-2">
-            <span className="text-slate-600">Seu Progresso</span>
-            <span className="text-[#EB6D57]">30%</span>
-          </div>
-          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#EB6D57] rounded-full w-[30%]"></div>
-          </div>
-        </div>
+      {/* Cabeçalho do Curso Limpo */}
+      <header className="mb-6">
+        <Link href="/dashboard" className="text-sm font-semibold text-slate-400 hover:text-[#4C6C54] flex items-center gap-1 mb-3 transition-colors w-fit">
+          <ChevronLeft className="h-4 w-4" /> Voltar ao Início
+        </Link>
+        <h1 className="text-3xl font-extrabold text-[#4C6C54]">
+          Introdução Alimentar Descomplicada
+        </h1>
+        <p className="text-slate-500 mt-1 text-base">Módulo 1: Entendendo a Seletividade</p>
       </header>
 
       {/* Grid Principal: Player (Esquerda) + Playlist (Direita) */}
@@ -37,15 +24,13 @@ export default function CursosPage() {
         {/* COLUNA ESQUERDA: Player e Conteúdo da Aula */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Área do Player de Vídeo (Onde entrará o iframe do Vimeo/PandaVideo) */}
+          {/* Área do Player de Vídeo */}
           <div className="w-full aspect-video bg-slate-900 rounded-3xl overflow-hidden relative shadow-lg group">
-            {/* Mock Visual do Player para a Etapa 03 */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <button className="h-20 w-20 bg-[#EB6D57] rounded-full flex items-center justify-center text-white shadow-lg hover:scale-105 hover:bg-[#d55e49] transition-transform duration-300">
                 <PlayCircle className="h-10 w-10 ml-1" />
               </button>
             </div>
-            {/* Barra inferior falsa do player */}
             <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-black/80 to-transparent flex items-end px-4 pb-3">
               <div className="w-full h-1 bg-white/30 rounded-full overflow-hidden">
                 <div className="h-full bg-[#EB6D57] w-1/3"></div>
@@ -84,17 +69,29 @@ export default function CursosPage() {
           </div>
         </div>
 
-        {/* COLUNA DIREITA: Playlist / Módulos */}
+        {/* COLUNA DIREITA: Playlist / Módulos com Progresso Integrado */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden sticky top-24">
             
-            {/* Header da Playlist */}
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-              <h3 className="font-bold text-slate-800 text-lg">Conteúdo do Curso</h3>
-              <p className="text-sm text-slate-500 mt-1">12 aulas • 2h 40m</p>
+            {/* Header da Playlist + Progresso */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 space-y-4">
+              <div>
+                <h3 className="font-bold text-slate-800 text-lg">Conteúdo do Curso</h3>
+                <p className="text-sm text-slate-500 mt-1">12 aulas • 2h 40m</p>
+              </div>
+              
+              <div className="pt-2">
+                <div className="flex justify-between text-xs font-bold mb-2">
+                  <span className="text-slate-500 uppercase tracking-wider">Progresso Geral</span>
+                  <span className="text-[#EB6D57]">30%</span>
+                </div>
+                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#EB6D57] rounded-full w-[30%]"></div>
+                </div>
+              </div>
             </div>
 
-            {/* Lista de Módulos (Estilo Acordeão aberto) */}
+            {/* Lista de Módulos */}
             <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
               
               {/* Módulo 1 (Ativo) */}
@@ -106,8 +103,6 @@ export default function CursosPage() {
                 
                 {/* Aulas do Módulo 1 */}
                 <div className="bg-slate-50 flex flex-col">
-                  
-                  {/* Aula Assistida */}
                   <button className="flex items-start gap-3 p-4 hover:bg-slate-100 transition-colors text-left border-l-4 border-transparent">
                     <CheckCircle2 className="h-5 w-5 text-[#4C6C54] shrink-0 mt-0.5" />
                     <div>
@@ -116,7 +111,6 @@ export default function CursosPage() {
                     </div>
                   </button>
 
-                  {/* Aula Atual (Assistindo) */}
                   <button className="flex items-start gap-3 p-4 bg-white border-l-4 border-[#EB6D57] transition-colors text-left shadow-sm">
                     <PlayCircle className="h-5 w-5 text-[#EB6D57] shrink-0 mt-0.5" />
                     <div>
@@ -125,7 +119,6 @@ export default function CursosPage() {
                     </div>
                   </button>
 
-                  {/* Aula Pendente */}
                   <button className="flex items-start gap-3 p-4 hover:bg-slate-100 transition-colors text-left border-l-4 border-transparent group">
                     <div className="h-5 w-5 rounded-full border-2 border-slate-300 group-hover:border-[#4C6C54] shrink-0 mt-0.5"></div>
                     <div>
@@ -133,7 +126,6 @@ export default function CursosPage() {
                       <span className="block text-xs text-slate-400 mt-1">18:30</span>
                     </div>
                   </button>
-
                 </div>
               </div>
 

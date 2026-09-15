@@ -48,7 +48,6 @@ export default function AnamneseWizard() {
   const [sintomasAdversos, setSintomasAdversos] = useState("");
   const [sintomasAdversosDetalhes, setSintomasAdversosDetalhes] = useState("");
   
-  // Campos Numéricos Ajustados para aceitar vírgula
   const [pesoNascer, setPesoNascer] = useState("");
   const [pesoAtual, setPesoAtual] = useState("");
   const [alturaAtual, setAlturaAtual] = useState("");
@@ -71,16 +70,12 @@ export default function AnamneseWizard() {
   // ==========================================
   const [cereais, setCereais] = useState<string[]>([]);
   const [outroCerealTexto, setOutroCerealTexto] = useState("");
-  
   const [proteinas, setProteinas] = useState<string[]>([]);
   const [outroProteinaTexto, setOutroProteinaTexto] = useState("");
-  
   const [frutas, setFrutas] = useState<string[]>([]);
   const [outroFrutaTexto, setOutroFrutaTexto] = useState("");
-
   const [vegetais, setVegetais] = useState<string[]>([]);
   const [outroVegetalTexto, setOutroVegetalTexto] = useState("");
-  
   const [leguminosas, setLeguminosas] = useState<string[]>([]);
   const [outroLeguminosaTexto, setOutroLeguminosaTexto] = useState("");
 
@@ -88,12 +83,40 @@ export default function AnamneseWizard() {
   const [alimentosContados, setAlimentosContados] = useState(0);
 
   // ==========================================
+  // ESTADOS - ETAPA 4 (PERFIL SENSORIAL)
+  // ==========================================
+  const [comerFora, setComerFora] = useState("");
+  const [comerForaQual, setComerForaQual] = useState("");
+  const [exigeTodoDia, setExigeTodoDia] = useState("");
+  const [exigeTodoDiaQual, setExigeTodoDiaQual] = useState("");
+  const [sofrimentoFalta, setSofrimentoFalta] = useState("");
+  const [sofrimentoFaltaQual, setSofrimentoFaltaQual] = useState("");
+  const [influencias, setInfluencias] = useState<string[]>([]);
+  const [outraInfluenciaTexto, setOutraInfluenciaTexto] = useState("");
+  
+  const [mudancasMatriz, setMudancasMatriz] = useState({
+    marca: "",
+    preparo: "",
+    apresentacao: "",
+    encostando: "",
+    misturados: ""
+  });
+
+  const [comportamentoNovo, setComportamentoNovo] = useState<string[]>([]);
+  const [outroComportamentoNovoTexto, setOutroComportamentoNovoTexto] = useState("");
+  const [utensilios, setUtensilios] = useState<string[]>([]);
+  const [independencia, setIndependencia] = useState("");
+  const [dificuldadeMastigacao, setDificuldadeMastigacao] = useState<string[]>([]);
+  const [erroValidacaoEtapa4, setErroValidacaoEtapa4] = useState("");
+
+  const q38Ref = useRef<HTMLDivElement>(null);
+  const q41Ref = useRef<HTMLDivElement>(null);
+
+  // ==========================================
   // FUNÇÕES DE CONTROLE
   // ==========================================
 
-  // Função para lidar com números (aceitando vírgula ou ponto)
   const handleDecimalChange = (e: React.ChangeEvent<HTMLInputElement>, setter: React.Dispatch<React.SetStateAction<string>>) => {
-    // Permite apenas números, vírgula e ponto
     let valor = e.target.value.replace(/[^0-9.,]/g, '');
     setter(valor);
   };
@@ -106,13 +129,13 @@ export default function AnamneseWizard() {
     }
   }, [medicamentos]);
 
-  // Efeito do Auto-Cálculo de Alimentos
   useEffect(() => {
     const todosMarcados = [...cereais, ...proteinas, ...frutas, ...vegetais, ...leguminosas];
     const contagemBase = todosMarcados.filter(item => 
       !item.includes("Outros") && 
       !item.includes("Outras") && 
-      !item.includes("Nenhum") // Não conta a opção "Nenhum"
+      !item.includes("Nenhum") &&
+      !item.includes("Nenhuma")
     ).length;
     
     setAlimentosContados(contagemBase);
@@ -134,11 +157,24 @@ export default function AnamneseWizard() {
     }
   };
 
+  const handleInfluenciaToggle = (fator: string) => {
+    if (influencias.includes(fator)) {
+      setInfluencias(influencias.filter((i) => i !== fator));
+      if (fator === "Outro") setOutraInfluenciaTexto("");
+    } else {
+      if (influencias.length < 5) setInfluencias([...influencias, fator]);
+    }
+  };
+
+  const handleMatrizChange = (categoria: keyof typeof mudancasMatriz, valor: string) => {
+    setMudancasMatriz(prev => ({ ...prev, [categoria]: valor }));
+  };
+
   const handleCheckboxToggle = (
     valor: string, 
     estadoAtual: string[], 
     setEstado: React.Dispatch<React.SetStateAction<string[]>>,
-    exclusivos: string[] = ["Não", "Nenhum", "🚫 Nenhum", "Sem intercorrências", "Não sei informar", "Não sei"]
+    exclusivos: string[] = ["Não", "Nenhum", "🚫 Nenhum", "🚫 Nenhuma", "Sem intercorrências", "Não sei informar", "Não sei", "Não sei avaliar"]
   ) => {
     if (exclusivos.includes(valor)) {
       setEstado([valor]);
@@ -182,11 +218,28 @@ export default function AnamneseWizard() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validações obrigatórias para a Etapa 4
+    if (etapaAtual === 4) {
+      if (comportamentoNovo.length === 0) {
+        setErroValidacaoEtapa4("Por favor, selecione ao menos uma reação ao novo alimento (Pergunta 38).");
+        q38Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (dificuldadeMastigacao.length === 0) {
+        setErroValidacaoEtapa4("Por favor, selecione ao menos uma opção sobre mastigação e deglutição (Pergunta 41).");
+        q41Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
+    setErroValidacaoEtapa4("");
     if (etapaAtual < totalEtapas) setEtapaAtual(etapaAtual + 1);
     window.scrollTo(0, 0);
   };
 
   const voltarEtapa = () => {
+    setErroValidacaoEtapa4("");
     if (etapaAtual > 1) setEtapaAtual(etapaAtual - 1);
     window.scrollTo(0, 0);
   };
@@ -227,7 +280,7 @@ export default function AnamneseWizard() {
         <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-12 rounded-[2rem] shadow-sm border border-slate-100 space-y-12">
           
           {/* ================================================================ */}
-          {/* ETAPA 1 */}
+          {/* ETAPA 1 - CONHECENDO A CRIANÇA */}
           {/* ================================================================ */}
           {etapaAtual === 1 && (
             <div className="animation-fade-in space-y-12">
@@ -380,7 +433,6 @@ export default function AnamneseWizard() {
             </div>
           )}
 
-
           {/* ================================================================ */}
           {/* ETAPA 2 - HISTÓRICO DE SAÚDE */}
           {/* ================================================================ */}
@@ -426,7 +478,6 @@ export default function AnamneseWizard() {
                   </div>
                   <div>
                     <label className="block text-base font-bold text-slate-800 mb-3">13. Peso ao nascer (kg) <span className="text-red-500">*</span></label>
-                    {/* Campo de texto com inputMode para aceitar vírgula ou ponto no celular */}
                     <input 
                       type="text" 
                       inputMode="decimal" 
@@ -606,7 +657,6 @@ export default function AnamneseWizard() {
               </div>
 
               <div className="space-y-8 bg-slate-50/50 p-6 sm:p-8 rounded-3xl border border-slate-100">
-                
                 <div>
                   <h3 className="text-lg font-extrabold text-slate-800 mb-4 flex items-center gap-2">
                     23. Dados mais recentes da criança
@@ -759,9 +809,7 @@ export default function AnamneseWizard() {
                     </div>
                   )}
                 </div>
-
               </div>
-
             </div>
           )}
 
@@ -898,17 +946,387 @@ export default function AnamneseWizard() {
                   ))}
                 </div>
               </div>
-
             </div>
           )}
 
+          {/* ================================================================ */}
+          {/* ETAPA 4 - PERFIL SENSORIAL */}
+          {/* ================================================================ */}
+          {etapaAtual === 4 && (
+            <div className="animation-fade-in space-y-12">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center h-16 w-16 bg-[#EB6D57]/10 rounded-2xl mb-4">
+                  <span className="text-3xl">👃</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-[#EB6D57] mb-3">Perfil Sensorial</h1>
+                <p className="text-slate-500 text-lg">Comportamentos de apego, flexibilidade, texturas e mastigação.</p>
+              </div>
 
-          {/* Rodapé de Navegação Comum */}
+              {/* ALERTA DE VALIDAÇÃO GERAL DA ETAPA 4 */}
+              {erroValidacaoEtapa4 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{erroValidacaoEtapa4}</span>
+                </div>
+              )}
+
+              {/* BLOCO 1: COMPORTAMENTO E APEGO */}
+              <div className="space-y-8 bg-slate-50/50 p-6 sm:p-8 rounded-3xl border border-slate-100">
+                <div>
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    33. Existe algum alimento que ele(a) aceita comer apenas fora de casa? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-4 h-14">
+                    {["Não", "Sim"].map(opcao => (
+                      <label key={opcao} className="flex-1 flex items-center justify-center gap-2 border border-slate-200 bg-white rounded-2xl cursor-pointer has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] transition-all">
+                        <input type="radio" name="comerFora" value={opcao} onChange={(e) => setComerFora(e.target.value)} className="sr-only" required />
+                        <span className="font-semibold text-slate-700">{opcao}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {comerFora === "Sim" && (
+                    <div className="animation-fade-in mt-4">
+                      <input type="text" value={comerForaQual} onChange={(e) => setComerForaQual(e.target.value)} placeholder="Quais alimentos aceita apenas fora?" className="w-full h-14 px-5 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" required />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6 border-t border-slate-200/60">
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    34. Existe algum alimento que ela exige ou precisa comer todos os dias? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-4 h-14">
+                    {["Não", "Sim"].map(opcao => (
+                      <label key={opcao} className="flex-1 flex items-center justify-center gap-2 border border-slate-200 bg-white rounded-2xl cursor-pointer has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] transition-all">
+                        <input type="radio" name="exigeTodoDia" value={opcao} onChange={(e) => setExigeTodoDia(e.target.value)} className="sr-only" required />
+                        <span className="font-semibold text-slate-700">{opcao}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {exigeTodoDia === "Sim" && (
+                    <div className="animation-fade-in mt-4">
+                      <input type="text" value={exigeTodoDiaQual} onChange={(e) => setExigeTodoDiaQual(e.target.value)} placeholder="Quais alimentos ela exige diariamente?" className="w-full h-14 px-5 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" required />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6 border-t border-slate-200/60">
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    35. Existe algum alimento que, se não estiver disponível, gera grande sofrimento? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-4 h-14">
+                    {["Não", "Sim"].map(opcao => (
+                      <label key={opcao} className="flex-1 flex items-center justify-center gap-2 border border-slate-200 bg-white rounded-2xl cursor-pointer has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] transition-all">
+                        <input type="radio" name="sofrimentoFalta" value={opcao} onChange={(e) => setSofrimentoFalta(e.target.value)} className="sr-only" required />
+                        <span className="font-semibold text-slate-700">{opcao}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {sofrimentoFalta === "Sim" && (
+                    <div className="animation-fade-in mt-4">
+                      <input type="text" value={sofrimentoFaltaQual} onChange={(e) => setSofrimentoFaltaQual(e.target.value)} placeholder="Quais alimentos geram esse sofrimento?" className="w-full h-14 px-5 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" required />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 2: FATORES SENSORIAIS */}
+              <div>
+                <div className="mb-4">
+                  <label className="block text-base font-bold text-slate-800 mb-1">
+                    36. O que mais influencia a aceitação de um alimento? <span className="text-red-500">*</span>
+                  </label>
+                  <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full transition-all ${influencias.length === 5 ? 'bg-amber-100 text-amber-800 font-extrabold' : 'bg-[#EB6D57]/10 text-[#EB6D57]'}`}>
+                    Escolha até 5 opções ({influencias.length}/5)
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
+                    "Textura", "Cor", "Aparência", "Cheiro", "Temperatura", 
+                    "Formato", "Marca", "Embalagem", "Sabor", "Crocância", 
+                    "Forma de preparo", "Alimento separado", "Familiaridade"
+                  ].map((fator) => (
+                    <label key={fator} className={`flex items-start p-4 rounded-2xl border cursor-pointer transition-all ${influencias.includes(fator) ? 'border-[#EB6D57] bg-[#EB6D57]/5 shadow-sm' : 'border-slate-200 hover:border-slate-300'} ${!influencias.includes(fator) && influencias.length >= 5 ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input 
+                        type="checkbox" 
+                        checked={influencias.includes(fator)} 
+                        onChange={() => handleInfluenciaToggle(fator)} 
+                        disabled={!influencias.includes(fator) && influencias.length >= 5} 
+                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
+                      />
+                      <span className="text-sm font-medium text-slate-700 leading-tight">{fator}</span>
+                    </label>
+                  ))}
+                  
+                  <div className={`flex flex-col p-4 rounded-2xl border transition-all sm:col-span-2 md:col-span-3 ${influencias.includes("Outro") ? 'border-[#EB6D57] bg-[#EB6D57]/5 shadow-sm' : 'border-slate-200'}`}>
+                    <label className={`flex items-center cursor-pointer ${!influencias.includes("Outro") && influencias.length >= 5 ? 'opacity-40' : ''}`}>
+                      <input 
+                        type="checkbox" 
+                        checked={influencias.includes("Outro")} 
+                        onChange={() => handleInfluenciaToggle("Outro")} 
+                        disabled={!influencias.includes("Outro") && influencias.length >= 5} 
+                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mr-3 focus:ring-[#EB6D57]" 
+                      />
+                      <span className="text-sm font-bold text-slate-700">Outro fator</span>
+                    </label>
+                    {influencias.includes("Outro") && (
+                      <input 
+                        type="text" 
+                        value={outraInfluenciaTexto} 
+                        onChange={(e) => setOutraInfluenciaTexto(e.target.value)} 
+                        placeholder="Especifique qual outro fator influencia..." 
+                        className="w-full mt-3 h-12 px-4 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#EB6D57] text-sm" 
+                        required 
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCO 3: MATRIZ DE FLEXIBILIDADE */}
+              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-6 sm:p-8 bg-slate-50 border-b border-slate-200">
+                  <label className="block text-lg font-bold text-slate-800">
+                    37. A criança aceita o mesmo alimento quando há pequenas mudanças? <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-slate-500 text-sm mt-1">Marque a reação dela para cada situação abaixo:</p>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {[
+                    { key: "marca", label: "Quando é de outra marca" },
+                    { key: "preparo", label: "Com outra forma de preparo" },
+                    { key: "apresentacao", label: "Com outra apresentação" },
+                    { key: "encostando", label: "Com os alimentos encostando uns nos outros" },
+                    { key: "misturados", label: "Com os alimentos misturados" }
+                  ].map((linha) => (
+                    <div key={linha.key} className="p-6 sm:px-8 sm:py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <span className="font-semibold text-slate-700 text-base">{linha.label}</span>
+                      <div className="flex gap-2">
+                        {["Sim", "Às vezes", "Não"].map(opcao => (
+                          <label key={`${linha.key}-${opcao}`} className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57] has-[:checked]:text-white">
+                            <input 
+                              type="radio" 
+                              name={`mudancasMatriz_${linha.key}`} 
+                              value={opcao} 
+                              onChange={() => handleMatrizChange(linha.key as keyof typeof mudancasMatriz, opcao)} 
+                              className="sr-only" 
+                              required 
+                            />
+                            <span className="font-bold text-sm whitespace-nowrap">{opcao}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* BLOCO 4: REAÇÃO AO NOVO (OBRIGATÓRIA) */}
+              <div 
+                ref={q38Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa4 && comportamentoNovo.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    38. Quando um alimento novo aparece, o que ela costuma fazer? <span className="text-red-500">*</span>
+                  </label>
+                  {erroValidacaoEtapa4 && comportamentoNovo.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    "Aceita normalmente", "Observa, mas não come", "Não aceita no prato", 
+                    "Não aceita próximo", "Não aceita tocar", "Não aceita cheirar", 
+                    "Tem ânsia/nojo", "Foge/chora"
+                  ].map((acao) => (
+                    <label key={acao} className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                      <input 
+                        type="checkbox" 
+                        checked={comportamentoNovo.includes(acao)} 
+                        onChange={() => {
+                          handleCheckboxToggle(acao, comportamentoNovo, setComportamentoNovo);
+                          setErroValidacaoEtapa4("");
+                        }} 
+                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
+                      />
+                      <span className="text-sm font-semibold text-slate-700">{acao}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <label className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={comportamentoNovo.includes("Outro")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outro", comportamentoNovo, setComportamentoNovo);
+                        setErroValidacaoEtapa4("");
+                      }} 
+                      className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outro comportamento</span>
+                  </label>
+                  {comportamentoNovo.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroComportamentoNovoTexto} 
+                        onChange={(e) => setOutroComportamentoNovoTexto(e.target.value)} 
+                        placeholder="Descreva o que a criança costuma fazer..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 5: HABILIDADES, UTENSÍLIOS E MASTIGAÇÃO */}
+              <div className="space-y-8 bg-slate-50/50 p-6 sm:p-8 rounded-3xl border border-slate-100">
+                <div>
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    39. Como ela costuma comer? (Pode marcar mais de um)
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { nome: "Mãos", icone: "🖐️", especial: false },
+                      { nome: "Colher", icone: "🥄", especial: false },
+                      { nome: "Garfo", icone: "🍴", especial: false },
+                      { nome: "Faca infantil", icone: "🔪", especial: false },
+                      { nome: "Copo", icone: "🥛", especial: false },
+                      { nome: "Canudo", icone: "🥤", especial: false },
+                      { nome: "Só come com auxílio de responsáveis", icone: "🤲", especial: true }
+                    ].map((item) => (
+                      <label 
+                        key={item.nome} 
+                        className={`flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 ${
+                          item.especial ? 'col-span-2 sm:col-span-3 border-dashed border-slate-300' : ''
+                        }`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={utensilios.includes(item.nome)} 
+                          onChange={() => handleCheckboxToggle(item.nome, utensilios, setUtensilios)} 
+                          className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                        />
+                        <span className="text-sm font-semibold text-slate-700 truncate">
+                          {item.icone} {item.nome}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-200/60">
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    40. Ele(a) se alimenta de forma... <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      "Independente", 
+                      "Precisa de ajuda parcial", 
+                      "Precisa de ajuda frequente", 
+                      "Precisa de ajuda total"
+                    ].map((opcao) => (
+                      <label key={opcao} className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                        <input 
+                          type="radio" 
+                          name="independencia" 
+                          value={opcao} 
+                          onChange={(e) => setIndependencia(e.target.value)} 
+                          className="sr-only" 
+                          required 
+                        />
+                        <span className="text-sm font-semibold text-slate-700">{opcao}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div 
+                  ref={q41Ref}
+                  className={`pt-6 border-t rounded-2xl transition-all p-4 ${
+                    erroValidacaoEtapa4 && dificuldadeMastigacao.length === 0 
+                      ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                      : 'border-slate-200/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-base font-bold text-slate-800">
+                      41. Você percebe alguma dificuldade de mastigação ou para engolir? <span className="text-red-500">*</span>
+                    </label>
+                    {erroValidacaoEtapa4 && dificuldadeMastigacao.length === 0 && (
+                      <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md">
+                        Campo obrigatório
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      "Não", 
+                      "Mastiga pouco", 
+                      "Engole rapidamente", 
+                      "Guarda comida na boca", 
+                      "Tosse durante/após comer ou beber", 
+                      "Engasga", 
+                      "Parece ter dificuldade para engolir", 
+                      "Não sei avaliar"
+                    ].map((opt) => (
+                      <label key={opt} className={`flex items-start p-4 rounded-2xl border bg-white shadow-sm cursor-pointer transition-all hover:border-[#EB6D57]/30 has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 ${opt === "Não" || opt === "Não sei avaliar" ? 'font-bold' : ''}`}>
+                        <input 
+                          type="checkbox" 
+                          checked={dificuldadeMastigacao.includes(opt)} 
+                          onChange={() => {
+                            handleCheckboxToggle(opt, dificuldadeMastigacao, setDificuldadeMastigacao, ["Não", "Não sei avaliar"]);
+                            setErroValidacaoEtapa4("");
+                          }} 
+                          className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
+                        />
+                        <span className="text-sm font-medium text-slate-700 leading-tight">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* PLACEHOLDER PARA ETAPAS 5 A 8 */}
+          {/* ================================================================ */}
+          {etapaAtual > 4 && (
+            <div className="animation-fade-in text-center py-20">
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">
+                Etapa {etapaAtual}: {titulosEtapas[etapaAtual - 1]}
+              </h2>
+              <p className="text-slate-500">Aguardando a implementação da próxima etapa.</p>
+            </div>
+          )}
+
+          {/* RODAPÉ DE NAVEGAÇÃO */}
           <div className="flex items-center justify-between mt-12 pt-8 border-t border-slate-100">
-            <button type="button" onClick={voltarEtapa} disabled={etapaAtual === 1} className="flex items-center gap-2 px-6 py-4 font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+            <button 
+              type="button" 
+              onClick={voltarEtapa} 
+              disabled={etapaAtual === 1} 
+              className="flex items-center gap-2 px-6 py-4 font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
               <ChevronLeft className="h-5 w-5" /> Voltar
             </button>
-            <button type="submit" className="flex items-center gap-2 px-8 py-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-all shadow-md hover:shadow-lg hover:scale-105">
+            <button 
+              type="submit" 
+              className="flex items-center gap-2 px-8 py-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-all shadow-md hover:shadow-lg hover:scale-105"
+            >
               {etapaAtual === totalEtapas ? "Finalizar" : "Próximo Passo"} <ChevronRight className="h-5 w-5" />
             </button>
           </div>

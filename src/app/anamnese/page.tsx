@@ -113,6 +113,31 @@ export default function AnamneseWizard() {
   const q41Ref = useRef<HTMLDivElement>(null);
 
   // ==========================================
+  // ESTADOS - ETAPA 5 (ROTINA DAS REFEIÇÕES)
+  // ==========================================
+  const [horarios, setHorarios] = useState({
+    cafe: { horario: "", naoFaz: false },
+    lancheManha: { horario: "", naoFaz: false },
+    almoco: { horario: "", naoFaz: false },
+    lancheTarde: { horario: "", naoFaz: false },
+    jantar: { horario: "", naoFaz: false },
+    ceia: { horario: "", naoFaz: false }
+  });
+
+  const [locaisRefeicao, setLocaisRefeicao] = useState<string[]>([]);
+  const [outroLocalRefeicaoTexto, setOutroLocalRefeicaoTexto] = useState("");
+
+  const [usoTelas, setUsoTelas] = useState("");
+  const [reacaoSemTela, setReacaoSemTela] = useState<string[]>([]);
+  const [outraReacaoSemTelaTexto, setOutraReacaoSemTelaTexto] = useState("");
+  const [erroValidacaoEtapa5, setErroValidacaoEtapa5] = useState("");
+  const [refeicoesIncompletas, setRefeicoesIncompletas] = useState<string[]>([]);
+
+  const q42Ref = useRef<HTMLDivElement>(null);
+  const q43Ref = useRef<HTMLDivElement>(null);
+  const q44Ref = useRef<HTMLDivElement>(null);
+
+  // ==========================================
   // FUNÇÕES DE CONTROLE
   // ==========================================
 
@@ -188,6 +213,27 @@ export default function AnamneseWizard() {
     }
   };
 
+  const handleHorarioChange = (refeicao: keyof typeof horarios, valor: string) => {
+    setHorarios(prev => ({
+      ...prev,
+      [refeicao]: { ...prev[refeicao], horario: valor }
+    }));
+    setRefeicoesIncompletas(prev => prev.filter(item => item !== refeicao));
+    if (erroValidacaoEtapa5.includes("42")) setErroValidacaoEtapa5("");
+  };
+
+  const handleNaoFazToggle = (refeicao: keyof typeof horarios) => {
+    setHorarios(prev => ({
+      ...prev,
+      [refeicao]: { 
+        horario: !prev[refeicao].naoFaz ? "" : prev[refeicao].horario,
+        naoFaz: !prev[refeicao].naoFaz 
+      }
+    }));
+    setRefeicoesIncompletas(prev => prev.filter(item => item !== refeicao));
+    if (erroValidacaoEtapa5.includes("42")) setErroValidacaoEtapa5("");
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErroExame("");
     if (e.target.files && e.target.files.length > 0) {
@@ -219,7 +265,7 @@ export default function AnamneseWizard() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validações obrigatórias para a Etapa 4
+    // Validações da Etapa 4
     if (etapaAtual === 4) {
       if (comportamentoNovo.length === 0) {
         setErroValidacaoEtapa4("Por favor, selecione ao menos uma reação ao novo alimento (Pergunta 38).");
@@ -231,15 +277,49 @@ export default function AnamneseWizard() {
         q41Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
+      setErroValidacaoEtapa4("");
     }
 
-    setErroValidacaoEtapa4("");
+    // Validações da Etapa 5
+    if (etapaAtual === 5) {
+      const faltantes: string[] = [];
+      (Object.keys(horarios) as Array<keyof typeof horarios>).forEach((refKey) => {
+        const refData = horarios[refKey];
+        if (!refData.horario && !refData.naoFaz) {
+          faltantes.push(refKey);
+        }
+      });
+
+      if (faltantes.length > 0) {
+        setRefeicoesIncompletas(faltantes);
+        setErroValidacaoEtapa5("Por favor, defina o horário ou marque 'Não costuma fazer' em todas as refeições (Pergunta 42).");
+        q42Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      if (locaisRefeicao.length === 0) {
+        setErroValidacaoEtapa5("Por favor, selecione onde a criança geralmente realiza as refeições (Pergunta 43).");
+        q43Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      if (usoTelas && usoTelas !== "Nunca" && reacaoSemTela.length === 0) {
+        setErroValidacaoEtapa5("Por favor, informe o que acontece quando a tela é retirada (Pergunta 44).");
+        q44Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      setErroValidacaoEtapa5("");
+      setRefeicoesIncompletas([]);
+    }
+
     if (etapaAtual < totalEtapas) setEtapaAtual(etapaAtual + 1);
     window.scrollTo(0, 0);
   };
 
   const voltarEtapa = () => {
     setErroValidacaoEtapa4("");
+    setErroValidacaoEtapa5("");
     if (etapaAtual > 1) setEtapaAtual(etapaAtual - 1);
     window.scrollTo(0, 0);
   };
@@ -962,7 +1042,6 @@ export default function AnamneseWizard() {
                 <p className="text-slate-500 text-lg">Comportamentos de apego, flexibilidade, texturas e mastigação.</p>
               </div>
 
-              {/* ALERTA DE VALIDAÇÃO GERAL DA ETAPA 4 */}
               {erroValidacaoEtapa4 && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
                   <AlertCircle className="h-5 w-5 shrink-0" />
@@ -1052,7 +1131,7 @@ export default function AnamneseWizard() {
                         checked={influencias.includes(fator)} 
                         onChange={() => handleInfluenciaToggle(fator)} 
                         disabled={!influencias.includes(fator) && influencias.length >= 5} 
-                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
                       />
                       <span className="text-sm font-medium text-slate-700 leading-tight">{fator}</span>
                     </label>
@@ -1065,7 +1144,7 @@ export default function AnamneseWizard() {
                         checked={influencias.includes("Outro")} 
                         onChange={() => handleInfluenciaToggle("Outro")} 
                         disabled={!influencias.includes("Outro") && influencias.length >= 5} 
-                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mr-3 focus:ring-[#EB6D57]" 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 mr-3 focus:ring-[#EB6D57]" 
                       />
                       <span className="text-sm font-bold text-slate-700">Outro fator</span>
                     </label>
@@ -1122,7 +1201,7 @@ export default function AnamneseWizard() {
                 </div>
               </div>
 
-              {/* BLOCO 4: REAÇÃO AO NOVO (OBRIGATÓRIA) */}
+              {/* BLOCO 4: REAÇÃO AO NOVO */}
               <div 
                 ref={q38Ref}
                 className={`p-6 sm:p-8 rounded-3xl border transition-all ${
@@ -1156,7 +1235,7 @@ export default function AnamneseWizard() {
                           handleCheckboxToggle(acao, comportamentoNovo, setComportamentoNovo);
                           setErroValidacaoEtapa4("");
                         }} 
-                        className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
                       />
                       <span className="text-sm font-semibold text-slate-700">{acao}</span>
                     </label>
@@ -1171,7 +1250,7 @@ export default function AnamneseWizard() {
                         handleCheckboxToggle("Outro", comportamentoNovo, setComportamentoNovo);
                         setErroValidacaoEtapa4("");
                       }} 
-                      className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
+                      className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" 
                     />
                     <span className="text-sm font-semibold text-slate-700">Outro comportamento</span>
                   </label>
@@ -1216,7 +1295,7 @@ export default function AnamneseWizard() {
                           type="checkbox" 
                           checked={utensilios.includes(item.nome)} 
                           onChange={() => handleCheckboxToggle(item.nome, utensilios, setUtensilios)} 
-                          className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                          className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
                         />
                         <span className="text-sm font-semibold text-slate-700 truncate">
                           {item.icone} {item.nome}
@@ -1262,10 +1341,10 @@ export default function AnamneseWizard() {
                 >
                   <div className="flex items-center justify-between mb-4">
                     <label className="block text-base font-bold text-slate-800">
-                      41. Você percebe alguma dificuldade de mastigação ou para engolir? <span className="text-red-500">*</span>
+                      41. Você percebe alguma dificuldade de mastigação ou para engolir?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
                     </label>
                     {erroValidacaoEtapa4 && dificuldadeMastigacao.length === 0 && (
-                      <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md">
+                      <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
                         Campo obrigatório
                       </span>
                     )}
@@ -1290,7 +1369,7 @@ export default function AnamneseWizard() {
                             handleCheckboxToggle(opt, dificuldadeMastigacao, setDificuldadeMastigacao, ["Não", "Não sei avaliar"]);
                             setErroValidacaoEtapa4("");
                           }} 
-                          className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
+                          className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#EB6D57]" 
                         />
                         <span className="text-sm font-medium text-slate-700 leading-tight">{opt}</span>
                       </label>
@@ -1302,9 +1381,299 @@ export default function AnamneseWizard() {
           )}
 
           {/* ================================================================ */}
-          {/* PLACEHOLDER PARA ETAPAS 5 A 8 */}
+          {/* ETAPA 5 - ROTINA DAS REFEIÇÕES */}
           {/* ================================================================ */}
-          {etapaAtual > 4 && (
+          {etapaAtual === 5 && (
+            <div className="animation-fade-in space-y-12">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center h-16 w-16 bg-[#4C6C54]/10 rounded-2xl mb-4">
+                  <span className="text-3xl">⏰</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-[#4C6C54] mb-3">Rotina das Refeições</h1>
+                <p className="text-slate-500 text-lg">Horários diários, ambientes de refeição e uso de telas.</p>
+              </div>
+
+              {erroValidacaoEtapa5 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{erroValidacaoEtapa5}</span>
+                </div>
+              )}
+
+              {/* BLOCO 1: HORÁRIOS DA ROTINA (Q42 - OBRIGATÓRIA) */}
+              <div 
+                ref={q42Ref}
+                className={`space-y-6 p-6 sm:p-8 rounded-3xl border transition-all ${
+                  refeicoesIncompletas.length > 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-base font-bold text-slate-800 mb-1">
+                      42. Como costuma ser a rotina alimentar? (Horários aproximados)<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                    </label>
+                    <p className="text-sm text-slate-500">
+                      Defina o horário habitual ou marque se a criança não tem o hábito de realizá-la.
+                    </p>
+                  </div>
+                  {refeicoesIncompletas.length > 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { key: "cafe", label: "Café da manhã", icone: "☕" },
+                    { key: "lancheManha", label: "Lanche da manhã", icone: "🍎" },
+                    { key: "almoco", label: "Almoço", icone: "🍽️" },
+                    { key: "lancheTarde", label: "Lanche da tarde", icone: "🥪" },
+                    { key: "jantar", label: "Jantar", icone: "🍲" },
+                    { key: "ceia", label: "Ceia", icone: "🥛" }
+                  ].map((ref) => {
+                    const itemKey = ref.key as keyof typeof horarios;
+                    const itemData = horarios[itemKey];
+                    const estaIncompleta = refeicoesIncompletas.includes(itemKey);
+                    const estaConcluida = !!itemData.horario || itemData.naoFaz;
+
+                    return (
+                      <div 
+                        key={ref.key} 
+                        className={`p-4 rounded-2xl border transition-all ${
+                          estaIncompleta
+                            ? 'bg-red-50/70 border-red-300 ring-1 ring-red-300'
+                            : itemData.naoFaz 
+                              ? 'bg-slate-100/70 border-slate-200 opacity-70' 
+                              : estaConcluida
+                                ? 'bg-[#4C6C54]/5 border-[#4C6C54]/40 shadow-sm'
+                                : 'bg-white border-slate-200 shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-lg">{ref.icone}</span>
+                          <span className="text-sm font-bold text-slate-700">{ref.label}</span>
+                        </div>
+
+                        <div className="relative mb-3">
+                          <input 
+                            type="time" 
+                            value={itemData.horario} 
+                            onChange={(e) => handleHorarioChange(itemKey, e.target.value)} 
+                            disabled={itemData.naoFaz} 
+                            className="w-full h-12 px-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-center" 
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer pt-2 border-t border-slate-100">
+                          <input 
+                            type="checkbox" 
+                            checked={itemData.naoFaz} 
+                            onChange={() => handleNaoFazToggle(itemKey)} 
+                            className="w-4 h-4 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 focus:ring-[#4C6C54]" 
+                          />
+                          <span className="text-xs font-semibold text-slate-600">
+                            Não costuma fazer
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BLOCO 2: LOCAIS DA REFEIÇÃO (Q43) */}
+              <div 
+                ref={q43Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa5 && locaisRefeicao.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    43. Durante as refeições, geralmente a criança: <span className="text-red-500">*</span>
+                  </label>
+                  {erroValidacaoEtapa5 && locaisRefeicao.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { nome: "Come à mesa", icone: "🪑" },
+                    { nome: "Come no sofá", icone: "🛋️" },
+                    { nome: "Come andando", icone: "🚶" },
+                    { nome: "Come no carro", icone: "🚗" }
+                  ].map((local) => (
+                    <label 
+                      key={local.nome} 
+                      className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5"
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={locaisRefeicao.includes(local.nome)} 
+                        onChange={() => {
+                          handleCheckboxToggle(local.nome, locaisRefeicao, setLocaisRefeicao);
+                          setErroValidacaoEtapa5("");
+                        }} 
+                        className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 focus:ring-[#4C6C54] mr-3 shrink-0" 
+                      />
+                      <span className="text-sm font-semibold text-slate-700">
+                        {local.icone} {local.nome}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={locaisRefeicao.includes("Outro")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outro", locaisRefeicao, setLocaisRefeicao);
+                        setErroValidacaoEtapa5("");
+                      }} 
+                      className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 focus:ring-[#4C6C54] mr-3 shrink-0" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">➕ Outro local</span>
+                  </label>
+                  {locaisRefeicao.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroLocalRefeicaoTexto} 
+                        onChange={(e) => setOutroLocalRefeicaoTexto(e.target.value)} 
+                        placeholder="Especifique em qual outro lugar ela costuma comer..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 3: USO DE TELAS (Q44) */}
+              <div 
+                ref={q44Ref}
+                className="space-y-8 bg-slate-50/50 p-6 sm:p-8 rounded-3xl border border-slate-100"
+              >
+                <div>
+                  <label className="block text-base font-bold text-slate-800 mb-4">
+                    44. Usa telas durante as refeições? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    {["Nunca", "Raramente", "Às vezes", "Frequentemente", "Sempre"].map((opcao) => (
+                      <label 
+                        key={opcao} 
+                        className="flex items-center justify-center p-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:bg-[#4C6C54] has-[:checked]:text-white text-center group"
+                      >
+                        <input 
+                          type="radio" 
+                          name="usoTelas" 
+                          value={opcao} 
+                          checked={usoTelas === opcao} 
+                          onChange={(e) => {
+                            setUsoTelas(e.target.value);
+                            setErroValidacaoEtapa5("");
+                            if (e.target.value === "Nunca") {
+                              setReacaoSemTela([]);
+                              setOutraReacaoSemTelaTexto("");
+                            }
+                          }} 
+                          className="sr-only" 
+                          required 
+                        />
+                        <span className="font-bold text-slate-700 group-has-[:checked]:text-white text-sm">
+                          {opcao}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Subpergunta Condicional se usa telas */}
+                {usoTelas && usoTelas !== "Nunca" && (
+                  <div className="animation-fade-in pt-6 border-t border-slate-200/70 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-base font-bold text-slate-800">
+                        O que acontece quando a tela é retirada? <span className="text-red-500">*</span>
+                      </label>
+                      {erroValidacaoEtapa5 && reacaoSemTela.length === 0 && (
+                        <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                          Selecione ao menos uma opção
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        "Continua comendo normalmente",
+                        "Come menos",
+                        "Para de comer",
+                        "Fica irritada/chora",
+                        "Não aceita comer sem tela"
+                      ].map((reacao) => (
+                        <label 
+                          key={reacao} 
+                          className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5"
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={reacaoSemTela.includes(reacao)} 
+                            onChange={() => {
+                              handleCheckboxToggle(reacao, reacaoSemTela, setReacaoSemTela);
+                              setErroValidacaoEtapa5("");
+                            }} 
+                            className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 focus:ring-[#4C6C54] mr-3 shrink-0" 
+                          />
+                          <span className="text-sm font-semibold text-slate-700">{reacao}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5">
+                        <input 
+                          type="checkbox" 
+                          checked={reacaoSemTela.includes("Outro")} 
+                          onChange={() => {
+                            handleCheckboxToggle("Outro", reacaoSemTela, setReacaoSemTela);
+                            setErroValidacaoEtapa5("");
+                          }} 
+                          className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 focus:ring-[#4C6C54] mr-3 shrink-0" 
+                        />
+                        <span className="text-sm font-semibold text-slate-700">Outra reação</span>
+                      </label>
+                      {reacaoSemTela.includes("Outro") && (
+                        <div className="animation-fade-in mt-3">
+                          <input 
+                            type="text" 
+                            value={outraReacaoSemTelaTexto} 
+                            onChange={(e) => setOutraReacaoSemTelaTexto(e.target.value)} 
+                            placeholder="Descreva a reação ao retirar o dispositivo..." 
+                            className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] text-base" 
+                            required 
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* PLACEHOLDER PARA ETAPAS 6 A 8 */}
+          {/* ================================================================ */}
+          {etapaAtual > 5 && (
             <div className="animation-fade-in text-center py-20">
               <h2 className="text-2xl font-bold text-slate-800 mb-2">
                 Etapa {etapaAtual}: {titulosEtapas[etapaAtual - 1]}

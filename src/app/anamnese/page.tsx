@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { ChevronRight, ChevronLeft, Save, Paperclip, X, FileText, AlertCircle } from "lucide-react";
+import { ChevronRight, ChevronLeft, Save, Paperclip, X, FileText, AlertCircle, HeartHandshake } from "lucide-react";
 
 export default function AnamneseWizard() {
   const [etapaAtual, setEtapaAtual] = useState(1);
@@ -136,6 +136,25 @@ export default function AnamneseWizard() {
   const q42Ref = useRef<HTMLDivElement>(null);
   const q43Ref = useRef<HTMLDivElement>(null);
   const q44Ref = useRef<HTMLDivElement>(null);
+
+  // ==========================================
+  // ESTADOS - ETAPA 6 (FAMÍLIA E COMPORTAMENTO)
+  // ==========================================
+  const [acoesRecusa, setAcoesRecusa] = useState<string[]>([]);
+  const [outraAcaoRecusaTexto, setOutraAcaoRecusaTexto] = useState("");
+
+  const [freqSubstituicao, setFreqSubstituicao] = useState("");
+
+  const [motivosSubstituicao, setMotivosSubstituicao] = useState<string[]>([]);
+  const [outroMotivoSubstituicaoTexto, setOutroMotivoSubstituicaoTexto] = useState("");
+
+  const [sentimentosPais, setSentimentosPais] = useState<string[]>([]);
+  const [erroValidacaoEtapa6, setErroValidacaoEtapa6] = useState("");
+
+  const q45Ref = useRef<HTMLDivElement>(null);
+  const q46Ref = useRef<HTMLDivElement>(null);
+  const q47Ref = useRef<HTMLDivElement>(null);
+  const q48Ref = useRef<HTMLDivElement>(null);
 
   // ==========================================
   // FUNÇÕES DE CONTROLE
@@ -313,6 +332,31 @@ export default function AnamneseWizard() {
       setRefeicoesIncompletas([]);
     }
 
+    // Validações da Etapa 6
+    if (etapaAtual === 6) {
+      if (acoesRecusa.length === 0) {
+        setErroValidacaoEtapa6("Por favor, selecione ao menos uma atitude diante da recusa alimentar (Pergunta 45).");
+        q45Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (!freqSubstituicao) {
+        setErroValidacaoEtapa6("Por favor, informe com que frequência costuma oferecer outra opção (Pergunta 46).");
+        q46Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (freqSubstituicao !== "Nunca" && motivosSubstituicao.length === 0) {
+        setErroValidacaoEtapa6("Por favor, informe os motivos pelos quais costuma oferecer outra comida (Pergunta 47).");
+        q47Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (sentimentosPais.length === 0) {
+        setErroValidacaoEtapa6("Por favor, selecione como você geralmente reage ou se sente diante da recusa (Pergunta 48).");
+        q48Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      setErroValidacaoEtapa6("");
+    }
+
     if (etapaAtual < totalEtapas) setEtapaAtual(etapaAtual + 1);
     window.scrollTo(0, 0);
   };
@@ -320,6 +364,7 @@ export default function AnamneseWizard() {
   const voltarEtapa = () => {
     setErroValidacaoEtapa4("");
     setErroValidacaoEtapa5("");
+    setErroValidacaoEtapa6("");
     if (etapaAtual > 1) setEtapaAtual(etapaAtual - 1);
     window.scrollTo(0, 0);
   };
@@ -1671,9 +1716,295 @@ export default function AnamneseWizard() {
           )}
 
           {/* ================================================================ */}
-          {/* PLACEHOLDER PARA ETAPAS 6 A 8 */}
+          {/* ETAPA 6 - FAMÍLIA E COMPORTAMENTO */}
           {/* ================================================================ */}
-          {etapaAtual > 5 && (
+          {etapaAtual === 6 && (
+            <div className="animation-fade-in space-y-12">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center h-16 w-16 bg-[#EB6D57]/10 rounded-2xl mb-4">
+                  <span className="text-3xl">👨‍👩‍👧</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-[#EB6D57] mb-3">Família e Comportamento</h1>
+                <p className="text-slate-500 text-lg">Manejo da recusa, estratégias parentais e dinâmica emocional.</p>
+              </div>
+
+              {erroValidacaoEtapa6 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{erroValidacaoEtapa6}</span>
+                </div>
+              )}
+
+              {/* BLOCO 1: ATITUDES DIANTE DA RECUSA (Q45) */}
+              <div 
+                ref={q45Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa6 && acoesRecusa.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-base font-bold text-slate-800">
+                    45. Quando a criança recusa uma comida, o que você costuma fazer?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa6 && acoesRecusa.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-500 mb-6">Pode marcar mais de uma opção:</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    "Retiro o alimento",
+                    "Ofereço outra opção",
+                    "Insisto para experimentar",
+                    "Negocio",
+                    "Distraio",
+                    "Ofereço recompensa",
+                    "Dou bronca",
+                    "Obrigo",
+                    "Tento colocar a comida na boca",
+                    "Ignoro"
+                  ].map((acao) => (
+                    <label 
+                      key={acao} 
+                      className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5"
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={acoesRecusa.includes(acao)} 
+                        onChange={() => {
+                          handleCheckboxToggle(acao, acoesRecusa, setAcoesRecusa);
+                          setErroValidacaoEtapa6("");
+                        }} 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                      />
+                      <span className="text-sm font-semibold text-slate-700">{acao}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={acoesRecusa.includes("Outra")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outra", acoesRecusa, setAcoesRecusa);
+                        setErroValidacaoEtapa6("");
+                      }} 
+                      className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outra atitude</span>
+                  </label>
+                  {acoesRecusa.includes("Outra") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outraAcaoRecusaTexto} 
+                        onChange={(e) => setOutraAcaoRecusaTexto(e.target.value)} 
+                        placeholder="Especifique o que costuma fazer..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 2: FREQUÊNCIA DE SUBSTITUIÇÃO (Q46) */}
+              <div 
+                ref={q46Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa6 && !freqSubstituicao 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    46. Com que frequência você oferece outra comida quando ela recusa a refeição?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa6 && !freqSubstituicao && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                  {["Nunca", "Quase nunca", "Às vezes", "Quase sempre", "Sempre"].map((opcao) => (
+                    <label 
+                      key={opcao} 
+                      className="flex items-center justify-center p-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57] has-[:checked]:text-white text-center group"
+                    >
+                      <input 
+                        type="radio" 
+                        name="freqSubstituicao" 
+                        value={opcao} 
+                        checked={freqSubstituicao === opcao} 
+                        onChange={(e) => {
+                          setFreqSubstituicao(e.target.value);
+                          setErroValidacaoEtapa6("");
+                          if (e.target.value === "Nunca") {
+                            setMotivosSubstituicao([]);
+                            setOutroMotivoSubstituicaoTexto("");
+                          }
+                        }} 
+                        className="sr-only" 
+                        required 
+                      />
+                      <span className="font-bold text-slate-700 group-has-[:checked]:text-white text-sm">
+                        {opcao}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* BLOCO 3: MOTIVOS PARA OFERECER OUTRA OPÇÃO (Q47 - CONDICIONAL) */}
+              {freqSubstituicao && freqSubstituicao !== "Nunca" && (
+                <div 
+                  ref={q47Ref}
+                  className={`animation-fade-in p-6 sm:p-8 rounded-3xl border transition-all ${
+                    erroValidacaoEtapa6 && motivosSubstituicao.length === 0 
+                      ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                      : 'bg-slate-50/50 border-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-base font-bold text-slate-800">
+                      47. Por que costuma oferecer outra opção?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                    </label>
+                    {erroValidacaoEtapa6 && motivosSubstituicao.length === 0 && (
+                      <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                        Campo obrigatório
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-500 mb-6">Pode marcar mais de um motivo:</p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      "Tenho medo que fique sem comer",
+                      "Sei que ela não vai aceitar",
+                      "Quero evitar conflitos",
+                      "Quero garantir que coma alguma coisa",
+                      "É orientação profissional"
+                    ].map((motivo) => (
+                      <label 
+                        key={motivo} 
+                        className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5"
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={motivosSubstituicao.includes(motivo)} 
+                          onChange={() => {
+                            handleCheckboxToggle(motivo, motivosSubstituicao, setMotivosSubstituicao);
+                            setErroValidacaoEtapa6("");
+                          }} 
+                          className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                        />
+                        <span className="text-sm font-semibold text-slate-700">{motivo}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                      <input 
+                        type="checkbox" 
+                        checked={motivosSubstituicao.includes("Outro")} 
+                        onChange={() => {
+                          handleCheckboxToggle("Outro", motivosSubstituicao, setMotivosSubstituicao);
+                          setErroValidacaoEtapa6("");
+                        }} 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                      />
+                      <span className="text-sm font-semibold text-slate-700">Outro motivo</span>
+                    </label>
+                    {motivosSubstituicao.includes("Outro") && (
+                      <div className="animation-fade-in mt-3">
+                        <input 
+                          type="text" 
+                          value={outroMotivoSubstituicaoTexto} 
+                          onChange={(e) => setOutroMotivoSubstituicaoTexto(e.target.value)} 
+                          placeholder="Especifique o motivo..." 
+                          className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                          required 
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* BLOCO 4: SENTIMENTOS E REAÇÕES DOS RESPONSÁVEIS (Q48) */}
+              <div 
+                ref={q48Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa6 && sentimentosPais.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                {/* Banner de Acolhimento Livre de Julgamentos */}
+                <div className="mb-6 p-4 bg-[#EB6D57]/10 border border-[#EB6D57]/20 rounded-2xl flex items-start gap-3">
+                  <HeartHandshake className="h-6 w-6 text-[#EB6D57] shrink-0 mt-0.5" />
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    <strong>Espaço seguro e acolhedor:</strong> Sabemos que lidar com a recusa alimentar gera grande sobrecarga emocional. Seja sincero(a); entender seus sentimentos nos ajuda a criar planos realistas e empáticos para sua família.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    48. Quando ela recusa uma refeição, você geralmente:<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa6 && sentimentosPais.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    "Fica ansioso(a)",
+                    "Fica irritado(a)",
+                    "Insiste",
+                    "Oferece outra comida",
+                    "Negocia",
+                    "Sente culpa",
+                    "Consegue manter tranquilidade"
+                  ].map((reacao) => (
+                    <label 
+                      key={reacao} 
+                      className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5"
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={sentimentosPais.includes(reacao)} 
+                        onChange={() => {
+                          handleCheckboxToggle(reacao, sentimentosPais, setSentimentosPais);
+                          setErroValidacaoEtapa6("");
+                        }} 
+                        className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                      />
+                      <span className="text-sm font-semibold text-slate-700">{reacao}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* PLACEHOLDER PARA ETAPAS 7 E 8 */}
+          {/* ================================================================ */}
+          {etapaAtual > 6 && (
             <div className="animation-fade-in text-center py-20">
               <h2 className="text-2xl font-bold text-slate-800 mb-2">
                 Etapa {etapaAtual}: {titulosEtapas[etapaAtual - 1]}

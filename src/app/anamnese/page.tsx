@@ -2,11 +2,16 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { ChevronRight, ChevronLeft, Save, Paperclip, X, FileText, AlertCircle, HeartHandshake } from "lucide-react";
+import { 
+  ChevronRight, ChevronLeft, Save, Paperclip, X, FileText, 
+  AlertCircle, HeartHandshake, AlertTriangle, CheckCircle2, 
+  Calendar, Droplets, Sparkles, Activity
+} from "lucide-react";
 
 export default function AnamneseWizard() {
   const [etapaAtual, setEtapaAtual] = useState(1);
   const totalEtapas = 8;
+  const [formularioConcluido, setFormularioConcluido] = useState(false);
 
   const titulosEtapas = [
     "Conhecendo a Criança", "Histórico de Saúde", "Mapa Alimentar", "Perfil Sensorial",
@@ -149,12 +154,52 @@ export default function AnamneseWizard() {
   const [outroMotivoSubstituicaoTexto, setOutroMotivoSubstituicaoTexto] = useState("");
 
   const [sentimentosPais, setSentimentosPais] = useState<string[]>([]);
+  const [outroSentimentoTexto, setOutroSentimentoTexto] = useState("");
   const [erroValidacaoEtapa6, setErroValidacaoEtapa6] = useState("");
 
   const q45Ref = useRef<HTMLDivElement>(null);
   const q46Ref = useRef<HTMLDivElement>(null);
   const q47Ref = useRef<HTMLDivElement>(null);
   const q48Ref = useRef<HTMLDivElement>(null);
+
+  // ==========================================
+  // ESTADOS - ETAPA 7 (SINAIS DE ATENÇÃO)
+  // ==========================================
+  const [situacoesNutricionais, setSituacoesNutricionais] = useState<string[]>([]);
+  const [outraSituacaoNutricionalTexto, setOutraSituacaoNutricionalTexto] = useState("");
+
+  const [medosAlimentares, setMedosAlimentares] = useState<string[]>([]);
+  const [outroMedoAlimentarTexto, setOutroMedoAlimentarTexto] = useState("");
+
+  const [comportamentosAtipicos, setComportamentosAtipicos] = useState<string[]>([]);
+  const [outroComportamentoAtipicoTexto, setOutroComportamentoAtipicoTexto] = useState("");
+
+  const [erroValidacaoEtapa7, setErroValidacaoEtapa7] = useState("");
+
+  const q49Ref = useRef<HTMLDivElement>(null);
+  const q50Ref = useRef<HTMLDivElement>(null);
+  const q51Ref = useRef<HTMLDivElement>(null);
+
+  // ==========================================
+  // ESTADOS - ETAPA 8 (ROTINA E OBJETIVOS)
+  // ==========================================
+  const [aguaQuantidade, setAguaQuantidade] = useState("");
+  const [tamanhoCopoMl, setTamanhoCopoMl] = useState("");
+
+  const [freqIntestino, setFreqIntestino] = useState("");
+  const [tipoBristol, setTipoBristol] = useState("");
+  const [sintomasIntestino, setSintomasIntestino] = useState<string[]>([]);
+  const [outroSintomaIntestinoTexto, setOutroSintomaIntestinoTexto] = useState("");
+
+  const [interessesFavoritos, setInteressesFavoritos] = useState("");
+  const [motivacaoCrianca, setMotivacaoCrianca] = useState("");
+  const [informacoesAdicionais, setInformacoesAdicionais] = useState("");
+
+  const [erroValidacaoEtapa8, setErroValidacaoEtapa8] = useState("");
+
+  const q52Ref = useRef<HTMLDivElement>(null);
+  const q53Ref = useRef<HTMLDivElement>(null);
+  const q54Ref = useRef<HTMLDivElement>(null);
 
   // ==========================================
   // FUNÇÕES DE CONTROLE
@@ -218,7 +263,7 @@ export default function AnamneseWizard() {
     valor: string, 
     estadoAtual: string[], 
     setEstado: React.Dispatch<React.SetStateAction<string[]>>,
-    exclusivos: string[] = ["Não", "Nenhum", "🚫 Nenhum", "🚫 Nenhuma", "Sem intercorrências", "Não sei informar", "Não sei", "Não sei avaliar"]
+    exclusivos: string[] = ["Não", "Nenhum", "Nenhuma", "Não se aplica", "🚫 Nenhum", "🚫 Nenhuma", "Sem intercorrências", "Não sei informar", "Não sei", "Não sei avaliar"]
   ) => {
     if (exclusivos.includes(valor)) {
       setEstado([valor]);
@@ -284,7 +329,6 @@ export default function AnamneseWizard() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validações da Etapa 4
     if (etapaAtual === 4) {
       if (comportamentoNovo.length === 0) {
         setErroValidacaoEtapa4("Por favor, selecione ao menos uma reação ao novo alimento (Pergunta 38).");
@@ -299,7 +343,6 @@ export default function AnamneseWizard() {
       setErroValidacaoEtapa4("");
     }
 
-    // Validações da Etapa 5
     if (etapaAtual === 5) {
       const faltantes: string[] = [];
       (Object.keys(horarios) as Array<keyof typeof horarios>).forEach((refKey) => {
@@ -332,7 +375,6 @@ export default function AnamneseWizard() {
       setRefeicoesIncompletas([]);
     }
 
-    // Validações da Etapa 6
     if (etapaAtual === 6) {
       if (acoesRecusa.length === 0) {
         setErroValidacaoEtapa6("Por favor, selecione ao menos uma atitude diante da recusa alimentar (Pergunta 45).");
@@ -357,6 +399,47 @@ export default function AnamneseWizard() {
       setErroValidacaoEtapa6("");
     }
 
+    if (etapaAtual === 7) {
+      if (situacoesNutricionais.length === 0) {
+        setErroValidacaoEtapa7("Por favor, selecione ao menos uma situação nutricional recente (Pergunta 49).");
+        q49Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (medosAlimentares.length === 0) {
+        setErroValidacaoEtapa7("Por favor, informe sobre os medos alimentares ou marque 'Não se aplica' (Pergunta 50).");
+        q50Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (comportamentosAtipicos.length === 0) {
+        setErroValidacaoEtapa7("Por favor, selecione ao menos uma opção sobre comportamentos atípicos (Pergunta 51).");
+        q51Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      setErroValidacaoEtapa7("");
+    }
+
+    if (etapaAtual === 8) {
+      if (!aguaQuantidade) {
+        setErroValidacaoEtapa8("Por favor, informe a quantidade aproximada de água que a criança bebe (Pergunta 52).");
+        q52Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (!freqIntestino || !tipoBristol || sintomasIntestino.length === 0) {
+        setErroValidacaoEtapa8("Por favor, preencha a frequência, o aspecto das fezes (Bristol) e os sintomas intestinais (Pergunta 53).");
+        q53Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (!interessesFavoritos.trim()) {
+        setErroValidacaoEtapa8("Por favor, descreva os interesses favoritos da criança para direcionarmos a terapia (Pergunta 54).");
+        q54Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      setErroValidacaoEtapa8("");
+      setFormularioConcluido(true);
+      window.scrollTo(0, 0);
+      return;
+    }
+
     if (etapaAtual < totalEtapas) setEtapaAtual(etapaAtual + 1);
     window.scrollTo(0, 0);
   };
@@ -365,9 +448,78 @@ export default function AnamneseWizard() {
     setErroValidacaoEtapa4("");
     setErroValidacaoEtapa5("");
     setErroValidacaoEtapa6("");
+    setErroValidacaoEtapa7("");
+    setErroValidacaoEtapa8("");
     if (etapaAtual > 1) setEtapaAtual(etapaAtual - 1);
     window.scrollTo(0, 0);
   };
+
+  if (formularioConcluido) {
+    return (
+      <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800 pb-20">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-center">
+            <div className="relative h-14 w-40 sm:h-20 sm:w-56">
+              <Image src="/logo-transparente.png" alt="Nutrindo em Casa" fill className="object-contain" priority />
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 sm:px-6 mt-12">
+          <div className="bg-white p-8 sm:p-14 rounded-[2.5rem] shadow-sm border border-slate-100 text-center space-y-8 animation-fade-in">
+            <div className="inline-flex items-center justify-center h-24 w-24 bg-[#4C6C54]/10 rounded-full text-[#4C6C54] shadow-inner">
+              <CheckCircle2 className="h-14 w-14" />
+            </div>
+
+            <div className="space-y-3">
+              <span className="inline-block bg-[#4C6C54]/10 text-[#4C6C54] font-extrabold text-sm px-4 py-1.5 rounded-full uppercase tracking-wider">
+                100% Concluído
+              </span>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-800">
+                Anamnese Entregue com Sucesso!
+              </h1>
+            </div>
+
+            <div className="bg-[#4C6C54]/5 border border-[#4C6C54]/20 p-6 sm:p-8 rounded-3xl text-left space-y-4">
+              <p className="text-slate-700 text-base sm:text-lg leading-relaxed font-medium">
+                &ldquo;Obrigada por compartilhar essas informações comigo. 💚 Agora consigo conhecer melhor sua criança e entender quais pontos merecem mais atenção durante o acompanhamento.&rdquo;
+              </p>
+              <div className="flex items-center gap-3 pt-2">
+                <div className="w-10 h-10 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-sm shadow">
+                  DL
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-800">Dra. Laís Leles</h4>
+                  <p className="text-xs text-slate-500 font-semibold">Nutricionista Clínica Pediátrica</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border border-slate-200 rounded-3xl space-y-4">
+              <div className="flex items-center justify-center gap-2 text-[#EB6D57] font-bold text-base">
+                <Calendar className="h-5 w-5" />
+                <span>Próximo Passo: Agendamento da Devolutiva</span>
+              </div>
+              <p className="text-sm text-slate-600">
+                Selecione o melhor dia e horário para a nossa videochamada de apresentação do cronograma e alinhamento das estratégias alimentares.
+              </p>
+              <button 
+                type="button" 
+                onClick={() => alert("Módulo de agendamento integrado (Calendly/Google Agenda).")}
+                className="w-full py-4 px-6 bg-[#EB6D57] hover:bg-[#d95a44] text-white font-bold text-base rounded-2xl transition-all shadow-md hover:shadow-lg hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Calendar className="h-5 w-5" /> Agendar Videochamada Devolutiva
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Uma cópia das suas respostas foi arquivada em seu prontuário clínico seguro.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800 pb-20">
@@ -723,7 +875,7 @@ export default function AnamneseWizard() {
                   <label className="block text-base font-bold text-slate-800 mb-4">20. Houve algum evento associado ao início da dificuldade?</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {["Não", "Engasgo", "Vômito", "Dor/refluxo", "Doença", "Mudança de rotina", "Entrada na escola", "Mudança familiar", "Experiência negativa com alimento", "Outro", "Não sei"].map((evt) => (
-                      <label key={evt} className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57]">
+                      <label key={evt} className="flex items-center p-3.5 rounded-xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:ring-1] has-[:checked]:ring-[#EB6D57]">
                         <input type="checkbox" checked={eventosAssociados.includes(evt)} onChange={() => handleCheckboxToggle(evt, eventosAssociados, setEventosAssociados, ["Não", "Não sei"])} className="w-5 h-5 text-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3" />
                         <span className="text-sm font-semibold text-slate-700">{evt}</span>
                       </label>
@@ -1951,7 +2103,6 @@ export default function AnamneseWizard() {
                     : 'bg-slate-50/50 border-slate-100'
                 }`}
               >
-                {/* Banner de Acolhimento Livre de Julgamentos */}
                 <div className="mb-6 p-4 bg-[#EB6D57]/10 border border-[#EB6D57]/20 rounded-2xl flex items-start gap-3">
                   <HeartHandshake className="h-6 w-6 text-[#EB6D57] shrink-0 mt-0.5" />
                   <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
@@ -1997,19 +2148,645 @@ export default function AnamneseWizard() {
                     </label>
                   ))}
                 </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#EB6D57]/30 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={sentimentosPais.includes("Outro")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outro", sentimentosPais, setSentimentosPais);
+                        setErroValidacaoEtapa6("");
+                      }} 
+                      className="w-5 h-5 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 focus:ring-[#EB6D57] mr-3 shrink-0" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outra reação ou sentimento</span>
+                  </label>
+                  {sentimentosPais.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroSentimentoTexto} 
+                        onChange={(e) => setOutroSentimentoTexto(e.target.value)} 
+                        placeholder="Descreva como você costuma se sentir ou agir..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
           {/* ================================================================ */}
-          {/* PLACEHOLDER PARA ETAPAS 7 E 8 */}
+          {/* ETAPA 7 - SINAIS DE ATENÇÃO */}
           {/* ================================================================ */}
-          {etapaAtual > 6 && (
-            <div className="animation-fade-in text-center py-20">
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">
-                Etapa {etapaAtual}: {titulosEtapas[etapaAtual - 1]}
-              </h2>
-              <p className="text-slate-500">Aguardando a implementação da próxima etapa.</p>
+          {etapaAtual === 7 && (
+            <div className="animation-fade-in space-y-12">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center h-16 w-16 bg-[#4C6C54]/10 rounded-2xl mb-4">
+                  <AlertTriangle className="h-8 w-8 text-[#4C6C54]" />
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-[#4C6C54] mb-3">Sinais de Atenção</h1>
+                <p className="text-slate-500 text-lg">Histórico nutricional de risco, medos alimentares e comportamentos atípicos.</p>
+              </div>
+
+              {erroValidacaoEtapa7 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{erroValidacaoEtapa7}</span>
+                </div>
+              )}
+
+              {/* BLOCO 1: SITUAÇÕES NUTRICIONAIS RECENTES (Q49) */}
+              <div 
+                ref={q49Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa7 && situacoesNutricionais.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    49. Nos últimos meses, aconteceu alguma dessas situações?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa7 && situacoesNutricionais.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    "Perdeu peso sem intenção",
+                    "Não ganhou peso adequadamente",
+                    "Come quantidade muito pequena",
+                    "Passa muitas horas sem comer",
+                    "Tem pouco interesse por comida",
+                    "Depende de suplemento para complementar alimentação",
+                    "Já apresentou deficiência nutricional",
+                    "Já precisou de sonda",
+                    "Nenhuma"
+                  ].map((sit) => (
+                    <label 
+                      key={sit} 
+                      className={`flex items-start p-4 rounded-2xl border bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5 ${
+                        sit === "Nenhuma" ? 'font-bold text-slate-700 sm:col-span-2 border-dashed border-slate-300' : ''
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={situacoesNutricionais.includes(sit)} 
+                        onChange={() => {
+                          handleCheckboxToggle(sit, situacoesNutricionais, setSituacoesNutricionais, ["Nenhuma"]);
+                          setErroValidacaoEtapa7("");
+                        }} 
+                        className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                      />
+                      <span className="text-sm font-medium text-slate-700 leading-tight">{sit}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={situacoesNutricionais.includes("Outra")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outra", situacoesNutricionais, setSituacoesNutricionais, ["Nenhuma"]);
+                        setErroValidacaoEtapa7("");
+                      }} 
+                      className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outra situação</span>
+                  </label>
+                  {situacoesNutricionais.includes("Outra") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outraSituacaoNutricionalTexto} 
+                        onChange={(e) => setOutraSituacaoNutricionalTexto(e.target.value)} 
+                        placeholder="Especifique a situação nutricional..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 2: MEDOS ALIMENTARES (Q50) */}
+              <div 
+                ref={q50Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa7 && medosAlimentares.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    50. Ela evita alimentos por medo de:<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa7 && medosAlimentares.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    "Engasgar",
+                    "Vomitar",
+                    "Sentir dor",
+                    "Refluxo",
+                    "Dor abdominal",
+                    "Reação alérgica",
+                    "Não se aplica"
+                  ].map((medo) => (
+                    <label 
+                      key={medo} 
+                      className={`flex items-start p-4 rounded-2xl border bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5 ${
+                        medo === "Não se aplica" ? 'font-bold text-slate-700 sm:col-span-2 border-dashed border-slate-300' : ''
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={medosAlimentares.includes(medo)} 
+                        onChange={() => {
+                          handleCheckboxToggle(medo, medosAlimentares, setMedosAlimentares, ["Não se aplica"]);
+                          setErroValidacaoEtapa7("");
+                        }} 
+                        className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                      />
+                      <span className="text-sm font-medium text-slate-700 leading-tight">{medo}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={medosAlimentares.includes("Outro")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outro", medosAlimentares, setMedosAlimentares, ["Não se aplica"]);
+                        setErroValidacaoEtapa7("");
+                      }} 
+                      className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outro medo</span>
+                  </label>
+                  {medosAlimentares.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroMedoAlimentarTexto} 
+                        onChange={(e) => setOutroMedoAlimentarTexto(e.target.value)} 
+                        placeholder="Especifique qual outro medo alimentar..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 3: COMPORTAMENTOS ATÍPICOS (Q51) */}
+              <div 
+                ref={q51Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+                  erroValidacaoEtapa7 && comportamentosAtipicos.length === 0 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-base font-bold text-slate-800">
+                    51. Apresenta algum desses comportamentos?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa7 && comportamentosAtipicos.length === 0 && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { label: "Mastiga e cospe" },
+                    { label: "Guarda comida na boca" },
+                    { label: "Engole sem mastigar" },
+                    { label: "Regurgita" },
+                    { label: "Esconde comida" },
+                    { label: "Come escondida" },
+                    { 
+                      label: "Come ou põe na boca substâncias que não são alimentos", 
+                      detalhe: "Ex: terra, papel, plástico, giz (Pica/geofagia)" 
+                    },
+                    { label: "Episódios de comer uma quantidade muito grande" },
+                    { label: "Nenhum" }
+                  ].map((comp) => (
+                    <label 
+                      key={comp.label} 
+                      className={`flex items-start p-4 rounded-2xl border bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5 ${
+                        comp.label === "Nenhum" ? 'font-bold text-slate-700 sm:col-span-2 border-dashed border-slate-300' : ''
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={comportamentosAtipicos.includes(comp.label)} 
+                        onChange={() => {
+                          handleCheckboxToggle(comp.label, comportamentosAtipicos, setComportamentosAtipicos, ["Nenhum"]);
+                          setErroValidacaoEtapa7("");
+                        }} 
+                        className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mt-0.5 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-slate-700 leading-tight">{comp.label}</span>
+                        {comp.detalhe && (
+                          <span className="text-xs text-slate-400 mt-0.5">{comp.detalhe}</span>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="flex items-center p-4 rounded-2xl border border-white bg-white shadow-sm cursor-pointer hover:border-[#4C6C54]/30 transition-all has-[:checked]:border-[#4C6C54] has-[:checked]:ring-1 has-[:checked]:ring-[#4C6C54] has-[:checked]:bg-[#4C6C54]/5">
+                    <input 
+                      type="checkbox" 
+                      checked={comportamentosAtipicos.includes("Outro")} 
+                      onChange={() => {
+                        handleCheckboxToggle("Outro", comportamentosAtipicos, setComportamentosAtipicos, ["Nenhum"]);
+                        setErroValidacaoEtapa7("");
+                      }} 
+                      className="w-5 h-5 text-[#4C6C54] accent-[#4C6C54] rounded border-slate-300 mr-3 shrink-0 focus:ring-[#4C6C54]" 
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Outro comportamento</span>
+                  </label>
+                  {comportamentosAtipicos.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroComportamentoAtipicoTexto} 
+                        onChange={(e) => setOutroComportamentoAtipicoTexto(e.target.value)} 
+                        placeholder="Descreva qual outro comportamento atípico..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* ETAPA 8 - ROTINA E OBJETIVOS (ETAPA FINAL) */}
+          {/* ================================================================ */}
+          {etapaAtual === 8 && (
+            <div className="animation-fade-in space-y-12">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center justify-center h-16 w-16 bg-[#EB6D57]/10 rounded-2xl mb-4">
+                  <Sparkles className="h-8 w-8 text-[#EB6D57]" />
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-[#EB6D57] mb-3">Rotina e Objetivos</h1>
+                <p className="text-slate-500 text-lg">Hidratação, saúde intestinal e hiperfocos para o plano terapêutico.</p>
+              </div>
+
+              {erroValidacaoEtapa8 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold shadow-sm animation-fade-in">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{erroValidacaoEtapa8}</span>
+                </div>
+              )}
+
+              {/* BLOCO 1: HIDRATAÇÃO (Q52) */}
+              <div 
+                ref={q52Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all space-y-6 ${
+                  erroValidacaoEtapa8 && !aguaQuantidade 
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <label className="block text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Droplets className="h-5 w-5 text-[#EB6D57]" /> 
+                    52. Aproximadamente quanto de água a criança bebe por dia?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  {erroValidacaoEtapa8 && !aguaQuantidade && (
+                    <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                      Campo obrigatório
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+                  {["Menos de 1 copo", "1–2 copos", "3–4 copos", "5–6 copos", "7–8 copos", "Mais de 8 copos", "Não sei"].map((faixa) => (
+                    <label 
+                      key={faixa} 
+                      className="flex items-center justify-center p-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57] has-[:checked]:text-white text-center group"
+                    >
+                      <input 
+                        type="radio" 
+                        name="aguaQuantidade" 
+                        value={faixa} 
+                        checked={aguaQuantidade === faixa} 
+                        onChange={(e) => {
+                          setAguaQuantidade(e.target.value);
+                          setErroValidacaoEtapa8("");
+                        }} 
+                        className="sr-only" 
+                        required 
+                      />
+                      <span className="font-bold text-slate-700 group-has-[:checked]:text-white text-xs sm:text-sm">
+                        {faixa}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-slate-200/60 max-w-sm">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Tamanho aproximado do copo:
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={tamanhoCopoMl}
+                      onChange={(e) => setTamanhoCopoMl(e.target.value)}
+                      placeholder="Ex: 200"
+                      className="w-full h-12 pl-4 pr-12 bg-white border border-slate-200 rounded-xl font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
+                      ml
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Dica: copo descartável pequeno (150ml), copo americano/requeijão (200ml), garrafinha infantil (300 a 350ml).
+                  </p>
+                </div>
+              </div>
+
+              {/* BLOCO 2: SAÚDE INTESTINAL E ESCALA DE BRISTOL (Q53) */}
+              <div 
+                ref={q53Ref}
+                className={`p-6 sm:p-8 rounded-3xl border transition-all space-y-8 ${
+                  erroValidacaoEtapa8 && (!freqIntestino || !tipoBristol || sintomasIntestino.length === 0)
+                    ? 'bg-red-50/40 border-red-300 ring-2 ring-red-200' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-[#EB6D57]" /> 
+                    53. Como costuma ser o funcionamento do intestino?<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Avaliação clínica da frequência e consistência das evacuações.
+                  </p>
+                </div>
+
+                {/* Sub-bloco A: Frequência */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-slate-700">
+                    A) Frequência das evacuações: <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+                    {["Menos de 3x/semana", "3–6x/semana", "1x/dia", "2x/dia", "≥ 3x/dia", "Muito variável"].map((freq) => (
+                      <label 
+                        key={freq} 
+                        className="flex items-center justify-center p-3 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57] has-[:checked]:text-white text-center group"
+                      >
+                        <input 
+                          type="radio" 
+                          name="freqIntestino" 
+                          value={freq} 
+                          checked={freqIntestino === freq} 
+                          onChange={(e) => {
+                            setFreqIntestino(e.target.value);
+                            setErroValidacaoEtapa8("");
+                          }} 
+                          className="sr-only" 
+                          required 
+                        />
+                        <span className="font-bold text-slate-700 group-has-[:checked]:text-white text-xs">
+                          {freq}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sub-bloco B: Escala de Bristol */}
+                <div className="space-y-3 pt-4 border-t border-slate-200/60">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-bold text-slate-700">
+                      B) Aspecto predominante das fezes (Escala de Bristol): <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-xs font-semibold text-slate-400">Referência clínica</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      {
+                        valor: "Bristol 1-2",
+                        titulo: "Bristol 1–2 (Constipação)",
+                        desc: "Caroços duros separados ou em forma de salsicha grumosa.",
+                        icone: "🟤"
+                      },
+                      {
+                        valor: "Bristol 3-4",
+                        titulo: "Bristol 3–4 (Ideal / Saudável)",
+                        desc: "Formato de salsicha/cobra, com rachaduras suaves ou macia.",
+                        icone: "🟢"
+                      },
+                      {
+                        valor: "Bristol 5",
+                        titulo: "Bristol 5 (Trânsito rápido)",
+                        desc: "Pedaços macios com bordas bem nítidas, fáceis de passar.",
+                        icone: "🟡"
+                      },
+                      {
+                        valor: "Bristol 6-7",
+                        titulo: "Bristol 6–7 (Diarreia)",
+                        desc: "Pedaços esfarrapados ou consistência inteiramente líquida.",
+                        icone: "🟠"
+                      }
+                    ].map((b) => (
+                      <label 
+                        key={b.valor} 
+                        className="flex items-start p-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:border-[#EB6D57]/40 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] shadow-sm"
+                      >
+                        <input 
+                          type="radio" 
+                          name="tipoBristol" 
+                          value={b.valor} 
+                          checked={tipoBristol === b.valor} 
+                          onChange={(e) => {
+                            setTipoBristol(e.target.value);
+                            setErroValidacaoEtapa8("");
+                          }} 
+                          className="sr-only" 
+                          required 
+                        />
+                        <span className="text-2xl mr-3">{b.icone}</span>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800">{b.titulo}</h4>
+                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{b.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    {["Variável", "Não sei"].map((opt) => (
+                      <label 
+                        key={opt} 
+                        className="flex items-center justify-center p-3 bg-white border border-dashed border-slate-300 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:bg-[#EB6D57] has-[:checked]:text-white text-center group"
+                      >
+                        <input 
+                          type="radio" 
+                          name="tipoBristol" 
+                          value={opt} 
+                          checked={tipoBristol === opt} 
+                          onChange={(e) => {
+                            setTipoBristol(e.target.value);
+                            setErroValidacaoEtapa8("");
+                          }} 
+                          className="sr-only" 
+                        />
+                        <span className="font-bold text-slate-600 group-has-[:checked]:text-white text-xs sm:text-sm">
+                          {opt}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sub-bloco C: Sintomas Associados com Outro */}
+                <div className="space-y-3 pt-4 border-t border-slate-200/60">
+                  <label className="block text-sm font-bold text-slate-700">
+                    C) Durante ou após evacuar, apresenta:<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {["Dor", "Esforço", "Sangue", "Retenção", "Escape fecal", "Diarreia", "Nenhum"].map((sintoma) => (
+                      <label 
+                        key={sintoma} 
+                        className={`flex items-center p-3 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5 ${
+                          sintoma === "Nenhum" ? 'border-dashed border-slate-300 font-bold' : ''
+                        }`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={sintomasIntestino.includes(sintoma)} 
+                          onChange={() => {
+                            handleCheckboxToggle(sintoma, sintomasIntestino, setSintomasIntestino, ["Nenhum"]);
+                            setErroValidacaoEtapa8("");
+                          }} 
+                          className="w-4 h-4 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 mr-2 shrink-0" 
+                        />
+                        <span className="text-xs sm:text-sm font-semibold text-slate-700">{sintoma}</span>
+                      </label>
+                    ))}
+
+                    <label className="flex items-center p-3 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:border-[#EB6D57] has-[:checked]:ring-1 has-[:checked]:ring-[#EB6D57] has-[:checked]:bg-[#EB6D57]/5">
+                      <input 
+                        type="checkbox" 
+                        checked={sintomasIntestino.includes("Outro")} 
+                        onChange={() => {
+                          handleCheckboxToggle("Outro", sintomasIntestino, setSintomasIntestino, ["Nenhum"]);
+                          setErroValidacaoEtapa8("");
+                        }} 
+                        className="w-4 h-4 text-[#EB6D57] accent-[#EB6D57] rounded border-slate-300 mr-2 shrink-0" 
+                      />
+                      <span className="text-xs sm:text-sm font-semibold text-slate-700">Outro</span>
+                    </label>
+                  </div>
+
+                  {sintomasIntestino.includes("Outro") && (
+                    <div className="animation-fade-in mt-3">
+                      <input 
+                        type="text" 
+                        value={outroSintomaIntestinoTexto} 
+                        onChange={(e) => setOutroSintomaIntestinoTexto(e.target.value)} 
+                        placeholder="Especifique qual outro sintoma intestinal..." 
+                        className="w-full h-14 px-5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                        required 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOCO 3: HIPERFOCOS E MOTIVAÇÃO (Q54 a Q56) */}
+              <div 
+                ref={q54Ref}
+                className="space-y-8 bg-slate-50/50 p-6 sm:p-8 rounded-3xl border border-slate-100"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-base font-bold text-slate-800">
+                      54. Quais são os interesses favoritos da criança? (Hiperfocos)<span className="whitespace-nowrap">&nbsp;<span className="text-red-500">*</span></span>
+                    </label>
+                    {erroValidacaoEtapa8 && !interessesFavoritos.trim() && (
+                      <span className="text-xs font-bold text-red-500 bg-red-100 px-2.5 py-1 rounded-md shrink-0">
+                        Campo obrigatório
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Ex: personagens favoritos, desenhos, animais, carros, jogos, brincadeiras, cores ou temas preferidos. Usaremos isso para conectar as estratégias alimentares ao universo dela!
+                  </p>
+                  <textarea 
+                    value={interessesFavoritos} 
+                    onChange={(e) => {
+                      setInteressesFavoritos(e.target.value);
+                      setErroValidacaoEtapa8("");
+                    }} 
+                    placeholder="Conte o que os olhos dela brilham ao ver ou brincar..." 
+                    rows={3} 
+                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base resize-none" 
+                    required 
+                  />
+                </div>
+
+                <div className="pt-6 border-t border-slate-200/60">
+                  <label className="block text-base font-bold text-slate-800 mb-1">
+                    55. O que costuma motivar ou deixar sua criança muito feliz?
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">Resposta curta opcional.</p>
+                  <input 
+                    type="text" 
+                    value={motivacaoCrianca} 
+                    onChange={(e) => setMotivacaoCrianca(e.target.value)} 
+                    placeholder="Ex: elogios, brincadeiras ao ar livre, construir blocos..." 
+                    className="w-full h-14 px-5 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base" 
+                  />
+                </div>
+
+                <div className="pt-6 border-t border-slate-200/60">
+                  <label className="block text-base font-bold text-slate-800 mb-1">
+                    56. Existe alguma informação importante sobre seu filho que não perguntamos?
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">Espaço livre para observações dos responsáveis (opcional).</p>
+                  <textarea 
+                    value={informacoesAdicionais} 
+                    onChange={(e) => setInformacoesAdicionais(e.target.value)} 
+                    placeholder="Fique à vontade para compartilhar qualquer detalhe que julgar relevante..." 
+                    rows={3} 
+                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#EB6D57]/50 focus:border-[#EB6D57] text-base resize-none" 
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -2019,15 +2796,16 @@ export default function AnamneseWizard() {
               type="button" 
               onClick={voltarEtapa} 
               disabled={etapaAtual === 1} 
-              className="flex items-center gap-2 px-6 py-4 font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-4 font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
             >
               <ChevronLeft className="h-5 w-5" /> Voltar
             </button>
             <button 
               type="submit" 
-              className="flex items-center gap-2 px-8 py-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-all shadow-md hover:shadow-lg hover:scale-105"
+              className="flex items-center gap-2 px-8 py-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-all shadow-md hover:shadow-lg hover:scale-105 cursor-pointer"
             >
-              {etapaAtual === totalEtapas ? "Finalizar" : "Próximo Passo"} <ChevronRight className="h-5 w-5" />
+              {etapaAtual === totalEtapas ? "Finalizar Anamnese" : "Próximo Passo"} 
+              {etapaAtual === totalEtapas ? <CheckCircle2 className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
             </button>
           </div>
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, Calendar as CalendarIcon, UserCircle, Clock, CheckCircle2, Apple, Droplet, Carrot, PlusCircle, Trophy } from "lucide-react";
+import { BookOpen, Calendar as CalendarIcon, UserCircle, Clock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import DiarioAlimentar from "@/components/dashboard/DiarioAlimentar";
 
 export default function DashboardInicio() {
   const [saudacao, setSaudacao] = useState("Carregando...");
@@ -32,13 +33,13 @@ export default function DashboardInicio() {
         </div>
         
         {/* Ícone de Perfil / Conta no topo direito */}
-        <button className="h-12 w-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#4C6C54] hover:border-[#4C6C54] transition-colors shadow-sm">
+        <button className="h-12 w-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#4C6C54] hover:border-[#4C6C54] transition-colors shadow-sm cursor-pointer">
           <UserCircle className="h-7 w-7" />
         </button>
       </header>
 
       {/* Grid Principal do Dashboard (2/3 Esquerda, 1/3 Direita) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
         {/* Coluna da Esquerda (Cursos e Calendário) - Ocupa 2/3 do espaço */}
         <div className="col-span-1 lg:col-span-2 space-y-8">
@@ -128,26 +129,20 @@ export default function DashboardInicio() {
 
             </div>
             
-            <button className="w-full mt-4 py-3 text-sm font-bold text-slate-500 hover:text-[#2A546D] hover:bg-slate-50 rounded-xl transition-colors">
+            <Link 
+              href="/dashboard/calendario"
+              className="block text-center w-full mt-4 py-3 text-sm font-bold text-slate-500 hover:text-[#2A546D] hover:bg-slate-50 rounded-xl transition-colors"
+            >
               Ver calendário completo
-            </button>
+            </Link>
           </section>
         </div>
 
-        {/* Coluna da Direita (Diário Alimentar e Registro Rápido) */}
-        <div className="col-span-1 space-y-8">
-          
-          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 h-full flex flex-col hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-            
-            {/* Cabeçalho do Diário */}
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-slate-800">Diário Alimentar</h3>
-              <span className="text-xs font-bold text-[#4C6C54] bg-[#4C6C54]/10 px-3 py-1 rounded-full">
-                Hoje
-              </span>
-            </div>
-          </section>
+        {/* Coluna da Direita (Diário Alimentar Ativo) */}
+        <div className="col-span-1">
+          <DiarioAlimentar />
         </div>
+
       </div>
     </div>
   );

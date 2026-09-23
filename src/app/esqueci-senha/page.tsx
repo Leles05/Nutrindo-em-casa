@@ -3,92 +3,111 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Mail, ArrowLeft, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
 
-export default function EsqueciSenhaPage() {
+export default function PaginaEsqueciSenha() {
   const [email, setEmail] = useState("");
+  const [carregando, setCarregando] = useState(false);
   const [enviado, setEnviado] = useState(false);
 
-  const handleEnviar = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setEnviado(true);
+    if (!email.trim()) return;
+
+    setCarregando(true);
+    setTimeout(() => {
+      setCarregando(false);
+      setEnviado(true);
+    }, 800);
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0EAE1] text-slate-800 font-sans p-4">
-      
-      {/* Área da Logo Centralizada - Igualada ao tamanho da tela de login para consistência */}
-      <div className="mb-8 flex flex-col items-center">
-        <div className="relative h-48 w-48 sm:h-64 sm:w-64 mb-1">
-          <Image 
-            src="/logo-transparente.png" 
-            alt="Logo Nutrindo em Casa"
-            fill
-            sizes="(max-width: 768px) 192px, 256px"
-            className="object-contain"
-            priority 
-          />
-        </div>
-      </div>
-
-      {/* Card Principal */}
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-md border border-slate-100 p-8 sm:p-10 text-center">
+    <div className="h-screen w-full bg-[#F0EAE1] flex items-center justify-center p-4 overflow-hidden font-sans select-none">
+      <div className="bg-white rounded-3xl sm:rounded-[2.5rem] max-w-md w-full p-6 sm:p-8 space-y-5 shadow-xl border border-slate-200/80 animation-fade-in relative">
         
+        {/* LOGO */}
+        <div className="text-center space-y-2">
+          <div className="relative h-16 w-40 mx-auto">
+            <Image 
+              src="/logo-transparente.png" 
+              alt="Nutrindo em Casa" 
+              fill 
+              className="object-contain" 
+              priority 
+            />
+          </div>
+          <h1 className="text-2xl font-black text-[#4C6C54]">
+            Esqueceu a senha?
+          </h1>
+          <p className="text-xs text-slate-400 font-medium max-w-xs mx-auto">
+            Digite seu e-mail cadastrado e enviaremos um link para você redefinir sua senha.
+          </p>
+        </div>
+
         {enviado ? (
-          <div className="flex flex-col items-center py-6">
-            <CheckCircle2 className="h-16 w-16 text-[#4C6C54] mb-5" />
-            <h2 className="text-3xl font-extrabold text-[#4C6C54] mb-3 tracking-tight">E-mail Enviado!</h2>
-            <p className="text-slate-600 mb-8 text-base leading-relaxed px-2">
-              Enviamos as instruções de recuperação para <strong className="text-slate-800">{email}</strong>. 
-              Por favor, verifique sua caixa de entrada e a pasta de spam.
-            </p>
-            <Link 
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-3 animation-fade-in">
+            <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
+            <div>
+              <h3 className="text-xs font-bold text-emerald-800">E-mail de recuperação enviado!</h3>
+              <p className="text-[11px] text-emerald-600 mt-1">
+                Verifique sua caixa de entrada e siga as instruções para cadastrar uma nova senha.
+              </p>
+            </div>
+            <Link
               href="/"
-              className="w-full h-12 flex items-center justify-center bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-colors shadow-sm text-lg"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4C6C54] hover:underline pt-2"
             >
-              Voltar para o Login
+              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o login
             </Link>
           </div>
         ) : (
-          <>
-            <h2 className="text-3xl font-extrabold text-[#4C6C54] mb-3 tracking-tight">Esqueceu a senha?</h2>
-            <p className="text-slate-600 mb-8 text-lg leading-relaxed px-2">
-              Não se preocupe! Digite o e-mail cadastrado e enviaremos um link para você redefinir sua senha.
-            </p>
-
-            <form onSubmit={handleEnviar} className="space-y-5 text-left">
-              <div>
-                <label className="block text-base font-semibold text-[#4C6C54] mb-2">Email</label>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                E-mail cadastrado
+              </label>
+              <div className="relative">
                 <input
-                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="exemplo@email.com"
-                  className="w-full h-12 px-4 text-base bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                  className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54] focus:bg-white transition-all"
                   required
                 />
+                <Mail className="h-4 w-4 text-slate-400 absolute left-3 top-3.5" />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                className="w-full h-12 flex items-center justify-center bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold rounded-2xl transition-colors shadow-sm mt-4 text-lg"
-              >
-                Enviar instruções
-              </button>
-            </form>
+            <button
+              type="submit"
+              disabled={carregando}
+              className="w-full h-11 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+            >
+              {carregando ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Enviando instruções...</span>
+                </>
+              ) : (
+                <>
+                  <span>Enviar instruções</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
 
-            <div className="mt-8">
-              <Link 
+            <div className="pt-2 text-center">
+              <Link
                 href="/"
-                className="inline-flex items-center justify-center gap-2 text-base font-medium text-slate-500 hover:text-[#4C6C54] transition-colors"
+                className="text-xs font-bold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
               >
-                <ArrowLeft className="h-5 w-5" />
-                Voltar para o login
+                <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o login
               </Link>
             </div>
-          </>
+          </form>
         )}
+
       </div>
     </div>
   );

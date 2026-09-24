@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { 
   PlayCircle, Calendar as CalendarIcon, Utensils, Sparkles, 
-  ArrowRight, CheckCircle2, Plus, X, Check, Video, User 
+  ArrowRight, CheckCircle2, Plus, X, Check, Video, User,
+  ChevronDown, CreditCard, ClipboardCheck, Settings, LogOut, Crown
 } from "lucide-react";
 
 interface RefeicaoHoje {
@@ -21,6 +22,35 @@ export default function PaginaDashboard() {
 
   const [modalAberto, setModalAberto] = useState(false);
   const [toastMensagem, setToastMensagem] = useState("");
+
+  // Estado do Perfil e Assinatura
+  const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
+  const menuPerfilRef = useRef<HTMLDivElement>(null);
+
+  const [dadosPlano] = useState({
+    plano: 'Trimestral',
+    status: 'ativo' as 'ativo' | 'expirando' | 'inativo',
+    vencimento: '18/10/2026',
+    diasRestantes: 24,
+    valorCiclo: 'R$ 239,70',
+    responsavel: 'Lucas Lima',
+    email: 'lucas@email.com',
+    crianca: 'Pedro'
+  });
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuPerfilRef.current && !menuPerfilRef.current.contains(event.target as Node)) {
+        setMenuPerfilAberto(false);
+      }
+    }
+    if (menuPerfilAberto) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuPerfilAberto]);
 
   // Estado do formulário do modal
   const [novaData, setNovaData] = useState(hoje);
@@ -166,10 +196,154 @@ export default function PaginaDashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow-2xs">
-            <User className="h-4 w-4" />
-          </div>
+        {/* PERFIL & ASSINATURA */}
+        <div className="relative" ref={menuPerfilRef}>
+          <button
+            type="button"
+            onClick={() => setMenuPerfilAberto(!menuPerfilAberto)}
+            className="flex items-center gap-2 p-1.5 pl-2.5 rounded-full bg-white/90 hover:bg-white border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/30"
+            aria-expanded={menuPerfilAberto}
+            aria-label="Menu de perfil e assinatura"
+          >
+            {/* Badge Interativo do Status do Plano */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                dadosPlano.diasRestantes <= 7
+                  ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full shrink-0 ${
+                  dadosPlano.diasRestantes <= 7
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-emerald-500 animate-pulse"
+                }`}
+              />
+              <span className="hidden sm:inline">
+                {dadosPlano.diasRestantes <= 7
+                  ? `Expira em ${dadosPlano.diasRestantes} dias`
+                  : `Plano ${dadosPlano.plano} • Ativo`}
+              </span>
+              <span className="sm:hidden font-bold">
+                {dadosPlano.diasRestantes <= 7 ? "Expira em breve" : "Trimestral"}
+              </span>
+            </div>
+
+            {/* Avatar do Usuário */}
+            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-extrabold text-xs shadow-xs ring-2 ring-white">
+              LL
+            </div>
+
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 mr-1 ${
+                menuPerfilAberto ? "rotate-180 text-[#4C6C54]" : ""
+              }`}
+            />
+          </button>
+
+          {/* DROPDOWN FLUTUANTE DE PERFIL E ASSINATURA */}
+          {menuPerfilAberto && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-88 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl p-4 space-y-3.5 z-50 animation-fade-in divide-y divide-slate-100">
+              {/* CABEÇALHO */}
+              <div className="flex items-start justify-between pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-extrabold text-sm shadow-sm ring-2 ring-emerald-50 shrink-0">
+                    LL
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-sm leading-tight">
+                      {dadosPlano.responsavel}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-medium">
+                      {dadosPlano.email}
+                    </p>
+                    <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EB6D57]/10 text-[#EB6D57] border border-[#EB6D57]/20">
+                      <span>👦 {dadosPlano.crianca}</span>
+                      <span className="text-slate-400 font-normal">• 3 anos</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD DE ASSINATURA RÁPIDA */}
+              <div className="pt-3">
+                <div className="bg-gradient-to-br from-slate-50 to-emerald-50/40 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-6 w-6 rounded-lg bg-[#4C6C54]/10 text-[#4C6C54] flex items-center justify-center">
+                        <Crown className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800">
+                        Plano {dadosPlano.plano}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 tracking-wider">
+                      Ativo
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 flex items-center justify-between font-medium">
+                    <span>Próxima renovação:</span>
+                    <strong className="text-slate-700">{dadosPlano.vencimento}</strong>
+                  </div>
+
+                  <Link
+                    href="/pagamento?origem=upgrade"
+                    onClick={() => setMenuPerfilAberto(false)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer group/cta"
+                  >
+                    <span>Renovar ou Alterar Plano</span>
+                    <ArrowRight className="h-3.5 w-3.5 group-hover/cta:translate-x-0.5 transition-transform" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* AÇÕES DE NAVEGAÇÃO */}
+              <div className="pt-3 space-y-1">
+                <Link
+                  href="/configuracoes?aba=faturas"
+                  onClick={() => setMenuPerfilAberto(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-semibold text-xs transition-colors"
+                >
+                  <CreditCard className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span>Minha Assinatura & Faturas</span>
+                </Link>
+
+                <Link
+                  href="/anamnese?modo=visualizacao"
+                  onClick={() => setMenuPerfilAberto(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-semibold text-xs transition-colors"
+                >
+                  <ClipboardCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <div className="flex-1 flex items-center justify-between">
+                    <span>Ver Anamnese Concluída</span>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                      Enviada
+                    </span>
+                  </div>
+                </Link>
+
+                <Link
+                  href="/configuracoes?aba=perfil"
+                  onClick={() => setMenuPerfilAberto(false)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-semibold text-xs transition-colors text-left cursor-pointer"
+                >
+                  <Settings className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span>Configurações de Conta</span>
+                </Link>
+
+                <Link
+                  href="/"
+                  onClick={() => setMenuPerfilAberto(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4 text-red-500 shrink-0" />
+                  <span>Sair</span>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

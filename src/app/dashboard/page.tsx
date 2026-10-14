@@ -105,6 +105,16 @@ export default function PaginaDashboard() {
     }
   ]);
 
+  // Contadores de conquistas da semana por degrau da Escalada do Comer (atualizados ao registrar refeições)
+  const [contadoresSemana, setContadoresSemana] = useState<Record<"tolerou" | "cheirou" | "tocou" | "provou" | "comeu", number>>({
+    tolerou: 3,
+    cheirou: 1,
+    tocou: 1,
+    provou: 0,
+    comeu: 1
+  });
+  const totalConquistasSemana = Object.values(contadoresSemana).reduce((acc, n) => acc + n, 0);
+
   // Compromissos com suporte a check direto na Home
   const [compromissosSemana, setCompromissosSemana] = useState([
     {
@@ -163,6 +173,7 @@ export default function PaginaDashboard() {
     };
 
     setRefeicoesHoje([nova, ...refeicoesHoje]);
+    setContadoresSemana((prev) => ({ ...prev, [novaEtapaSlug]: prev[novaEtapaSlug] + 1 }));
     setNovoAlimento("");
     setNovoDetalhe("");
     setModalAberto(false);
@@ -506,34 +517,34 @@ export default function PaginaDashboard() {
                   <Sparkles className="h-3 w-3 text-[#EB6D57]" /> Essa semana a criança:
                 </span>
                 <span className="text-[10px] font-black text-[#4C6C54] bg-[#4C6C54]/10 px-2 py-0.5 rounded-md">
-                  +6 conquistas
+                  +{totalConquistasSemana} conquistas
                 </span>
               </div>
 
               <div className="grid grid-cols-5 gap-1 text-center">
                 <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-2xs">
                   <span className="text-xs">👀</span>
-                  <p className="text-xs font-black text-slate-800">3</p>
+                  <p className={`text-xs font-black ${contadoresSemana.tolerou > 0 ? "text-slate-800" : "text-slate-400"}`}>{contadoresSemana.tolerou}</p>
                   <span className="text-[8px] text-slate-400 font-bold uppercase truncate block">Tolerou</span>
                 </div>
                 <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-2xs">
                   <span className="text-xs">👃</span>
-                  <p className="text-xs font-black text-slate-800">1</p>
+                  <p className={`text-xs font-black ${contadoresSemana.cheirou > 0 ? "text-slate-800" : "text-slate-400"}`}>{contadoresSemana.cheirou}</p>
                   <span className="text-[8px] text-slate-400 font-bold uppercase truncate block">Cheirou</span>
                 </div>
                 <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-2xs">
                   <span className="text-xs">🖐️</span>
-                  <p className="text-xs font-black text-slate-800">1</p>
+                  <p className={`text-xs font-black ${contadoresSemana.tocou > 0 ? "text-slate-800" : "text-slate-400"}`}>{contadoresSemana.tocou}</p>
                   <span className="text-[8px] text-slate-400 font-bold uppercase truncate block">Tocou</span>
                 </div>
                 <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-2xs">
                   <span className="text-xs">👅</span>
-                  <p className="text-xs font-black text-slate-400">0</p>
+                  <p className={`text-xs font-black ${contadoresSemana.provou > 0 ? "text-slate-800" : "text-slate-400"}`}>{contadoresSemana.provou}</p>
                   <span className="text-[8px] text-slate-400 font-bold uppercase truncate block">Provou</span>
                 </div>
                 <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-2xs">
                   <span className="text-xs">😋</span>
-                  <p className="text-xs font-black text-slate-800">1</p>
+                  <p className={`text-xs font-black ${contadoresSemana.comeu > 0 ? "text-slate-800" : "text-slate-400"}`}>{contadoresSemana.comeu}</p>
                   <span className="text-[8px] text-slate-400 font-bold uppercase truncate block">Comeu</span>
                 </div>
               </div>

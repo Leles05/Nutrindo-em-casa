@@ -22,13 +22,21 @@ interface Evento {
 export default function PaginaCalendario() {
   const hoje = "2026-09-22";
   
-  const [dataSelecionada, setDataSelecionada] = useState("2026-09-27");
+  const [dataSelecionada, setDataSelecionada] = useState(hoje);
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "consulta" | "meta">("todos");
   const [modalAberto, setModalAberto] = useState(false);
   const [toastMensagem, setToastMensagem] = useState("");
   const [avisoDataPassadaModal, setAvisoDataPassadaModal] = useState("");
 
   const [eventos, setEventos] = useState<Evento[]>([
+    {
+      id: 5,
+      data: "2026-09-22",
+      titulo: "Meta do Dia: Oferecer vegetal no prato de apoio",
+      tipo: "meta",
+      horario: "12:30",
+      concluido: false
+    },
     {
       id: 1,
       data: "2026-09-27",

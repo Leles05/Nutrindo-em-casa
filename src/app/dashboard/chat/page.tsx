@@ -30,8 +30,24 @@ export default function PaginaChat() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fimChatRef = useRef<HTMLDivElement>(null);
+  const respostaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [digitando, setDigitando] = useState(false);
+
+  // Evita timers pendentes ao sair da página
+  useEffect(() => {
+    return () => {
+      if (respostaTimerRef.current) clearTimeout(respostaTimerRef.current);
+    };
+  }, []);
 
   const [conversas, setConversas] = useState<Mensagem[]>([
+    {
+      id: 0,
+      remetente: "nutri",
+      texto: "Olá! Seja muito bem-vinda ao Nutrindo em Casa 💚 Este é o nosso canal direto: pode me contar como foram as refeições, tirar dúvidas e compartilhar fotos dos pratos a qualquer momento.",
+      horario: "09:30",
+      dataEnvio: "Hoje às 09:30"
+    },
     {
       id: 1,
       remetente: "nutri",
@@ -57,7 +73,7 @@ export default function PaginaChat() {
   // Rola suavemente para a última mensagem
   useEffect(() => {
     fimChatRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversas]);
+  }, [conversas, digitando]);
 
   // Captura todas as imagens trocadas no chat para montar o carrossel da galeria
   const todasImagensGaleria = useMemo(() => {
@@ -152,6 +168,26 @@ export default function PaginaChat() {
     setArquivosPendentes((prev) => prev.filter((arq) => arq.id !== id));
   };
 
+  // Simula a resposta da equipe 1,5s após o envio (reinicia o timer se houver novas mensagens)
+  const agendarRespostaAutomatica = () => {
+    if (respostaTimerRef.current) clearTimeout(respostaTimerRef.current);
+    setDigitando(true);
+
+    respostaTimerRef.current = setTimeout(() => {
+      const horarioResposta = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const resposta: Mensagem = {
+        id: Date.now(),
+        remetente: "nutri",
+        texto: "Recebemos seu relato! A Dra. Laís analisará antes do próximo retorno.",
+        horario: horarioResposta,
+        dataEnvio: `Hoje às ${horarioResposta}`
+      };
+      setConversas((prev) => [...prev, resposta]);
+      setDigitando(false);
+      respostaTimerRef.current = null;
+    }, 1500);
+  };
+
   const handleEnviar = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!mensagem.trim() && arquivosPendentes.length === 0) return;
@@ -172,6 +208,7 @@ export default function PaginaChat() {
     setMensagem("");
     setArquivosPendentes([]);
     tocarSomEnvio();
+    agendarRespostaAutomatica();
   };
 
   const abrirGaleriaNaFoto = (url: string) => {
@@ -323,6 +360,23 @@ export default function PaginaChat() {
             </div>
           </div>
         ))}
+        {/* INDICADOR DE DIGITAÇÃO DA DRA. LAÍS */}
+        {digitando && (
+          <div className="flex items-end gap-2 justify-start animation-fade-in">
+            <div className="w-7 h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-[10px] shrink-0 mb-0.5 shadow-2xs">
+              DL
+            </div>
+            <div
+              className="px-4 py-3 rounded-2xl rounded-tl-xs bg-white border border-slate-100 shadow-xs flex items-center gap-1"
+              role="status"
+              aria-label="Dra. Laís está digitando"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "-0.3s" }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "-0.15s" }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" />
+            </div>
+          </div>
+        )}
         <div ref={fimChatRef} />
       </div>
 
@@ -414,6 +468,8 @@ export default function PaginaChat() {
             <button 
               type="submit"
               disabled={!mensagem.trim() && arquivosPendentes.length === 0}
+              aria-label="Enviar mensagem"
+              title="Enviar"
               className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all shadow-xs shrink-0 ${
                 mensagem.trim() || arquivosPendentes.length > 0
                   ? "bg-[#EAA345] hover:bg-[#d89234] text-white cursor-pointer" 

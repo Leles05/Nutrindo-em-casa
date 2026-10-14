@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense, useRef } from "react";
+import { useState, useEffect, Suspense, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
   QrCode, ArrowLeft, Sparkles, AlertCircle, ChevronRight,
-  Clock, Award, Shield, Flame, RefreshCw
+  Clock, Award, Shield, Flame, RefreshCw, Loader2
 } from "lucide-react";
 
 type TipoPlano = "mensal" | "trimestral" | "anual";
@@ -29,6 +29,14 @@ interface DetalhesPlano {
   beneficios: string[];
 }
 
+interface ErrosCartao {
+  numero?: string;
+  nome?: string;
+  validade?: string;
+  cvv?: string;
+  cpf?: string;
+}
+
 function ConteudoCheckout() {
   const searchParams = useSearchParams();
   const ehUpgrade = searchParams.get("origem") === "upgrade";
@@ -44,6 +52,13 @@ function ConteudoCheckout() {
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>("credito");
 
   const secaoPagamentoRef = useRef<HTMLDivElement>(null);
+
+  // Refs dos inputs para scroll suave até o primeiro erro
+  const inputNumeroRef = useRef<HTMLInputElement>(null);
+  const inputNomeRef = useRef<HTMLInputElement>(null);
+  const inputValidadeRef = useRef<HTMLInputElement>(null);
+  const inputCvvRef = useRef<HTMLInputElement>(null);
+  const inputCpfRef = useRef<HTMLInputElement>(null);
 
   // Scroll automático se plano foi pré-selecionado via URL
   useEffect(() => {
@@ -64,6 +79,9 @@ function ConteudoCheckout() {
   const [cartaoCpf, setCartaoCpf] = useState("");
   const [parcelas, setParcelas] = useState(ehUpgrade ? "12" : "1");
 
+  // Estado de erros individuais campo a campo
+  const [errosCartao, setErrosCartao] = useState<ErrosCartao>({});
+
   // Estado dos campos de Débito
   const [debitoNumero, setDebitoNumero] = useState("");
   const [debitoNome, setDebitoNome] = useState("");
@@ -71,12 +89,22 @@ function ConteudoCheckout() {
   const [debitoCvv, setDebitoCvv] = useState("");
   const [debitoCpf, setDebitoCpf] = useState("");
 
-  // Estado do Pix
+  // Estado do Pix Asaas Real
+  const [pixCarregando, setPixCarregando] = useState(false);
+  const [pixDados, setPixDados] = useState<{
+    encodedImage?: string;
+    payload?: string;
+    expirationDate?: string;
+    subscriptionId?: string;
+    paymentId?: string;
+  } | null>(null);
+  const [pixErro, setPixErro] = useState("");
   const [copiadoPix, setCopiadoPix] = useState(false);
   const [tempoRestantePix, setTempoRestantePix] = useState(899); // 14:59 min
 
-  // Loading e Modal de Sucesso
+  // Loading, ID de Transação e Modal de Sucesso
   const [processando, setProcessando] = useState(false);
+  const [idAssinaturaGerada, setIdAssinaturaGerada] = useState("");
   const [modalSucesso, setModalSucesso] = useState(false);
   const [erroForm, setErroForm] = useState("");
 
@@ -149,6 +177,57 @@ function ConteudoCheckout() {
     ? Math.max(0, planoAtivo.precoCobradoTotal - creditoProporcional)
     : planoAtivo.precoCobradoTotal;
 
+  // =========================================================================
+  // INTEGRAÇÃO REAL COM A API DO ASAAS (PIX)
+  // =========================================================================
+  const gerarPixAsaas = useCallback(async () => {
+    setPixCarregando(true);
+    setPixErro("");
+
+    try {
+      const res = await fetch("/api/asaas/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: cartaoNome || "Lucas Lima",
+          email: "lucas@email.com",
+          cpf: cartaoCpf || "384.192.837-12",
+          celular: "11988887777",
+          billingType: "PIX",
+          plano: planoSelecionado,
+          valor: valorTotalFinal
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Erro ao gerar QR Code Pix no Asaas.");
+      }
+
+      setPixDados({
+        encodedImage: data.encodedImage,
+        payload: data.payload,
+        expirationDate: data.expirationDate,
+        subscriptionId: data.subscriptionId,
+        paymentId: data.paymentId
+      });
+      setIdAssinaturaGerada(data.subscriptionId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao conectar com o Asaas.";
+      setPixErro(msg);
+    } finally {
+      setPixCarregando(false);
+    }
+  }, [cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal]);
+
+  // Dispara a geração de Pix do Asaas ao trocar para aba Pix ou trocar de plano
+  useEffect(() => {
+    if (metodoPagamento === "pix") {
+      gerarPixAsaas();
+    }
+  }, [metodoPagamento, planoSelecionado, gerarPixAsaas]);
+
   // Contador regressivo do Pix (15 minutos)
   useEffect(() => {
     if (metodoPagamento !== "pix") return;
@@ -164,11 +243,10 @@ function ConteudoCheckout() {
     return `${min.toString().padStart(2, "0")}:${seg.toString().padStart(2, "0")}`;
   };
 
-  // Código Pix dinâmico com valor final atualizado
-  const pixCopiaECola = `00020126580014br.gov.bcb.pix0136nutrindoemcasa-asaas-pix-62b1a9e3-82a15204000053039865405${valorTotalFinal.toFixed(2)}5802BR5916NUTRINDO EM CASA6009SAO PAULO62070503***6304`;
-
   const copiarChavePix = () => {
-    navigator.clipboard.writeText(pixCopiaECola);
+    const chave = pixDados?.payload || "";
+    if (!chave) return;
+    navigator.clipboard.writeText(chave);
     setCopiadoPix(true);
     setTimeout(() => setCopiadoPix(false), 3000);
   };
@@ -243,6 +321,105 @@ function ConteudoCheckout() {
     ];
   };
 
+  // =========================================================================
+  // VALIDAÇÃO LOCAL E DESTAQUE CAMPO A CAMPO
+  // =========================================================================
+  const validarFormularioCartao = (): boolean => {
+    const novosErros: ErrosCartao = {};
+
+    // 1. Número do Cartão (16 dígitos numéricos)
+    const numLimpo = cartaoNumero.replace(/\D/g, "");
+    if (!numLimpo) {
+      novosErros.numero = "Digite o número do cartão de crédito.";
+    } else if (numLimpo.length !== 16) {
+      novosErros.numero = "O número do cartão deve conter 16 dígitos.";
+    }
+
+    // 2. Nome do Titular (pelo menos duas palavras)
+    const nomeTrim = cartaoNome.trim();
+    if (!nomeTrim) {
+      novosErros.nome = "Digite o nome como impresso no cartão.";
+    } else if (nomeTrim.split(/\s+/).filter(Boolean).length < 2) {
+      novosErros.nome = "Informe o nome e o sobrenome do titular.";
+    }
+
+    // 3. Validade (formato MM/AA, mês 01 a 12, ano >= atual)
+    if (!cartaoValidade.trim()) {
+      novosErros.validade = "Informe a validade (MM/AA).";
+    } else {
+      const match = cartaoValidade.match(/^(\d{2})\/(\d{2})$/);
+      if (!match) {
+        novosErros.validade = "Use o formato MM/AA.";
+      } else {
+        const mes = parseInt(match[1], 10);
+        const ano = parseInt(`20${match[2]}`, 10);
+        const dataAtual = new Date();
+        const anoAtual = dataAtual.getFullYear();
+        const mesAtual = dataAtual.getMonth() + 1; // 1 a 12
+
+        if (mes < 1 || mes > 12) {
+          novosErros.validade = "Mês inválido (01 a 12).";
+        } else if (ano < anoAtual || (ano === anoAtual && mes < mesAtual)) {
+          novosErros.validade = "Cartão com validade vencida.";
+        }
+      }
+    }
+
+    // 4. CVV (3 ou 4 dígitos numéricos, bloqueia vazio, <3 dígitos ou '000')
+    const cvvLimpo = cartaoCvv.trim();
+    if (!cvvLimpo) {
+      novosErros.cvv = "Digite o código CVV.";
+    } else if (cvvLimpo.length < 3 || cvvLimpo.length > 4 || !/^\d{3,4}$/.test(cvvLimpo)) {
+      novosErros.cvv = "O CVV deve ter no mínimo 3 dígitos numéricos.";
+    } else if (cvvLimpo === "000" || cvvLimpo === "0000") {
+      novosErros.cvv = "Código de segurança inválido.";
+    }
+
+    // 5. CPF do Titular (11 dígitos)
+    const cpfLimpo = cartaoCpf.replace(/\D/g, "");
+    if (!cpfLimpo) {
+      novosErros.cpf = "Informe o CPF do titular.";
+    } else if (cpfLimpo.length !== 11 || /^(\d)\1{10}$/.test(cpfLimpo)) {
+      novosErros.cpf = "CPF inválido. Digite os 11 dígitos.";
+    }
+
+    setErrosCartao(novosErros);
+
+    // Scroll suave até o primeiro campo inválido se houver erro
+    if (Object.keys(novosErros).length > 0) {
+      if (novosErros.numero) {
+        inputNumeroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputNumeroRef.current?.focus();
+      } else if (novosErros.nome) {
+        inputNomeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputNomeRef.current?.focus();
+      } else if (novosErros.validade) {
+        inputValidadeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputValidadeRef.current?.focus();
+      } else if (novosErros.cvv) {
+        inputCvvRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputCvvRef.current?.focus();
+      } else if (novosErros.cpf) {
+        inputCpfRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        inputCpfRef.current?.focus();
+      }
+      return false;
+    }
+
+    return true;
+  };
+
+  // Helper para classes visuais com erro ou padrão
+  const getInputClass = (hasError: boolean) =>
+    `w-full h-11 px-3.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+      hasError
+        ? "bg-red-50/20 border border-red-400 ring-2 ring-red-100 text-slate-900 focus:outline-none focus:border-red-500"
+        : "bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white"
+    }`;
+
+  // =========================================================================
+  // FINALIZAÇÃO DE ASSINATURA (CONEXÃO REAL ASAAS SANDBOX)
+  // =========================================================================
   const handleFinalizarAssinatura = async (e: React.FormEvent) => {
     e.preventDefault();
     setErroForm("");
@@ -252,25 +429,74 @@ function ConteudoCheckout() {
       return;
     }
 
-    if (metodoPagamento === "credito") {
-      if (cartaoNumero.replace(/\s/g, "").length < 15) {
-        setErroForm("Por favor, digite um número de cartão de crédito válido.");
-        return;
+    // Fluxo do PIX
+    if (metodoPagamento === "pix") {
+      if (!pixDados?.encodedImage) {
+        await gerarPixAsaas();
       }
-      if (!cartaoNome.trim()) {
-        setErroForm("Informe o nome do titular como impresso no cartão.");
-        return;
-      }
-      if (cartaoValidade.length < 5) {
-        setErroForm("Informe a validade no formato MM/AA.");
-        return;
-      }
-      if (cartaoCvv.length < 3) {
-        setErroForm("Informe o código de segurança (CVV) do cartão.");
-        return;
-      }
+      setModalSucesso(true);
+      return;
     }
 
+    // Fluxo do Cartão de Crédito Real via Asaas
+    if (metodoPagamento === "credito") {
+      // Validação local campo a campo
+      const formValido = validarFormularioCartao();
+      if (!formValido) {
+        return;
+      }
+
+      const numLimpo = cartaoNumero.replace(/\D/g, "");
+      const [expMonth, expYear] = cartaoValidade.split("/");
+
+      setProcessando(true);
+
+      try {
+        const res = await fetch("/api/asaas/subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: cartaoNome,
+            email: "lucas@email.com",
+            cpf: cartaoCpf,
+            celular: "11988887777",
+            billingType: "CREDIT_CARD",
+            plano: planoSelecionado,
+            valor: valorTotalFinal,
+            cartao: {
+              holderName: cartaoNome,
+              number: numLimpo,
+              expiryMonth: expMonth,
+              expiryYear: expYear,
+              ccv: cartaoCvv,
+              cpf: cartaoCpf
+            }
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setErroForm(
+            data.message ||
+              "Não foi possível autorizar o cartão no Asaas. Verifique os dados ou utilize o Pix."
+          );
+          setProcessando(false);
+          return;
+        }
+
+        setIdAssinaturaGerada(data.subscriptionId);
+        setProcessando(false);
+        setModalSucesso(true);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Erro ao processar cobrança segura.";
+        setErroForm(msg);
+        setProcessando(false);
+      }
+      return;
+    }
+
+    // Fluxo de Débito
     if (metodoPagamento === "debito") {
       if (debitoNumero.replace(/\s/g, "").length < 15) {
         setErroForm("Por favor, digite um número de cartão de débito válido.");
@@ -280,14 +506,12 @@ function ConteudoCheckout() {
         setErroForm("Informe o nome do titular.");
         return;
       }
+      setProcessando(true);
+      setTimeout(() => {
+        setProcessando(false);
+        setModalSucesso(true);
+      }, 1400);
     }
-
-    setProcessando(true);
-
-    setTimeout(() => {
-      setProcessando(false);
-      setModalSucesso(true);
-    }, 1400);
   };
 
   return (
@@ -297,15 +521,15 @@ function ConteudoCheckout() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href={ehUpgrade ? "/configuracoes?aba=faturas" : "/dashboard"}
+              href={ehUpgrade ? "/configuracoes?aba=faturas" : "/"}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 p-2 rounded-xl hover:bg-slate-100 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>{ehUpgrade ? "Voltar às Configurações" : "Voltar ao Dashboard"}</span>
+              <span>{ehUpgrade ? "Voltar às Configurações" : "Voltar ao Início"}</span>
             </Link>
           </div>
 
-          <Link href="/dashboard" className="relative h-9 w-28 block">
+          <Link href="/" className="relative h-9 w-28 block">
             <Image
               src="/logo-transparente.png"
               alt="Nutrindo em Casa"
@@ -641,13 +865,18 @@ function ConteudoCheckout() {
           
           {/* COLUNA ESQUERDA: FORMAS DE PAGAMENTO (7 COLUNAS) */}
           <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
-            <div>
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
-                2. Método de Pagamento
-              </h2>
-              <p className="text-xs text-slate-500">
-                Pagamentos criptografados e processados com segurança pelo Asaas.
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                  2. Método de Pagamento
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Cobrança oficial processada de forma segura pelo Asaas Sandbox.
+                </p>
+              </div>
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Asaas Oficial
+              </span>
             </div>
 
             {/* SELETOR DE ABAS */}
@@ -662,7 +891,7 @@ function ConteudoCheckout() {
                 }`}
               >
                 <CreditCard className="h-4 w-4 text-slate-600" />
-                <span>Crédito (até 12x)</span>
+                <span>Crédito</span>
               </button>
 
               <button
@@ -696,15 +925,21 @@ function ConteudoCheckout() {
             </div>
 
             {erroForm && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2.5 animate-in fade-in duration-200">
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
                 <span>{erroForm}</span>
               </div>
             )}
 
-            {/* ABA 1: CARTÃO DE CRÉDITO (DEFAULT NO UPGRADE) */}
+            {/* ABA 1: CARTÃO DE CRÉDITO COM PROCESSAMENTO REAL NO ASAAS E VALIDAÇÃO LOCAL */}
             {metodoPagamento === "credito" && (
-              <form onSubmit={handleFinalizarAssinatura} className="space-y-4 animate-in fade-in duration-200">
+              <form
+                onSubmit={handleFinalizarAssinatura}
+                autoComplete="off"
+                noValidate
+                className="space-y-4 animate-in fade-in duration-200"
+              >
+                {/* 1. NÚMERO DO CARTÃO */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-bold text-slate-700 uppercase">
@@ -715,42 +950,89 @@ function ConteudoCheckout() {
                     </span>
                   </div>
                   <input
+                    ref={inputNumeroRef}
+                    id="f_num_pay"
+                    name="f_num_pay"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="0000 0000 0000 0000"
                     value={cartaoNumero}
-                    onChange={(e) => handleNumeroCartao(e.target.value, setCartaoNumero)}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                    onChange={(e) => {
+                      handleNumeroCartao(e.target.value, setCartaoNumero);
+                      if (errosCartao.numero) {
+                        setErrosCartao((prev) => ({ ...prev, numero: undefined }));
+                      }
+                    }}
+                    className={getInputClass(!!errosCartao.numero)}
                   />
+                  {errosCartao.numero && (
+                    <span className="text-xs text-red-500 font-medium mt-1 block animate-in fade-in duration-150">
+                      {errosCartao.numero}
+                    </span>
+                  )}
                 </div>
 
+                {/* 2. NOME IMPRESSO */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                     Nome Impresso no Cartão
                   </label>
                   <input
+                    ref={inputNomeRef}
+                    id="f_nom_pay"
+                    name="f_nom_pay"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="Ex: LUCAS LIMA"
                     value={cartaoNome}
-                    onChange={(e) => setCartaoNome(e.target.value.toUpperCase())}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                    onChange={(e) => {
+                      setCartaoNome(e.target.value.toUpperCase());
+                      if (errosCartao.nome) {
+                        setErrosCartao((prev) => ({ ...prev, nome: undefined }));
+                      }
+                    }}
+                    className={`${getInputClass(!!errosCartao.nome)} uppercase`}
                   />
+                  {errosCartao.nome && (
+                    <span className="text-xs text-red-500 font-medium mt-1 block animate-in fade-in duration-150">
+                      {errosCartao.nome}
+                    </span>
+                  )}
                 </div>
 
+                {/* 3. VALIDADE & CVV */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                       Validade (MM/AA)
                     </label>
                     <input
+                      ref={inputValidadeRef}
+                      id="f_val_pay"
+                      name="f_val_pay"
                       type="text"
-                      required
+                      autoComplete="new-password"
+                      data-form-type="other"
+                      data-lpignore="true"
                       placeholder="12/28"
                       value={cartaoValidade}
-                      onChange={(e) => handleValidade(e.target.value, setCartaoValidade)}
-                      className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                      onChange={(e) => {
+                        handleValidade(e.target.value, setCartaoValidade);
+                        if (errosCartao.validade) {
+                          setErrosCartao((prev) => ({ ...prev, validade: undefined }));
+                        }
+                      }}
+                      className={getInputClass(!!errosCartao.validade)}
                     />
+                    {errosCartao.validade && (
+                      <span className="text-xs text-red-500 font-medium mt-1 block animate-in fade-in duration-150">
+                        {errosCartao.validade}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -758,31 +1040,63 @@ function ConteudoCheckout() {
                       CVV / Código
                     </label>
                     <input
+                      ref={inputCvvRef}
+                      id="f_sec_pay"
+                      name="f_sec_pay"
                       type="password"
-                      required
+                      autoComplete="new-password"
+                      data-form-type="other"
+                      data-lpignore="true"
                       maxLength={4}
                       placeholder="123"
                       value={cartaoCvv}
-                      onChange={(e) => handleCvv(e.target.value, setCartaoCvv)}
-                      className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                      onChange={(e) => {
+                        handleCvv(e.target.value, setCartaoCvv);
+                        if (errosCartao.cvv) {
+                          setErrosCartao((prev) => ({ ...prev, cvv: undefined }));
+                        }
+                      }}
+                      className={getInputClass(!!errosCartao.cvv)}
                     />
+                    {errosCartao.cvv && (
+                      <span className="text-xs text-red-500 font-medium mt-1 block animate-in fade-in duration-150">
+                        {errosCartao.cvv}
+                      </span>
+                    )}
                   </div>
                 </div>
 
+                {/* 4. CPF DO TITULAR */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                     CPF do Titular
                   </label>
                   <input
+                    ref={inputCpfRef}
+                    id="f_doc_pay"
+                    name="f_doc_pay"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="000.000.000-00"
                     value={cartaoCpf}
-                    onChange={(e) => handleCpf(e.target.value, setCartaoCpf)}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
+                    onChange={(e) => {
+                      handleCpf(e.target.value, setCartaoCpf);
+                      if (errosCartao.cpf) {
+                        setErrosCartao((prev) => ({ ...prev, cpf: undefined }));
+                      }
+                    }}
+                    className={getInputClass(!!errosCartao.cpf)}
                   />
+                  {errosCartao.cpf && (
+                    <span className="text-xs text-red-500 font-medium mt-1 block animate-in fade-in duration-150">
+                      {errosCartao.cpf}
+                    </span>
+                  )}
                 </div>
 
+                {/* 5. OPÇÕES DE PARCELAMENTO */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                     Opções de Parcelamento
@@ -802,7 +1116,7 @@ function ConteudoCheckout() {
               </form>
             )}
 
-            {/* ABA 2: PIX */}
+            {/* ABA 2: PIX COM QR CODE REAL GERADO NO ASAAS SANDBOX */}
             {metodoPagamento === "pix" && (
               <div className="space-y-6 animate-in fade-in duration-200">
                 <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between text-xs text-emerald-900 font-medium">
@@ -815,63 +1129,70 @@ function ConteudoCheckout() {
                   </strong>
                 </div>
 
-                {/* QR CODE */}
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
-                    <svg
-                      width="180"
-                      height="180"
-                      viewBox="0 0 180 180"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="rounded-lg"
-                    >
-                      <rect width="180" height="180" fill="white" />
-                      <rect x="10" y="10" width="45" height="45" rx="8" fill="#1E293B" />
-                      <rect x="18" y="18" width="29" height="29" rx="4" fill="white" />
-                      <rect x="24" y="24" width="17" height="17" rx="2" fill="#1E293B" />
-
-                      <rect x="125" y="10" width="45" height="45" rx="8" fill="#1E293B" />
-                      <rect x="133" y="18" width="29" height="29" rx="4" fill="white" />
-                      <rect x="139" y="24" width="17" height="17" rx="2" fill="#1E293B" />
-
-                      <rect x="10" y="125" width="45" height="45" rx="8" fill="#1E293B" />
-                      <rect x="18" y="133" width="29" height="29" rx="4" fill="white" />
-                      <rect x="24" y="139" width="17" height="17" rx="2" fill="#1E293B" />
-
-                      <rect x="65" y="15" width="10" height="10" rx="2" fill="#1E293B" />
-                      <rect x="85" y="15" width="10" height="10" rx="2" fill="#1E293B" />
-                      <rect x="105" y="15" width="10" height="10" rx="2" fill="#1E293B" />
-
-                      <rect x="65" y="35" width="20" height="10" rx="2" fill="#1E293B" />
-                      <rect x="95" y="35" width="10" height="20" rx="2" fill="#1E293B" />
-
-                      <rect x="15" y="65" width="15" height="10" rx="2" fill="#1E293B" />
-                      <rect x="40" y="65" width="10" height="20" rx="2" fill="#1E293B" />
-
-                      <rect x="125" y="65" width="20" height="10" rx="2" fill="#1E293B" />
-                      <rect x="155" y="75" width="15" height="15" rx="2" fill="#1E293B" />
-
-                      <circle cx="90" cy="90" r="24" fill="#00BDAE" />
-                      <path
-                        d="M82 90L90 82L98 90L90 98L82 90Z"
-                        fill="white"
-                      />
-                      <rect x="87" y="87" width="6" height="6" fill="#00BDAE" />
-
-                      <rect x="65" y="125" width="15" height="15" rx="2" fill="#1E293B" />
-                      <rect x="90" y="135" width="20" height="10" rx="2" fill="#1E293B" />
-                      <rect x="120" y="125" width="10" height="25" rx="2" fill="#1E293B" />
-                      <rect x="140" y="145" width="25" height="15" rx="2" fill="#1E293B" />
-                      <rect x="70" y="155" width="30" height="15" rx="2" fill="#1E293B" />
-                    </svg>
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-500">
-                    Aponte a câmera do seu aplicativo de pagamentos
-                  </span>
+                {/* ÁREA DO QR CODE REAL DO ASAAS */}
+                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3 min-h-[260px]">
+                  {pixCarregando ? (
+                    <div className="flex flex-col items-center justify-center space-y-3 py-8">
+                      <Loader2 className="h-9 w-9 animate-spin text-[#4C6C54]" />
+                      <span className="text-xs font-extrabold text-slate-700">
+                        Gerando QR Code Pix oficial no Asaas...
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Conectando com o gateway seguro Asaas Sandbox
+                      </span>
+                    </div>
+                  ) : pixErro ? (
+                    <div className="text-center space-y-3 py-4 max-w-sm">
+                      <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
+                      <p className="text-xs font-bold text-rose-700">{pixErro}</p>
+                      <button
+                        type="button"
+                        onClick={() => gerarPixAsaas()}
+                        className="py-2 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Tentar Novamente</span>
+                      </button>
+                    </div>
+                  ) : pixDados?.encodedImage ? (
+                    <>
+                      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md">
+                        {/* Imagem Base64 Real do Asaas */}
+                        <img
+                          src={`data:image/png;base64,${pixDados.encodedImage}`}
+                          alt="QR Code Pix Asaas"
+                          className="w-48 h-48 rounded-lg object-contain"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-600">
+                          Aponte a câmera do seu banco para pagar
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => gerarPixAsaas()}
+                          title="Atualizar QR Code"
+                          className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <button
+                        type="button"
+                        onClick={() => gerarPixAsaas()}
+                        className="py-2.5 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <QrCode className="h-4 w-4" />
+                        <span>Gerar QR Code Pix Oficial</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* COPIA E COLA */}
+                {/* CAMPO COPIA E COLA REAL DO ASAAS */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                     Pix Copia e Cola:
@@ -880,13 +1201,17 @@ function ConteudoCheckout() {
                     <input
                       type="text"
                       readOnly
-                      value={pixCopiaECola}
+                      autoComplete="off"
+                      data-form-type="other"
+                      data-lpignore="true"
+                      value={pixDados?.payload || (pixCarregando ? "Gerando código Pix oficial..." : "Aguardando geração do QR Code...")}
                       className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none select-all"
                     />
                     <button
                       type="button"
                       onClick={copiarChavePix}
-                      className={`h-11 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs ${
+                      disabled={!pixDados?.payload || pixCarregando}
+                      className={`h-11 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed ${
                         copiadoPix
                           ? "bg-emerald-600 text-white"
                           : "bg-slate-900 hover:bg-slate-800 text-white"
@@ -911,7 +1236,12 @@ function ConteudoCheckout() {
 
             {/* ABA 3: CARTÃO DE DÉBITO */}
             {metodoPagamento === "debito" && (
-              <form onSubmit={handleFinalizarAssinatura} className="space-y-4 animate-in fade-in duration-200">
+              <form
+                onSubmit={handleFinalizarAssinatura}
+                autoComplete="off"
+                noValidate
+                className="space-y-4 animate-in fade-in duration-200"
+              >
                 <div className="p-3.5 bg-blue-50 border border-blue-200/80 rounded-2xl text-xs text-blue-900 font-medium flex items-start gap-2.5">
                   <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
                   <p>
@@ -924,8 +1254,12 @@ function ConteudoCheckout() {
                     Número do Cartão de Débito
                   </label>
                   <input
+                    id="f_num_deb"
+                    name="f_num_deb"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="0000 0000 0000 0000"
                     value={debitoNumero}
                     onChange={(e) => handleNumeroCartao(e.target.value, setDebitoNumero)}
@@ -938,8 +1272,12 @@ function ConteudoCheckout() {
                     Nome Impresso no Cartão
                   </label>
                   <input
+                    id="f_nom_deb"
+                    name="f_nom_deb"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="Ex: LUCAS LIMA"
                     value={debitoNome}
                     onChange={(e) => setDebitoNome(e.target.value.toUpperCase())}
@@ -953,8 +1291,12 @@ function ConteudoCheckout() {
                       Validade (MM/AA)
                     </label>
                     <input
+                      id="f_val_deb"
+                      name="f_val_deb"
                       type="text"
-                      required
+                      autoComplete="new-password"
+                      data-form-type="other"
+                      data-lpignore="true"
                       placeholder="12/28"
                       value={debitoValidade}
                       onChange={(e) => handleValidade(e.target.value, setDebitoValidade)}
@@ -967,8 +1309,12 @@ function ConteudoCheckout() {
                       CVV / Código
                     </label>
                     <input
+                      id="f_sec_deb"
+                      name="f_sec_deb"
                       type="password"
-                      required
+                      autoComplete="new-password"
+                      data-form-type="other"
+                      data-lpignore="true"
                       maxLength={4}
                       placeholder="123"
                       value={debitoCvv}
@@ -983,8 +1329,12 @@ function ConteudoCheckout() {
                     CPF do Titular
                   </label>
                   <input
+                    id="f_doc_deb"
+                    name="f_doc_deb"
                     type="text"
-                    required
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="000.000.000-00"
                     value={debitoCpf}
                     onChange={(e) => handleCpf(e.target.value, setDebitoCpf)}
@@ -1061,8 +1411,8 @@ function ConteudoCheckout() {
               >
                 {processando ? (
                   <>
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Processando via Asaas...</span>
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    <span>Processando cobrança segura no Asaas...</span>
                   </>
                 ) : (
                   <>
@@ -1072,6 +1422,8 @@ function ConteudoCheckout() {
                         ? "✓ Plano Vigente (Você já possui)"
                         : ehUpgrade
                         ? "Confirmar Upgrade para o Anual →"
+                        : metodoPagamento === "pix"
+                        ? "Confirmar Assinatura via Pix"
                         : "Concluir Assinatura Segura"}
                     </span>
                   </>
@@ -1125,7 +1477,7 @@ function ConteudoCheckout() {
         </div>
       </main>
 
-      {/* MODAL DE SUCESSO / CONFIRMAÇÃO DE ASSINATURA */}
+      {/* MODAL DE CELEBRAÇÃO / SUCESSO ASAAS */}
       {modalSucesso && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
@@ -1135,14 +1487,16 @@ function ConteudoCheckout() {
 
             <div>
               <span className="text-xs font-extrabold uppercase text-emerald-600 tracking-wider">
-                {ehUpgrade ? "Upgrade Concluído com Sucesso! 🚀" : "Pagamento Autorizado"}
+                {ehUpgrade ? "Upgrade Concluído via Asaas! 🚀" : "Assinatura Confirmada via Asaas! 🎉"}
               </span>
               <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
-                {ehUpgrade ? "Plano Anual Ativado!" : "Assinatura Confirmada! 🎉"}
+                {ehUpgrade ? "Plano Anual Ativado!" : "Bem-vindo(a) ao Nutrindo em Casa!"}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
-                {ehUpgrade
-                  ? "Sua assinatura foi atualizada para o Plano Anual. O crédito proporcional de R$ 79,90 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
+                {metodoPagamento === "pix"
+                  ? "Sua cobrança Pix foi registrada com sucesso no Asaas. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
+                  : ehUpgrade
+                  ? "Sua assinatura foi atualizada para o Plano Anual no Asaas. O crédito proporcional de R$ 79,90 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
                   : `Seu acesso ao ${planoAtivo.nome} foi liberado com sucesso. Todos os recursos, anamnese e ferramentas já estão disponíveis.`}
               </p>
             </div>
@@ -1157,22 +1511,24 @@ function ConteudoCheckout() {
                 <strong className="text-slate-800">R$ {valorTotalFinal.toFixed(2).replace(".", ",")}</strong>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Método:</span>
+                <span className="text-slate-500">Forma de Pagamento:</span>
                 <strong className="text-slate-800 uppercase">{metodoPagamento}</strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Próxima Renovação:</span>
-                <strong className="text-slate-800">
-                  {planoSelecionado === "anual" ? "Em 365 dias (Setembro/2027)" : "Em 90 dias"}
-                </strong>
-              </div>
+              {idAssinaturaGerada && (
+                <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500">ID da Assinatura Asaas:</span>
+                  <span className="font-mono text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-bold">
+                    {idAssinaturaGerada}
+                  </span>
+                </div>
+              )}
             </div>
 
             <Link
               href="/dashboard"
               className="w-full py-3.5 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Acessar o Meu Dashboard</span>
+              <span>Acessar Plataforma</span>
               <ChevronRight className="h-4 w-4" />
             </Link>
           </div>

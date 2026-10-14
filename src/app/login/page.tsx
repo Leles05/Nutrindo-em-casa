@@ -15,7 +15,7 @@ export default function PaginaLoginDedicada() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [carregando, setCarregando] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [provedorCarregando, setProvedorCarregando] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
@@ -28,12 +28,12 @@ export default function PaginaLoginDedicada() {
       return;
     }
 
-    setCarregando(true);
+    setLoading(true);
 
     setTimeout(() => {
-      setCarregando(false);
+      setLoading(false);
       router.push("/dashboard");
-    }, 600);
+    }, 1500);
   };
 
   const handleLoginSocial = (provedor: "google" | "facebook") => {
@@ -43,7 +43,7 @@ export default function PaginaLoginDedicada() {
     setTimeout(() => {
       setProvedorCarregando(null);
       router.push("/dashboard");
-    }, 500);
+    }, 1500);
   };
 
   return (
@@ -91,7 +91,7 @@ export default function PaginaLoginDedicada() {
             <button
               type="button"
               onClick={() => handleLoginSocial("google")}
-              disabled={carregando || provedorCarregando !== null}
+              disabled={loading || provedorCarregando !== null}
               className="h-11 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 transition-all shadow-2xs hover:border-slate-300 cursor-pointer disabled:opacity-50"
             >
               {provedorCarregando === "google" ? (
@@ -112,7 +112,7 @@ export default function PaginaLoginDedicada() {
             <button
               type="button"
               onClick={() => handleLoginSocial("facebook")}
-              disabled={carregando || provedorCarregando !== null}
+              disabled={loading || provedorCarregando !== null}
               className="h-11 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 transition-all shadow-2xs hover:border-slate-300 cursor-pointer disabled:opacity-50"
             >
               {provedorCarregando === "facebook" ? (
@@ -197,13 +197,13 @@ export default function PaginaLoginDedicada() {
 
             <button
               type="submit"
-              disabled={carregando}
+              disabled={loading}
               className="w-full h-12 bg-[#4C6C54] hover:bg-[#3a5340] active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 mt-2"
             >
-              {carregando ? (
+              {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Entrando na plataforma...</span>
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  <span>Autenticando...</span>
                 </>
               ) : (
                 <>

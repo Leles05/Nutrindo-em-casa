@@ -25,6 +25,11 @@ export default function PaginaInicialLanding() {
         "Sim. A metodologia da Dra. Laís Leles é baseada em evidências científicas e aborda as 5 fases sensoriais (tolerar, cheirar, tocar, provar e comer), respeitando o tempo individual de cada criança sem forçar ou gerar traumas."
     },
     {
+      pergunta: "Posso acessar pelo celular?",
+      resposta:
+        "Sim. A plataforma é totalmente responsiva e pode ser acessada pelo computador, tablet ou celular. As videoaulas são gravadas em alta definição e podem ser assistidas a qualquer hora."
+    },
+    {
       pergunta: "Como funciona a Anamnese Pediátrica de 56 perguntas?",
       resposta:
         "Assim que você entra na plataforma, você preenche um prontuário detalhado com histórico gestacional, seletividade e repertório de alimentos aceitos. A Dra. Laís utiliza essas informações para individualizar as orientações clínicas da sua família."
@@ -281,7 +286,7 @@ export default function PaginaInicialLanding() {
       </section>
 
       {/* ===================================================================== */}
-      {/* 3. BANNER DE MÉTRICAS & AUTORIDADE (ESTILO MATE ACADEMY) */}
+      {/* 3. BANNER DE MÉTRICAS & AUTORIDADE*/}
       {/* ===================================================================== */}
       <section className="py-8 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">

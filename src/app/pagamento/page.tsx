@@ -371,7 +371,7 @@ function ConteudoCheckout() {
       novosErros.cvv = "Digite o código CVV.";
     } else if (cvvLimpo.length < 3 || cvvLimpo.length > 4 || !/^\d{3,4}$/.test(cvvLimpo)) {
       novosErros.cvv = "O CVV deve ter no mínimo 3 dígitos numéricos.";
-    } else if (cvvLimpo === "000" || cvvLimpo === "0000") {
+    } else if (cvvLimpo === "000" || cvvLimpo === "0000" || cvvLimpo === "111") {
       novosErros.cvv = "Código de segurança inválido.";
     }
 
@@ -1424,7 +1424,7 @@ function ConteudoCheckout() {
                         ? "Confirmar Upgrade para o Anual →"
                         : metodoPagamento === "pix"
                         ? "Confirmar Assinatura via Pix"
-                        : "Concluir Assinatura Segura"}
+                        : "Finalizar Pagamento Agora"}
                     </span>
                   </>
                 )}

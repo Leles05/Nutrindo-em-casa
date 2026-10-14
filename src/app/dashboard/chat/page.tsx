@@ -178,7 +178,7 @@ export default function PaginaChat() {
       const resposta: Mensagem = {
         id: Date.now(),
         remetente: "nutri",
-        texto: "Recebemos seu relato! A Dra. Laís analisará antes do próximo retorno.",
+        texto: "Olá! Em que posso ajudar hoje?",
         horario: horarioResposta,
         dataEnvio: `Hoje às ${horarioResposta}`
       };

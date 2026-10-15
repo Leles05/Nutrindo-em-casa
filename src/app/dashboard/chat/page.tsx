@@ -168,37 +168,51 @@ export default function PaginaChat() {
     setArquivosPendentes((prev) => prev.filter((arq) => arq.id !== id));
   };
 
-  // Simula a resposta da equipe 1,5s após o envio (reinicia o timer se houver novas mensagens)
-  const agendarRespostaAutomatica = () => {
-    if (respostaTimerRef.current) clearTimeout(respostaTimerRef.current);
-    setDigitando(true);
+  // Carrega histórico do Supabase ao montar
+  useEffect(() => {
+    const emailUsuario =
+      typeof window !== "undefined"
+        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+        : "lucas@email.com";
 
-    respostaTimerRef.current = setTimeout(() => {
-      const horarioResposta = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const resposta: Mensagem = {
-        id: Date.now(),
-        remetente: "nutri",
-        texto: "Olá! Em que posso ajudar hoje?",
-        horario: horarioResposta,
-        dataEnvio: `Hoje às ${horarioResposta}`
-      };
-      setConversas((prev) => [...prev, resposta]);
-      setDigitando(false);
-      respostaTimerRef.current = null;
-    }, 1500);
-  };
+    async function carregarChat() {
+      try {
+        const res = await fetch(`/api/chat?email=${encodeURIComponent(emailUsuario)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.mensagens && data.mensagens.length > 0) {
+          const formatadas: Mensagem[] = data.mensagens.map((m: { id: string; remetente: "nutri" | "usuario"; texto: string; horario: string }) => ({
+            id: m.id,
+            remetente: m.remetente,
+            texto: m.texto,
+            horario: m.horario,
+            dataEnvio: `Hoje às ${m.horario}`,
+          }));
+          setConversas((prev) => {
+            // Mantém a de boas-vindas se não houver nenhuma
+            return formatadas.length > 0 ? formatadas : prev;
+          });
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar chat:", err);
+      }
+    }
 
-  const handleEnviar = (e?: React.FormEvent) => {
+    carregarChat();
+  }, []);
+
+  const handleEnviar = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!mensagem.trim() && arquivosPendentes.length === 0) return;
 
     const agora = new Date();
     const horarioFormatado = agora.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const textoMensagem = mensagem.trim();
 
     const novaMensagem: Mensagem = {
       id: Date.now(),
       remetente: "usuario",
-      texto: mensagem.trim() || undefined,
+      texto: textoMensagem || undefined,
       arquivos: arquivosPendentes.length > 0 ? [...arquivosPendentes] : undefined,
       horario: horarioFormatado,
       dataEnvio: `Hoje às ${horarioFormatado}`
@@ -208,7 +222,48 @@ export default function PaginaChat() {
     setMensagem("");
     setArquivosPendentes([]);
     tocarSomEnvio();
-    agendarRespostaAutomatica();
+
+    const emailUsuario =
+      typeof window !== "undefined"
+        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+        : "lucas@email.com";
+
+    if (textoMensagem) {
+      setDigitando(true);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: emailUsuario,
+            texto: textoMensagem,
+            horario: horarioFormatado,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.mensagemNutri) {
+          setTimeout(() => {
+            setConversas((prev) => [
+              ...prev,
+              {
+                id: Date.now() + 1,
+                remetente: "nutri",
+                texto: data.mensagemNutri.texto,
+                horario: data.mensagemNutri.horario || horarioFormatado,
+                dataEnvio: `Hoje às ${data.mensagemNutri.horario || horarioFormatado}`,
+              },
+            ]);
+            setDigitando(false);
+          }, 1200);
+        } else {
+          setDigitando(false);
+        }
+      } catch (err) {
+        console.warn("Aviso ao enviar mensagem para API:", err);
+        setDigitando(false);
+      }
+    }
   };
 
   const abrirGaleriaNaFoto = (url: string) => {

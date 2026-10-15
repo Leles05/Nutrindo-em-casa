@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Sparkles, Plus, Utensils, Check, X, Calendar } from "lucide-react";
 import Link from "next/link";
 
@@ -140,9 +140,47 @@ export default function PaginaDiarioAlimentar() {
     return `${dia} de ${meses[mes - 1]}`;
   };
 
-  const adicionarRegistro = (e: React.FormEvent) => {
+  // Busca do Supabase ao montar a página
+  useEffect(() => {
+    const carregarRefeicoesSupabase = async () => {
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+          : "lucas@email.com";
+
+      try {
+        const res = await fetch(`/api/diario?email=${encodeURIComponent(emailUsuario)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.refeicoes && data.refeicoes.length > 0) {
+          const formatados: RegistroRefeicao[] = data.refeicoes.map((r: { id: number; data_registro: string; refeicao: "Café" | "Almoço" | "Lanche" | "Jantar"; alimento: string; degrau: "tolerou" | "cheirou" | "tocou" | "provou" | "comeu"; observacoes: string }) => ({
+            id: r.id || Date.now(),
+            data: r.data_registro ? r.data_registro.split("T")[0] : hoje,
+            refeicao: r.refeicao,
+            alimento: r.alimento,
+            etapa: `${r.degrau.toUpperCase()} - Registrado`,
+            degrauSlug: r.degrau,
+            reacao: "positivo" as const,
+            detalhe: r.observacoes || "Registro no diário.",
+          }));
+          setHistorico((prev) => [...formatados, ...prev]);
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar diário:", err);
+      }
+    };
+
+    carregarRefeicoesSupabase();
+  }, [hoje]);
+
+  const adicionarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoAlimento.trim()) return;
+
+    const emailUsuario =
+      typeof window !== "undefined"
+        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+        : "lucas@email.com";
 
     const novo: RegistroRefeicao = {
       id: Date.now(),
@@ -163,6 +201,23 @@ export default function PaginaDiarioAlimentar() {
 
     setToastMensagem(`Conquista com ${novo.alimento} registrada! 🎉`);
     setTimeout(() => setToastMensagem(""), 3500);
+
+    // Persistência em background no PostgreSQL Supabase
+    try {
+      fetch("/api/diario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailUsuario,
+          alimento: novo.alimento,
+          refeicao: novo.refeicao,
+          degrau: novo.degrauSlug,
+          observacoes: novo.detalhe,
+        }),
+      }).catch((err) => console.warn("Aviso ao salvar no banco:", err));
+    } catch (err) {
+      console.warn("Aviso ao salvar diário:", err);
+    }
   };
 
   // Filtros aplicados

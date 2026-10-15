@@ -27,7 +27,7 @@ export default function PaginaDashboard() {
   const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
   const menuPerfilRef = useRef<HTMLDivElement>(null);
 
-  const [dadosPlano] = useState({
+  const [dadosPlano, setDadosPlano] = useState({
     plano: 'Trimestral',
     status: 'ativo' as 'ativo' | 'expirando' | 'inativo',
     vencimento: '18/10/2026',
@@ -37,6 +37,20 @@ export default function PaginaDashboard() {
     email: 'lucas@email.com',
     crianca: 'Pedro'
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const nomeSalvo = localStorage.getItem("nutrindo_user_nome");
+      const emailSalvo = localStorage.getItem("nutrindo_user_email");
+      if (nomeSalvo || emailSalvo) {
+        setDadosPlano((prev) => ({
+          ...prev,
+          responsavel: nomeSalvo || prev.responsavel,
+          email: emailSalvo || prev.email,
+        }));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -180,6 +194,28 @@ export default function PaginaDashboard() {
 
     setToastMensagem(`Conquista com ${nova.alimento} registrada! 🎉`);
     setTimeout(() => setToastMensagem(""), 3500);
+
+    // Persistência assíncrona no PostgreSQL do Supabase
+    try {
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+          : "lucas@email.com";
+
+      fetch("/api/diario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailUsuario,
+          alimento: nova.alimento,
+          refeicao: nova.refeicao,
+          degrau: novaEtapaSlug,
+          observacoes: novoDetalhe.trim(),
+        }),
+      }).catch((err) => console.warn("Aviso ao salvar refeição no banco:", err));
+    } catch (err) {
+      console.warn("Aviso ao salvar refeição:", err);
+    }
   };
 
   return (

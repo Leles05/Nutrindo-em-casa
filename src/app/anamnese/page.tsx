@@ -630,6 +630,51 @@ export default function AnamneseWizard() {
     setErroValidacaoEtapa8("");
 
     if (etapaAtual === 8) {
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+          : "lucas@email.com";
+
+      const payloadRespostas = {
+        nomeCrianca,
+        dataNascimento,
+        sexo,
+        nomeResponsavel,
+        parentesco,
+        outroParentescoTexto,
+        participaAlimentacao,
+        motivos,
+        diagnosticos,
+        nivelTEA,
+        comunicacao,
+        gestacao,
+        pesoAtual,
+        alturaAtual,
+        cereais,
+        proteinas,
+        frutas,
+        vegetais,
+        leguminosas,
+        qntAlimentos,
+        comerFora,
+        exigeTodoDia,
+        sofrimentoFalta,
+      };
+
+      try {
+        fetch("/api/anamnese", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: emailUsuario,
+            respostas: payloadRespostas,
+            concluida: true,
+          }),
+        }).catch((err) => console.warn("Aviso ao persistir anamnese:", err));
+      } catch (err) {
+        console.warn("Aviso ao persistir anamnese:", err);
+      }
+
       setFormularioConcluido(true);
       window.scrollTo(0, 0);
       return;

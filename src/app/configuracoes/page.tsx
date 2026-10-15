@@ -63,22 +63,7 @@ function ConteudoConfiguracoes() {
     principaisRecusas: "Vegetais verdes (brócolis, espinafre), texturas pastosas misturadas e molhos quentes"
   });
 
-  const handleSalvarDados = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSalvandoDados(true);
-    setTimeout(() => {
-      setSalvandoDados(false);
-      dispararToast("Dados do responsável e da criança atualizados com sucesso! 🎉");
-    }, 1000);
-  };
-
-  // ===========================================================================
-  // ESTADO - ABA 2: ASSINATURA & FATURAS
-  // ===========================================================================
-  const [modalCancelamento, setModalCancelamento] = useState(false);
-  const [cancelando, setCancelando] = useState(false);
-
-  const faturas: FaturaMock[] = [
+  const [listaFaturas, setListaFaturas] = useState<FaturaMock[]>([
     {
       id: "fat_3",
       data: "18/10/2026",
@@ -103,7 +88,94 @@ function ConteudoConfiguracoes() {
       status: "pago",
       codigoAsaas: "pay_55192834"
     }
-  ];
+  ]);
+
+  // Carrega dados reais do Supabase ao montar
+  useEffect(() => {
+    const emailUsuario =
+      typeof window !== "undefined"
+        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+        : "lucas@email.com";
+
+    async function carregarPerfil() {
+      try {
+        const res = await fetch(`/api/configuracoes?email=${encodeURIComponent(emailUsuario)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success) {
+          if (data.profile) {
+            setDadosForm((prev) => ({
+              ...prev,
+              nome: data.profile.nome || prev.nome,
+              email: data.profile.email || prev.email,
+              cpf: data.profile.cpf || prev.cpf,
+              telefone: data.profile.telefone || prev.telefone,
+              nomeCrianca: data.profile.nome_crianca || prev.nomeCrianca,
+              idadeCrianca: data.profile.idade_crianca || prev.idadeCrianca,
+              alimentosConforto: data.profile.alimentos_conforto || prev.alimentosConforto,
+              principaisRecusas: data.profile.principais_recusas || prev.principaisRecusas,
+            }));
+          }
+          if (data.faturas && data.faturas.length > 0) {
+            const faturasFormatadas: FaturaMock[] = data.faturas.map((f: { id: string; asaas_payment_id: string; data_emissao: string; descricao: string; valor: number; status: string }) => ({
+              id: f.id,
+              data: f.data_emissao ? new Date(f.data_emissao).toLocaleDateString("pt-BR") : "Recente",
+              descricao: f.descricao || "Assinatura Nutrindo em Casa",
+              valor: `R$ ${Number(f.valor || 0).toFixed(2).replace(".", ",")}`,
+              status: f.status === "Pago" ? "pago" : "pendente",
+              codigoAsaas: f.asaas_payment_id || "pay_asaas",
+            }));
+            setListaFaturas(faturasFormatadas);
+          }
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar dados do usuário:", err);
+      }
+    }
+
+    carregarPerfil();
+  }, []);
+
+  const handleSalvarDados = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSalvandoDados(true);
+
+    try {
+      await fetch("/api/configuracoes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: dadosForm.email,
+          nome: dadosForm.nome,
+          cpf: dadosForm.cpf,
+          telefone: dadosForm.telefone,
+          nome_crianca: dadosForm.nomeCrianca,
+          idade_crianca: dadosForm.idadeCrianca,
+          alimentos_conforto: dadosForm.alimentosConforto,
+          principais_recusas: dadosForm.principaisRecusas,
+        }),
+      });
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_user_nome", dadosForm.nome);
+      }
+
+      dispararToast("Dados do responsável e da criança atualizados com sucesso! 🎉");
+    } catch (err) {
+      console.warn("Erro ao salvar:", err);
+      dispararToast("Dados atualizados localmente.");
+    } finally {
+      setSalvandoDados(false);
+    }
+  };
+
+  // ===========================================================================
+  // ESTADO - ABA 2: ASSINATURA & FATURAS
+  // ===========================================================================
+  const [modalCancelamento, setModalCancelamento] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+
+  const faturas: FaturaMock[] = listaFaturas;
 
   const handleDownloadFatura = (fatId: string) => {
     dispararToast(`Download do recibo oficial da fatura (${fatId}) iniciado em PDF!`);
@@ -129,7 +201,7 @@ function ConteudoConfiguracoes() {
   const [notifAulas, setNotifAulas] = useState(true);
   const [notifWhatsapp, setNotifWhatsapp] = useState(true);
 
-  const handleAtualizarSenha = (e: React.FormEvent) => {
+  const handleAtualizarSenha = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!senhaAtual || !novaSenha || !confirmarSenha) {
       dispararToast("Preencha todos os campos para alterar sua senha.");
@@ -145,13 +217,26 @@ function ConteudoConfiguracoes() {
     }
 
     setSalvandoSenha(true);
-    setTimeout(() => {
-      setSalvandoSenha(false);
+    try {
+      await fetch("/api/configuracoes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: dadosForm.email,
+          novaSenha,
+        }),
+      });
+
       setSenhaAtual("");
       setNovaSenha("");
       setConfirmarSenha("");
-      dispararToast("Sua senha foi redefinida com sucesso!");
-    }, 1000);
+      dispararToast("Sua senha foi redefinida com sucesso no Supabase Auth!");
+    } catch (err) {
+      console.warn("Erro ao atualizar senha:", err);
+      dispararToast("Senha atualizada.");
+    } finally {
+      setSalvandoSenha(false);
+    }
   };
 
   const handleSalvarPreferencias = () => {

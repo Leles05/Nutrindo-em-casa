@@ -71,12 +71,18 @@ function ConteudoCheckout() {
     }
   }, [planoParam]);
 
+  // Dados do Comprador / Acesso
+  const [clienteNome, setClienteNome] = useState("Lucas Lima");
+  const [clienteEmail, setClienteEmail] = useState("lucas@email.com");
+  const [clienteCelular, setClienteCelular] = useState("(11) 98888-7777");
+  const [clienteCpf, setClienteCpf] = useState("384.192.837-12");
+
   // Estado dos campos de Cartão de Crédito
   const [cartaoNumero, setCartaoNumero] = useState("");
-  const [cartaoNome, setCartaoNome] = useState("");
+  const [cartaoNome, setCartaoNome] = useState("LUCAS LIMA");
   const [cartaoValidade, setCartaoValidade] = useState("");
   const [cartaoCvv, setCartaoCvv] = useState("");
-  const [cartaoCpf, setCartaoCpf] = useState("");
+  const [cartaoCpf, setCartaoCpf] = useState("384.192.837-12");
   const [parcelas, setParcelas] = useState(ehUpgrade ? "12" : "1");
 
   // Estado de erros individuais campo a campo
@@ -185,14 +191,17 @@ function ConteudoCheckout() {
     setPixErro("");
 
     try {
+      const emailEnvio = clienteEmail.trim().toLowerCase() || "lucas@email.com";
+      const nomeEnvio = clienteNome.trim() || cartaoNome || "Lucas Lima";
+
       const res = await fetch("/api/asaas/subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome: cartaoNome || "Lucas Lima",
-          email: "lucas@email.com",
-          cpf: cartaoCpf || "384.192.837-12",
-          celular: "11988887777",
+          nome: nomeEnvio,
+          email: emailEnvio,
+          cpf: clienteCpf || cartaoCpf || "384.192.837-12",
+          celular: clienteCelular || "11988887777",
           billingType: "PIX",
           plano: planoSelecionado,
           valor: valorTotalFinal
@@ -213,13 +222,18 @@ function ConteudoCheckout() {
         paymentId: data.paymentId
       });
       setIdAssinaturaGerada(data.subscriptionId);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_user_email", emailEnvio);
+        localStorage.setItem("nutrindo_user_nome", nomeEnvio);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao conectar com o Asaas.";
       setPixErro(msg);
     } finally {
       setPixCarregando(false);
     }
-  }, [cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal]);
+  }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal]);
 
   // Dispara a geração de Pix do Asaas ao trocar para aba Pix ou trocar de plano
   useEffect(() => {
@@ -452,14 +466,17 @@ function ConteudoCheckout() {
       setProcessando(true);
 
       try {
+        const emailEnvio = clienteEmail.trim().toLowerCase() || "lucas@email.com";
+        const nomeEnvio = clienteNome.trim() || cartaoNome;
+
         const res = await fetch("/api/asaas/subscription", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nome: cartaoNome,
-            email: "lucas@email.com",
-            cpf: cartaoCpf,
-            celular: "11988887777",
+            nome: nomeEnvio,
+            email: emailEnvio,
+            cpf: clienteCpf || cartaoCpf,
+            celular: clienteCelular || "11988887777",
             billingType: "CREDIT_CARD",
             plano: planoSelecionado,
             valor: valorTotalFinal,
@@ -469,7 +486,7 @@ function ConteudoCheckout() {
               expiryMonth: expMonth,
               expiryYear: expYear,
               ccv: cartaoCvv,
-              cpf: cartaoCpf
+              cpf: cartaoCpf || clienteCpf
             }
           })
         });
@@ -483,6 +500,11 @@ function ConteudoCheckout() {
           );
           setProcessando(false);
           return;
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nutrindo_user_email", emailEnvio);
+          localStorage.setItem("nutrindo_user_nome", nomeEnvio);
         }
 
         setIdAssinaturaGerada(data.subscriptionId);
@@ -863,12 +885,91 @@ function ConteudoCheckout() {
           className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start scroll-mt-24"
         >
           
-          {/* COLUNA ESQUERDA: FORMAS DE PAGAMENTO (7 COLUNAS) */}
+          {/* COLUNA ESQUERDA: DADOS PESSOAIS + FORMAS DE PAGAMENTO (7 COLUNAS) */}
           <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
+            
+            {/* SEÇÃO 1: DADOS DO COMPRADOR E ACESSO À PLATAFORMA */}
+            <div className="space-y-4 pb-6 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                    2. Dados de Contato e Acesso
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Seus dados para emissão da fatura e liberação de acesso imediato.
+                  </p>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" /> Seguro
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Nome Completo
+                  </label>
+                  <input
+                    type="text"
+                    value={clienteNome}
+                    onChange={(e) => {
+                      setClienteNome(e.target.value);
+                      if (!cartaoNome) setCartaoNome(e.target.value.toUpperCase());
+                    }}
+                    placeholder="Seu nome completo"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    E-mail de Acesso
+                  </label>
+                  <input
+                    type="email"
+                    value={clienteEmail}
+                    onChange={(e) => setClienteEmail(e.target.value)}
+                    placeholder="seuemail@exemplo.com"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Celular / WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={clienteCelular}
+                    onChange={(e) => setClienteCelular(e.target.value)}
+                    placeholder="(11) 98888-7777"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    CPF do Titular
+                  </label>
+                  <input
+                    type="text"
+                    value={clienteCpf}
+                    onChange={(e) => {
+                      handleCpf(e.target.value, setClienteCpf);
+                      setCartaoCpf(e.target.value);
+                    }}
+                    placeholder="000.000.000-00"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SEÇÃO 2: FORMAS DE PAGAMENTO */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
-                  2. Método de Pagamento
+                  3. Método de Pagamento
                 </h2>
                 <p className="text-xs text-slate-500">
                   Cobrança oficial processada de forma segura pelo Asaas Sandbox.
@@ -1420,11 +1521,7 @@ function ConteudoCheckout() {
                     <span>
                       {ehUpgrade && planoSelecionado === "trimestral"
                         ? "✓ Plano Vigente (Você já possui)"
-                        : ehUpgrade
-                        ? "Confirmar Upgrade para o Anual →"
-                        : metodoPagamento === "pix"
-                        ? "Confirmar Assinatura via Pix"
-                        : "Finalizar Pagamento Agora"}
+                        : "Concluir Assinatura Segura"}
                     </span>
                   </>
                 )}

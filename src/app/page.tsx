@@ -35,11 +35,6 @@ export default function PaginaInicialLanding() {
         "Assim que você entra na plataforma, você preenche um prontuário detalhado com histórico gestacional, seletividade e repertório de alimentos aceitos. A Dra. Laís utiliza essas informações para individualizar as orientações clínicas da sua família."
     },
     {
-      pergunta: "Onde assisto às aulas e como funciona o suporte?",
-      resposta:
-        "Todas as videoaulas são gravadas em alta definição na nossa infraestrutura de streaming seguro e podem ser assistidas no computador, tablet ou celular a qualquer hora. Você também conta com lembretes diários e acompanhamento de metas."
-    },
-    {
       pergunta: "Como funciona a garantia de 7 dias e o cancelamento?",
       resposta:
         "Você tem 7 dias de garantia incondicional. Se não notar valor real na evolução do seu filho, basta solicitar a devolução com 1 clique direto no painel do Asaas, sem burocracia. Os planos podem ser cancelados a qualquer momento na sua aba de configurações."

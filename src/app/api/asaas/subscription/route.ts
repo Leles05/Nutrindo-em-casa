@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 // Garante que o CPF tenha dígitos verificadores válidos exigidos pela API do Asaas
 function garantirCPFValido(cpfEntrada: string): string {
@@ -63,8 +64,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const {
-      nome = "Lucas Lima",
-      email = "lucas@email.com",
+      nome = "Cliente Nutrindo",
+      email = "cliente@nutrindoemcasa.com.br",
       cpf = "38419283746",
       celular = "11988887777",
       billingType = "PIX", // "PIX" | "CREDIT_CARD"
@@ -73,9 +74,10 @@ export async function POST(request: Request) {
       cartao // { holderName, number, expiryMonth, expiryYear, ccv, cpf }
     } = body;
 
-    // Normalização e validação de dados
+    const emailLimpo = String(email || "").trim().toLowerCase();
+    const nomeLimpo = String(nome || "").trim();
     const cpfLimpo = garantirCPFValido(cpf);
-    const celularLimpo = celular.replace(/\D/g, "") || "11988887777";
+    const celularLimpo = String(celular || "").replace(/\D/g, "") || "11988887777";
 
     const asaasHeaders = {
       access_token: ASAAS_API_KEY,
@@ -114,8 +116,8 @@ export async function POST(request: Request) {
         method: "POST",
         headers: asaasHeaders,
         body: JSON.stringify({
-          name: nome,
-          email: email,
+          name: nomeLimpo,
+          email: emailLimpo,
           cpfCnpj: cpfLimpo,
           mobilePhone: celularLimpo,
           notificationDisabled: false
@@ -138,12 +140,10 @@ export async function POST(request: Request) {
     }
 
     // =========================================================================
-    // PASSO B: CRIAR A ASSINATURA RECORRENTE
+    // PASSO B: CRIAR A ASSINATURA RECORRENTE NO ASAAS
     // =========================================================================
     const planoFormatado = String(plano || "").toLowerCase().trim();
 
-    // Mapeamento seguro de ciclos:
-    // A API v3 do Asaas utiliza o enum YEARLY para assinaturas anuais (o valor ANNUALLY é rejeitado com 400 invalid_cycle)
     let cycle = "MONTHLY";
     if (planoFormatado === "mensal" || planoFormatado === "monthly") {
       cycle = "MONTHLY";
@@ -155,7 +155,6 @@ export async function POST(request: Request) {
       cycle = "MONTHLY";
     }
 
-    // Tratamento resiliente do valor monetário enviado
     let valorCobrado = Number(valor);
     if (!valorCobrado || isNaN(valorCobrado) || valorCobrado <= 0) {
       if (planoFormatado === "anual") {
@@ -166,10 +165,8 @@ export async function POST(request: Request) {
         valorCobrado = 97.00;
       }
     }
-    // Garante valor numérico com precisão de 2 casas decimais
     valorCobrado = Number(valorCobrado.toFixed(2));
 
-    // Data de vencimento inicial: hoje
     const hoje = new Date().toISOString().split("T")[0];
 
     const subscriptionPayload: Record<string, unknown> = {
@@ -178,10 +175,9 @@ export async function POST(request: Request) {
       value: valorCobrado,
       nextDueDate: hoje,
       cycle: cycle,
-      description: "Assinatura Nutrindo em Casa - Método Dra. Laís Leles"
+      description: `Assinatura Nutrindo em Casa - Plano ${planoFormatado.toUpperCase()}`
     };
 
-    // Dados do Cartão de Crédito se aplicável
     if (billingType === "CREDIT_CARD" && cartao) {
       const expMonth = String(cartao.expiryMonth).padStart(2, "0");
       let expYear = String(cartao.expiryYear);
@@ -190,7 +186,7 @@ export async function POST(request: Request) {
       }
 
       subscriptionPayload.creditCard = {
-        holderName: cartao.holderName || nome,
+        holderName: cartao.holderName || nomeLimpo,
         number: String(cartao.number).replace(/\D/g, ""),
         expiryMonth: expMonth,
         expiryYear: expYear,
@@ -198,8 +194,8 @@ export async function POST(request: Request) {
       };
 
       subscriptionPayload.creditCardHolderInfo = {
-        name: cartao.holderName || nome,
-        email: email,
+        name: cartao.holderName || nomeLimpo,
+        email: emailLimpo,
         cpfCnpj: garantirCPFValido(cartao.cpf || cpfLimpo),
         postalCode: "01310-100",
         addressNumber: "1",
@@ -229,12 +225,13 @@ export async function POST(request: Request) {
     const subscriptionId = subData.id;
 
     // =========================================================================
-    // PASSO C: OBTENÇÃO DO QR CODE PIX (Caso Pix)
+    // PASSO C: SINCRONIZAÇÃO NO SUPABASE (PROFILES + FATURAS + AUTH INVITE)
     // =========================================================================
-    if (billingType === "PIX") {
-      // Pequeno delay para garantir que o Asaas gerou a primeira cobrança da assinatura
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    let firstPaymentId: string | null = null;
+    let paymentStatus = billingType === "CREDIT_CARD" ? "Pago" : "Pendente";
 
+    // Busca a primeira cobrança gerada para a assinatura
+    try {
       const paymentsRes = await fetch(
         `${ASAAS_API_URL}/subscriptions/${subscriptionId}/payments`,
         {
@@ -243,70 +240,125 @@ export async function POST(request: Request) {
         }
       );
 
-      if (!paymentsRes.ok) {
-        return NextResponse.json({
-          success: true,
-          tipo: "PIX",
-          subscriptionId,
-          aviso: "Assinatura gerada, aguardando compensação."
-        });
-      }
-
-      const paymentsData = await paymentsRes.json();
-      const firstPayment = paymentsData.data?.[0];
-
-      if (!firstPayment) {
-        return NextResponse.json({
-          success: true,
-          tipo: "PIX",
-          subscriptionId,
-          aviso: "Cobrança inicial em processamento no Asaas."
-        });
-      }
-
-      const paymentId = firstPayment.id;
-
-      // Requisita o QR Code do pagamento Pix
-      const qrCodeRes = await fetch(
-        `${ASAAS_API_URL}/payments/${paymentId}/pixQrCode`,
-        {
-          method: "GET",
-          headers: asaasHeaders
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        const firstPayment = paymentsData.data?.[0];
+        if (firstPayment) {
+          firstPaymentId = firstPayment.id;
+          if (firstPayment.status === "CONFIRMED" || firstPayment.status === "RECEIVED") {
+            paymentStatus = "Pago";
+          }
         }
+      }
+    } catch (payFetchErr) {
+      console.warn("Não foi possível buscar faturas imediatas da assinatura:", payFetchErr);
+    }
+
+    // Persistência no PostgreSQL do Supabase via Admin Client
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+
+      // a) Salva / atualiza (upsert) os dados na tabela profiles
+      await supabaseAdmin.from("profiles").upsert(
+        {
+          email: emailLimpo,
+          nome: nomeLimpo,
+          cpf: cpfLimpo,
+          telefone: celularLimpo,
+          plano: planoFormatado,
+          status_assinatura: paymentStatus === "Pago" ? "ATIVO" : "AGUARDANDO_PAGAMENTO",
+          asaas_customer_id: customerId,
+          asaas_subscription_id: subscriptionId,
+        },
+        { onConflict: "email" }
       );
 
-      if (!qrCodeRes.ok) {
-        const qrErro = await qrCodeRes.json();
-        return NextResponse.json({
-          success: true,
-          tipo: "PIX",
-          subscriptionId,
-          paymentId,
-          message: qrErro.errors?.[0]?.description || "QR Code Pix em geração."
-        });
+      // b) Registra a fatura correspondente na tabela faturas
+      if (firstPaymentId) {
+        await supabaseAdmin.from("faturas").upsert(
+          {
+            user_email: emailLimpo,
+            asaas_payment_id: firstPaymentId,
+            descricao: `Assinatura Nutrindo em Casa - Plano ${planoFormatado.charAt(0).toUpperCase() + planoFormatado.slice(1)}`,
+            valor: valorCobrado,
+            forma_pagamento: billingType,
+            status: paymentStatus,
+          },
+          { onConflict: "asaas_payment_id" }
+        );
       }
 
-      const qrData = await qrCodeRes.json();
+      // c) Criação de Login e Disparo de E-mail oficial via Supabase Auth
+      const origin =
+        request.headers.get("origin") ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        "https://nutrindoemcasa.com.br";
+      const redirectUrl = `${origin}/criar-senha`;
+
+      try {
+        const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+          emailLimpo,
+          { redirectTo: redirectUrl }
+        );
+
+        if (inviteError) {
+          // Se o usuário já existir no Supabase Auth, envia o link de redefinição/definição de senha
+          await supabaseAdmin.auth.resetPasswordForEmail(emailLimpo, {
+            redirectTo: redirectUrl,
+          });
+        }
+      } catch (authError) {
+        console.warn("Aviso ao disparar convite Supabase Auth:", authError);
+      }
+    } catch (supabaseErr) {
+      console.warn("Aviso na sincronização do Supabase (prosseguindo com retorno Asaas):", supabaseErr);
+    }
+
+    // =========================================================================
+    // PASSO D: OBTENÇÃO DO QR CODE PIX (Caso Pix)
+    // =========================================================================
+    if (billingType === "PIX") {
+      if (firstPaymentId) {
+        const qrCodeRes = await fetch(
+          `${ASAAS_API_URL}/payments/${firstPaymentId}/pixQrCode`,
+          {
+            method: "GET",
+            headers: asaasHeaders
+          }
+        );
+
+        if (qrCodeRes.ok) {
+          const qrData = await qrCodeRes.json();
+          return NextResponse.json({
+            success: true,
+            tipo: "PIX",
+            subscriptionId,
+            paymentId: firstPaymentId,
+            encodedImage: qrData.encodedImage,
+            payload: qrData.payload,
+            expirationDate: qrData.expirationDate
+          });
+        }
+      }
 
       return NextResponse.json({
         success: true,
         tipo: "PIX",
         subscriptionId,
-        paymentId,
-        encodedImage: qrData.encodedImage,
-        payload: qrData.payload,
-        expirationDate: qrData.expirationDate
+        paymentId: firstPaymentId,
+        aviso: "Cobrança Pix criada com sucesso. Aguardando compensação."
       });
     }
 
     // =========================================================================
-    // PASSO D: RETORNO DE SUCESSO PARA CARTÃO DE CRÉDITO
+    // PASSO E: RETORNO DE SUCESSO PARA CARTÃO DE CRÉDITO
     // =========================================================================
     return NextResponse.json({
       success: true,
       tipo: "CREDIT_CARD",
       status: subData.status,
-      subscriptionId: subData.id
+      subscriptionId: subData.id,
+      paymentId: firstPaymentId
     });
   } catch (error: unknown) {
     console.error("Erro interno ao processar assinatura Asaas:", error);

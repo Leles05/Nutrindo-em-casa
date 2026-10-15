@@ -19,21 +19,45 @@ export default function PaginaLoginDedicada() {
   const [provedorCarregando, setProvedorCarregando] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro("");
 
-    if (!email.trim() || !senha.trim()) {
+    const emailLimpo = email.trim().toLowerCase();
+    if (!emailLimpo || !senha.trim()) {
       setErro("Preencha seu e-mail e sua senha para continuar.");
       return;
     }
 
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailLimpo, password: senha }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErro(data.message || "E-mail ou senha incorretos.");
+        setLoading(false);
+        return;
+      }
+
+      // Salva identificadores locais para persistência no navegador
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_user_email", data.user?.email || emailLimpo);
+        localStorage.setItem("nutrindo_user_nome", data.user?.nome || "Responsável");
+      }
+
       router.push("/dashboard");
-    }, 1500);
+    } catch (err: unknown) {
+      console.error("Erro ao autenticar:", err);
+      setErro("Não foi possível conectar ao servidor. Tente novamente.");
+      setLoading(false);
+    }
   };
 
   const handleLoginSocial = (provedor: "google" | "facebook") => {
@@ -42,8 +66,12 @@ export default function PaginaLoginDedicada() {
 
     setTimeout(() => {
       setProvedorCarregando(null);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_user_email", `demo.${provedor}@nutrindoemcasa.com.br`);
+        localStorage.setItem("nutrindo_user_nome", `Usuário ${provedor === "google" ? "Google" : "Facebook"}`);
+      }
       router.push("/dashboard");
-    }, 1500);
+    }, 1200);
   };
 
   return (

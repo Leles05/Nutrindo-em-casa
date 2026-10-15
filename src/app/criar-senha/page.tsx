@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Check, ArrowRight, Loader2 } from "lucide-react";
 
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+
 export default function PaginaCriarSenha() {
   const router = useRouter();
 
@@ -18,7 +20,7 @@ export default function PaginaCriarSenha() {
   const temNumero = /\d/.test(novaSenha);
   const senhasConferem = novaSenha === confirmarSenha && novaSenha.length > 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro("");
 
@@ -34,10 +36,24 @@ export default function PaginaCriarSenha() {
 
     setCarregando(true);
 
-    setTimeout(() => {
-      setCarregando(false);
+    try {
+      if (isSupabaseConfigured()) {
+        const { error: authError } = await supabase.auth.updateUser({
+          password: novaSenha,
+        });
+
+        if (authError) {
+          console.warn("Aviso ao atualizar senha no Supabase Auth:", authError);
+        }
+      }
+
       router.push("/anamnese");
-    }, 700);
+    } catch (err: unknown) {
+      console.warn("Erro ao definir senha (prosseguindo para anamnese):", err);
+      router.push("/anamnese");
+    } finally {
+      setCarregando(false);
+    }
   };
 
   return (

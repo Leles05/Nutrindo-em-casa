@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     asaas_customer_id TEXT,
     asaas_subscription_id TEXT,
     notificacoes_email BOOLEAN DEFAULT true,
+    anamnese_concluida BOOLEAN DEFAULT false,
+    consulta_agendada BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -101,17 +103,35 @@ CREATE INDEX IF NOT EXISTS idx_diario_user_email ON public.diario_refeicoes (use
 CREATE INDEX IF NOT EXISTS idx_diario_data_registro ON public.diario_refeicoes (user_email, data_registro DESC);
 
 -- -------------------------------------------------------------------------
+-- 6. TABELA AGENDAMENTOS (Consultas, Metas e Lembretes Sincronizados)
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.agendamentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('consulta', 'meta', 'mentoria', 'lembrete')),
+    data TEXT NOT NULL, -- Formato YYYY-MM-DD
+    horario TEXT NOT NULL,
+    plataforma TEXT DEFAULT 'Google Meet',
+    link TEXT,
+    concluido BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Índices para Agendamentos
+CREATE INDEX IF NOT EXISTS idx_agendamentos_user_email ON public.agendamentos (user_email);
+CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON public.agendamentos (data ASC);
+
+-- -------------------------------------------------------------------------
 -- SEGURANÇA E ROW LEVEL SECURITY (RLS)
--- As tabelas são acessadas de forma protegida pelas rotas de API da aplicação
--- usando a Service Role Key do Supabase ou políticas por usuário autenticado.
 -- -------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.faturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.anamneses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mensagens_chat ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.diario_refeicoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agendamentos ENABLE ROW LEVEL SECURITY;
 
--- Políticas de Fallback para usuários autenticados acessarem apenas seus registros caso usem client direto:
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow individual read profiles' AND tablename = 'profiles') THEN
@@ -131,5 +151,8 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow individual read/write diario' AND tablename = 'diario_refeicoes') THEN
         CREATE POLICY "Allow individual read/write diario" ON public.diario_refeicoes FOR ALL USING (auth.jwt() ->> 'email' = user_email);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow individual read/write agendamentos' AND tablename = 'agendamentos') THEN
+        CREATE POLICY "Allow individual read/write agendamentos" ON public.agendamentos FOR ALL USING (auth.jwt() ->> 'email' = user_email);
     END IF;
 END $$;

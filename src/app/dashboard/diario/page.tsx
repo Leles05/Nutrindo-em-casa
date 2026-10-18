@@ -16,7 +16,16 @@ interface RegistroRefeicao {
 }
 
 export default function PaginaDiarioAlimentar() {
-  const hoje = "2026-09-22";
+  // Obtém a data de hoje no fuso horário local do navegador (YYYY-MM-DD)
+  const obterDataHojeLocal = () => {
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = String(agora.getMonth() + 1).padStart(2, "0");
+    const dia = String(agora.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  };
+
+  const hoje = obterDataHojeLocal();
 
   const [filtroRefeicao, setFiltroRefeicao] = useState("Todas");
   const [filtroDegrau, setFiltroDegrau] = useState<string | null>(null);
@@ -129,15 +138,29 @@ export default function PaginaDiarioAlimentar() {
     "Jantar": 4
   };
 
+  const desduplicarRefeicoes = (lista: RegistroRefeicao[]) => {
+    return Array.from(new Map(lista.map((item) => [item.id, item])).values());
+  };
+
   const formatarGrupoData = (dataIso: string) => {
-    if (dataIso === hoje) return "Hoje, 22 de Setembro";
-    if (dataIso === "2026-09-21") return "Ontem, 21 de Setembro";
+    const hojeLocal = obterDataHojeLocal();
+    const ontemObj = new Date();
+    ontemObj.setDate(ontemObj.getDate() - 1);
+    const anoOntem = ontemObj.getFullYear();
+    const mesOntem = String(ontemObj.getMonth() + 1).padStart(2, "0");
+    const diaOntem = String(ontemObj.getDate()).padStart(2, "0");
+    const ontemLocal = `${anoOntem}-${mesOntem}-${diaOntem}`;
+
     const [ano, mes, dia] = dataIso.split("-").map(Number);
     const meses = [
       "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
       "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
     ];
-    return `${dia} de ${meses[mes - 1]}`;
+    const nomeMes = meses[mes - 1] || "";
+
+    if (dataIso === hojeLocal) return `Hoje, ${dia} de ${nomeMes}`;
+    if (dataIso === ontemLocal) return `Ontem, ${dia} de ${nomeMes}`;
+    return `${dia} de ${nomeMes}`;
   };
 
   // Busca do Supabase ao montar a página
@@ -163,7 +186,7 @@ export default function PaginaDiarioAlimentar() {
             reacao: "positivo" as const,
             detalhe: r.observacoes || "Registro no diário.",
           }));
-          setHistorico((prev) => [...formatados, ...prev]);
+          setHistorico((prev) => desduplicarRefeicoes([...formatados, ...prev]));
         }
       } catch (err) {
         console.warn("Aviso ao carregar diário:", err);
@@ -193,7 +216,7 @@ export default function PaginaDiarioAlimentar() {
       detalhe: novoDetalhe.trim() || "Registro realizado no diário alimentar."
     };
 
-    setHistorico([novo, ...historico]);
+    setHistorico((prev) => desduplicarRefeicoes([novo, ...prev]));
     setNovoAlimento("");
     setNovoDetalhe("");
     setNovaData(hoje);
@@ -390,9 +413,9 @@ export default function PaginaDiarioAlimentar() {
                 </div>
 
                 <div className="space-y-2">
-                  {grupo.itens.map((item) => (
+                  {grupo.itens.map((item, index) => (
                     <div 
-                      key={item.id}
+                      key={`${item.id}-${index}`}
                       className="bg-white p-4 rounded-xl border border-slate-100 shadow-2xs hover:border-slate-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
                       <div className="space-y-0.5">

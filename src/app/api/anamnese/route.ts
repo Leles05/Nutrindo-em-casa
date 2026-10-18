@@ -75,6 +75,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Atualiza flag de onboarding no perfil apenas se o formulário foi concluído (não rascunho)
+    if (Boolean(concluida)) {
+      try {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ anamnese_concluida: true })
+          .eq("email", emailLimpo);
+      } catch (profileErr) {
+        console.warn("Aviso ao atualizar flag anamnese_concluida em profiles:", profileErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Anamnese salva com sucesso no prontuário clínico.",

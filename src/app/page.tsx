@@ -805,6 +805,15 @@ export default function PaginaInicialLanding() {
               <a href="#faq" className="hover:text-[#4C6C54] transition-colors">
                 Dúvidas Frequentes
               </a>
+              <a
+                href="https://wa.me/5541984926020?text=Ol%C3%A1!%20Tenho%20d%C3%BAvidas%20sobre%20o%20m%C3%A9todo%20Nutrindo%20em%20Casa."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#4C6C54] transition-colors flex items-center gap-1.5 text-emerald-700"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span>WhatsApp: (41) 98492-6020</span>
+              </a>
               <Link href="/configuracoes?aba=seguranca" className="hover:text-[#4C6C54] transition-colors">
                 Privacidade & LGPD
               </Link>
@@ -816,7 +825,7 @@ export default function PaginaInicialLanding() {
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
               <span>Ambiente Seguro com tecnologia Asaas e Panda Video. Proteção integral de dados LGPD.</span>
             </div>
-            <span>© {new Date().getFullYear()} Nutrindo em Casa. Todos os direitos reservados.</span>
+            <span>© {new Date().getFullYear()} Nutrindo em Casa. Suporte: (41) 98492-6020</span>
           </div>
 
         </div>
@@ -827,11 +836,11 @@ export default function PaginaInicialLanding() {
       {/* ===================================================================== */}
       <div className="fixed bottom-6 right-6 z-40">
         <a
-          href="https://wa.me/5511988887777?text=Ol%C3%A1!%20Gostaria%20de%20tirar%20d%C3%BAvidas%20sobre%20o%20m%C3%A9todo%20do%20Nutrindo%20em%20Casa"
+          href="https://wa.me/5541984926020?text=Ol%C3%A1!%20Tenho%20d%C3%BAvidas%20sobre%20o%20m%C3%A9todo%20Nutrindo%20em%20Casa."
           target="_blank"
           rel="noopener noreferrer"
           className="group flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-700 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-emerald-400/40"
-          title="Fale com a nossa equipe via WhatsApp"
+          title="Fale com a nossa equipe via WhatsApp: (41) 98492-6020"
         >
           {/* ÍCONE COM BADGE PULSANTE */}
           <div className="relative flex items-center justify-center">
@@ -847,7 +856,7 @@ export default function PaginaInicialLanding() {
               Dúvidas sobre o método?
             </span>
             <span className="text-xs font-extrabold leading-tight block">
-              Fale com a equipe
+              Fale com a equipe • (41) 98492-6020
             </span>
           </div>
         </a>

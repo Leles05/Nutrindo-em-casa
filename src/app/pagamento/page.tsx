@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense, useRef, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -38,6 +38,7 @@ interface ErrosCartao {
 }
 
 function ConteudoCheckout() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const ehUpgrade = searchParams.get("origem") === "upgrade";
   const planoParam = searchParams.get("plano") as TipoPlano | null;
@@ -71,29 +72,42 @@ function ConteudoCheckout() {
     }
   }, [planoParam]);
 
-  // Dados do Comprador / Acesso
-  const [clienteNome, setClienteNome] = useState("Lucas Lima");
-  const [clienteEmail, setClienteEmail] = useState("lucas@email.com");
-  const [clienteCelular, setClienteCelular] = useState("(11) 98888-7777");
-  const [clienteCpf, setClienteCpf] = useState("384.192.837-12");
+  // Dados do Comprador / Acesso (iniciados totalmente vazios por padrão)
+  const [clienteNome, setClienteNome] = useState("");
+  const [clienteEmail, setClienteEmail] = useState("");
+  const [clienteCelular, setClienteCelular] = useState("");
+  const [clienteCpf, setClienteCpf] = useState("");
 
-  // Estado dos campos de Cartão de Crédito
+  // Estado dos campos de Cartão de Crédito (iniciados totalmente vazios por padrão)
   const [cartaoNumero, setCartaoNumero] = useState("");
-  const [cartaoNome, setCartaoNome] = useState("LUCAS LIMA");
+  const [cartaoNome, setCartaoNome] = useState("");
   const [cartaoValidade, setCartaoValidade] = useState("");
   const [cartaoCvv, setCartaoCvv] = useState("");
-  const [cartaoCpf, setCartaoCpf] = useState("384.192.837-12");
+  const [cartaoCpf, setCartaoCpf] = useState("");
   const [parcelas, setParcelas] = useState(ehUpgrade ? "12" : "1");
 
   // Estado de erros individuais campo a campo
   const [errosCartao, setErrosCartao] = useState<ErrosCartao>({});
 
-  // Estado dos campos de Débito
+  // Estado dos campos de Débito (iniciados totalmente vazios por padrão)
   const [debitoNumero, setDebitoNumero] = useState("");
   const [debitoNome, setDebitoNome] = useState("");
   const [debitoValidade, setDebitoValidade] = useState("");
   const [debitoCvv, setDebitoCvv] = useState("");
   const [debitoCpf, setDebitoCpf] = useState("");
+
+  // Pré-preenche apenas quando for explicitamente rota de upgrade (?origem=upgrade)
+  useEffect(() => {
+    if (ehUpgrade && typeof window !== "undefined") {
+      const emailSalvo = localStorage.getItem("nutrindo_user_email") || "";
+      const nomeSalvo = localStorage.getItem("nutrindo_user_nome") || "";
+      if (emailSalvo) setClienteEmail(emailSalvo);
+      if (nomeSalvo) {
+        setClienteNome(nomeSalvo);
+        setCartaoNome(nomeSalvo.toUpperCase());
+      }
+    }
+  }, [ehUpgrade]);
 
   // Estado do Pix Asaas Real
   const [pixCarregando, setPixCarregando] = useState(false);
@@ -112,6 +126,7 @@ function ConteudoCheckout() {
   const [processando, setProcessando] = useState(false);
   const [idAssinaturaGerada, setIdAssinaturaGerada] = useState("");
   const [modalSucesso, setModalSucesso] = useState(false);
+  const [emailEnviado, setEmailEnviado] = useState(false);
   const [erroForm, setErroForm] = useState("");
 
   // Crédito proporcional do plano vigente
@@ -191,8 +206,8 @@ function ConteudoCheckout() {
     setPixErro("");
 
     try {
-      const emailEnvio = clienteEmail.trim().toLowerCase() || "lucas@email.com";
-      const nomeEnvio = clienteNome.trim() || cartaoNome || "Lucas Lima";
+      const emailEnvio = clienteEmail.trim().toLowerCase() || (ehUpgrade ? "lucas@email.com" : "cliente@nutrindoemcasa.com.br");
+      const nomeEnvio = clienteNome.trim() || cartaoNome || (ehUpgrade ? "Lucas Lima" : "Cliente Nutrindo");
 
       const res = await fetch("/api/asaas/subscription", {
         method: "POST",
@@ -200,7 +215,7 @@ function ConteudoCheckout() {
         body: JSON.stringify({
           nome: nomeEnvio,
           email: emailEnvio,
-          cpf: clienteCpf || cartaoCpf || "384.192.837-12",
+          cpf: clienteCpf || cartaoCpf || "89296740541",
           celular: clienteCelular || "11988887777",
           billingType: "PIX",
           plano: planoSelecionado,
@@ -222,6 +237,9 @@ function ConteudoCheckout() {
         paymentId: data.paymentId
       });
       setIdAssinaturaGerada(data.subscriptionId);
+      if (data.emailEnviado) {
+        setEmailEnviado(true);
+      }
 
       if (typeof window !== "undefined") {
         localStorage.setItem("nutrindo_user_email", emailEnvio);
@@ -443,6 +461,24 @@ function ConteudoCheckout() {
       return;
     }
 
+    // Validação obrigatória dos dados de contato do comprador
+    if (!clienteNome.trim()) {
+      setErroForm("Por favor, preencha o seu nome completo nos dados de acesso.");
+      return;
+    }
+    if (!clienteEmail.trim() || !clienteEmail.includes("@")) {
+      setErroForm("Por favor, informe um e-mail de acesso válido.");
+      return;
+    }
+    if (!clienteCelular.trim() || clienteCelular.replace(/\D/g, "").length < 10) {
+      setErroForm("Por favor, informe seu celular/WhatsApp com DDD.");
+      return;
+    }
+    if (!clienteCpf.trim() && !cartaoCpf.trim()) {
+      setErroForm("Por favor, informe seu CPF.");
+      return;
+    }
+
     // Fluxo do PIX
     if (metodoPagamento === "pix") {
       if (!pixDados?.encodedImage) {
@@ -466,7 +502,7 @@ function ConteudoCheckout() {
       setProcessando(true);
 
       try {
-        const emailEnvio = clienteEmail.trim().toLowerCase() || "lucas@email.com";
+        const emailEnvio = clienteEmail.trim().toLowerCase();
         const nomeEnvio = clienteNome.trim() || cartaoNome;
 
         const res = await fetch("/api/asaas/subscription", {
@@ -508,6 +544,9 @@ function ConteudoCheckout() {
         }
 
         setIdAssinaturaGerada(data.subscriptionId);
+        if (data.emailEnviado) {
+          setEmailEnviado(true);
+        }
         setProcessando(false);
         setModalSucesso(true);
       } catch (err: unknown) {
@@ -1088,7 +1127,7 @@ function ConteudoCheckout() {
                     autoComplete="new-password"
                     data-form-type="other"
                     data-lpignore="true"
-                    placeholder="Ex: LUCAS LIMA"
+                    placeholder="Como impresso no cartão"
                     value={cartaoNome}
                     onChange={(e) => {
                       setCartaoNome(e.target.value.toUpperCase());
@@ -1379,7 +1418,7 @@ function ConteudoCheckout() {
                     autoComplete="new-password"
                     data-form-type="other"
                     data-lpignore="true"
-                    placeholder="Ex: LUCAS LIMA"
+                    placeholder="Como impresso no cartão"
                     value={debitoNome}
                     onChange={(e) => setDebitoNome(e.target.value.toUpperCase())}
                     className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
@@ -1621,12 +1660,43 @@ function ConteudoCheckout() {
               )}
             </div>
 
-            <Link
-              href="/dashboard"
-              className="w-full py-3.5 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+            {/* AVISO DO E-MAIL E INSTRUÇÕES DE ACESSO */}
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-left space-y-1.5">
+              <p className="text-xs text-[#4C6C54] font-bold flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-[#4C6C54]" />
+                <span>Instruções enviadas para seu e-mail</span>
+              </p>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Enviamos um link para o seu e-mail para você definir sua senha de acesso. Após criar sua senha, faça login para iniciar sua Anamnese.
+              </p>
+            </div>
+
+            {/* BOTÃO PRINCIPAL: IR PARA O LOGIN */}
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/login${
+                    clienteEmail.trim()
+                      ? `?email=${encodeURIComponent(clienteEmail.trim().toLowerCase())}`
+                      : ""
+                  }`
+                )
+              }
+              className="w-full py-3.5 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer text-center"
             >
-              <span>Acessar Plataforma</span>
+              <span>Ir para o Login</span>
               <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {/* LINK SECUNDÁRIO DIRETO DE DEFINIR SENHA */}
+            <Link
+              href={`/criar-senha?email=${encodeURIComponent(
+                clienteEmail.trim().toLowerCase()
+              )}`}
+              className="text-[11px] text-slate-500 hover:text-slate-800 underline underline-offset-2 block text-center pt-1"
+            >
+              Prefere definir sua senha agora? Clique aqui →
             </Link>
           </div>
         </div>

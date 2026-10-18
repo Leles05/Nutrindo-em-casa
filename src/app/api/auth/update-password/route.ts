@@ -1,0 +1,66 @@
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { email, password } = body;
+    const emailLimpo = String(email || "").trim().toLowerCase();
+
+    if (!emailLimpo || !password) {
+      return NextResponse.json(
+        { success: false, message: "E-mail e senha são obrigatórios." },
+        { status: 400 }
+      );
+    }
+
+    if (isSupabaseConfigured()) {
+      const supabaseAdmin = getSupabaseAdmin();
+
+      // Localiza o usuário no Supabase Auth Admin
+      const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (!listError && listData?.users) {
+        const targetUser = listData.users.find(
+          (u) => u.email?.toLowerCase() === emailLimpo
+        );
+
+        if (targetUser) {
+          const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(
+            targetUser.id,
+            {
+              password: String(password),
+              email_confirm: true,
+            }
+          );
+          if (updateErr) {
+            console.warn("Aviso ao atualizar senha pelo Supabase Admin:", updateErr);
+          }
+        } else {
+          // Se o usuário ainda não tiver sido registrado no Auth, cria com a senha definida
+          const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+            email: emailLimpo,
+            password: String(password),
+            email_confirm: true,
+          });
+          if (createErr) {
+            console.warn("Aviso ao criar usuário com senha no Supabase Admin:", createErr);
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Senha definida com sucesso.",
+    });
+  } catch (error: unknown) {
+    console.error("Erro interno ao atualizar senha:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: error instanceof Error ? error.message : "Erro desconhecido",
+      },
+      { status: 500 }
+    );
+  }
+}

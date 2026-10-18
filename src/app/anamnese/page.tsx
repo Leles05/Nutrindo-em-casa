@@ -2,14 +2,19 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   ChevronRight, ChevronLeft, Save, Paperclip, X, FileText,
   AlertCircle, HeartHandshake, AlertTriangle, CheckCircle2,
-  Calendar, Droplets, Sparkles, Activity
+  Calendar, Droplets, Sparkles, Activity, LogOut, BookmarkCheck
 } from "lucide-react";
 import { validarEtapa } from "./validation";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AnamneseWizard() {
+  const { autenticado, carregando } = useAuthGuard();
+  const router = useRouter();
   const [etapaAtual, setEtapaAtual] = useState(1);
   const totalEtapas = 8;
   const [formularioConcluido, setFormularioConcluido] = useState(false);
@@ -21,6 +26,7 @@ export default function AnamneseWizard() {
 
   const hoje = new Date().toISOString().split("T")[0];
   const dataMinima = "2000-01-01";
+  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
 
   // ==========================================
   // ESTADOS - ETAPA 1
@@ -675,8 +681,18 @@ export default function AnamneseWizard() {
         console.warn("Aviso ao persistir anamnese:", err);
       }
 
+      if (typeof window !== "undefined") {
+        localStorage.setItem("anamnese_concluida", "true");
+      }
+
       setFormularioConcluido(true);
       window.scrollTo(0, 0);
+
+      // Redireciona automaticamente após 2 segundos de exibição da tela de sucesso
+      setTimeout(() => {
+        router.push("/dashboard/calendario?onboarding=consulta");
+      }, 2500);
+
       return;
     }
 
@@ -697,7 +713,143 @@ export default function AnamneseWizard() {
   };
 
 
-    if (formularioConcluido) {
+  // Salvar rascunho parcial e sair da sessão
+  const salvarRascunhoEPreencherDepois = async () => {
+    setSalvandoRascunho(true);
+    const emailUsuario =
+      typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "";
+
+    const rascunho = {
+      etapaAtual,
+      nomeCrianca,
+      dataNascimento,
+      sexo,
+      nomeResponsavel,
+      parentesco,
+      outroParentescoTexto,
+      participaAlimentacao,
+      motivos,
+      diagnosticos,
+      nivelTEA,
+      comunicacao,
+      comunicacaoGeral,
+      gestacao,
+      pesoAtual,
+      alturaAtual,
+      cereais,
+      proteinas,
+      frutas,
+      vegetais,
+      leguminosas,
+      qntAlimentos,
+      comerFora,
+      exigeTodoDia,
+      sofrimentoFalta,
+      influencias,
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
+      localStorage.removeItem("nutrindo_auth_token");
+    }
+
+    if (emailUsuario) {
+      try {
+        await fetch("/api/anamnese", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: emailUsuario,
+            respostas: rascunho,
+            concluida: false,
+          }),
+        });
+      } catch (e) {
+        console.warn("Aviso ao salvar rascunho:", e);
+      }
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+    }
+
+    router.replace("/login?rascunhoSalvo=true");
+  };
+
+  const handleSairConta = async () => {
+    const rascunho = {
+      etapaAtual,
+      nomeCrianca,
+      dataNascimento,
+      sexo,
+      nomeResponsavel,
+      parentesco,
+    };
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
+      localStorage.removeItem("nutrindo_auth_token");
+    }
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+    }
+    router.replace("/login");
+  };
+
+  // Restaura rascunho salvo do localStorage ao montar
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const rascunhoSalvo = localStorage.getItem("nutrindo_anamnese_rascunho");
+      if (rascunhoSalvo) {
+        const dados = JSON.parse(rascunhoSalvo);
+        if (dados.etapaAtual && typeof dados.etapaAtual === "number") {
+          setEtapaAtual(dados.etapaAtual);
+        }
+        if (dados.nomeCrianca) setNomeCrianca(dados.nomeCrianca);
+        if (dados.dataNascimento) setDataNascimento(dados.dataNascimento);
+        if (dados.sexo) setSexo(dados.sexo);
+        if (dados.nomeResponsavel) setNomeResponsavel(dados.nomeResponsavel);
+        if (dados.parentesco) setParentesco(dados.parentesco);
+        if (dados.outroParentescoTexto) setOutroParentescoTexto(dados.outroParentescoTexto);
+        if (dados.participaAlimentacao) setParticipaAlimentacao(dados.participaAlimentacao);
+        if (dados.motivos) setMotivos(dados.motivos);
+        if (dados.diagnosticos) setDiagnosticos(dados.diagnosticos);
+        if (dados.nivelTEA) setNivelTEA(dados.nivelTEA);
+        if (dados.comunicacao) setComunicacao(dados.comunicacao);
+        if (dados.comunicacaoGeral) setComunicacaoGeral(dados.comunicacaoGeral);
+        if (dados.pesoAtual) setPesoAtual(dados.pesoAtual);
+        if (dados.alturaAtual) setAlturaAtual(dados.alturaAtual);
+        if (dados.cereais) setCereais(dados.cereais);
+        if (dados.proteinas) setProteinas(dados.proteinas);
+        if (dados.frutas) setFrutas(dados.frutas);
+        if (dados.vegetais) setVegetais(dados.vegetais);
+        if (dados.leguminosas) setLeguminosas(dados.leguminosas);
+        if (dados.qntAlimentos) setQntAlimentos(dados.qntAlimentos);
+        if (dados.comerFora) setComerFora(dados.comerFora);
+        if (dados.exigeTodoDia) setExigeTodoDia(dados.exigeTodoDia);
+        if (dados.sofrimentoFalta) setSofrimentoFalta(dados.sofrimentoFalta);
+      }
+    } catch (e) {
+      console.warn("Aviso ao carregar rascunho da anamnese:", e);
+    }
+  }, []);
+
+  if (carregando || !autenticado) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#F0EAE1]">
+        <div className="flex items-center gap-3 bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 animate-in fade-in">
+          <div className="h-5 w-5 border-2 border-[#4C6C54] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-bold text-slate-700">Verificando autenticação segura...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (formularioConcluido) {
     return (
       <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800 pb-20">
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
@@ -741,22 +893,23 @@ export default function AnamneseWizard() {
             <div className="p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
               <div className="flex items-center justify-center gap-1.5 text-[#EB6D57] font-bold text-xs sm:text-sm">
                 <Calendar className="h-4 w-4" />
-                <span>Próximo Passo: Agendamento da Devolutiva</span>
+                <span>Passo Final Obrigatório: Agendar 1ª Consulta</span>
               </div>
               <p className="text-xs text-slate-600">
-                Selecione o melhor dia e horário para a nossa videochamada de apresentação do cronograma e alinhamento das estratégias alimentares.
+                Para liberar o seu acesso completo à plataforma, agende agora a sua videochamada individual de acolhimento e alinhamento com a Dra. Laís.
               </p>
               <button
                 type="button"
-                onClick={() => alert("Módulo de agendamento integrado (Calendly/Google Agenda).")}
-                className="w-full py-2.5 px-5 bg-[#EB6D57] hover:bg-[#d95a44] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-lg hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => router.push("/dashboard/calendario?onboarding=consulta")}
+                className="w-full py-3 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Calendar className="h-4 w-4" /> Agendar Videochamada Devolutiva
+                <Calendar className="h-4 w-4" />
+                <span>Agendar 1ª Consulta de Avaliação →</span>
               </button>
             </div>
 
             <p className="text-[11px] text-slate-400">
-              Uma cópia das suas respostas foi arquivada em seu prontuário clínico seguro.
+              Redirecionando automaticamente em instantes...
             </p>
           </div>
         </main>
@@ -767,17 +920,37 @@ export default function AnamneseWizard() {
   return (
     <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800 pb-20">
 
-      {/* HEADER FIXO */}
+      {/* HEADER FIXO COM BOTÕES DE SAIR E SALVAR RASCUNHO */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2">
-          <div className="flex items-center justify-between mb-1.5 sm:mb-2 relative">
-            <div className="w-10 sm:w-28"></div>
-            <div className="relative h-9 w-32 sm:h-11 sm:w-40">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2.5">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-2">
+            <div className="relative h-9 w-28 sm:h-11 sm:w-36 shrink-0">
               <Image src="/logo-transparente.png" alt="Nutrindo em Casa" fill className="object-contain" priority />
             </div>
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-400 w-10 sm:w-28 justify-end">
-              <Save className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Salvo</span>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={salvarRascunhoEPreencherDepois}
+                disabled={salvandoRascunho}
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-[#4C6C54] border border-emerald-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Salvar respostas parciais e continuar mais tarde"
+              >
+                <Save className="h-3.5 w-3.5 text-[#4C6C54]" />
+                <span className="hidden sm:inline">{salvandoRascunho ? "Salvando..." : "Salvar e Preencher Depois"}</span>
+                <span className="sm:hidden">Salvar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSairConta}
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                title="Encerrar sessão e voltar ao login"
+              >
+                <LogOut className="h-3.5 w-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Sair da Conta</span>
+                <span className="sm:hidden">Sair</span>
+              </button>
             </div>
           </div>
 

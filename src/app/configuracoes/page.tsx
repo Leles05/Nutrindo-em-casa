@@ -10,6 +10,7 @@ import {
   Loader2, ChevronRight, Bell, Smartphone
 } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
+import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
 
 type AbaConfiguracao = "dados" | "assinatura" | "seguranca";
 
@@ -23,6 +24,7 @@ interface FaturaMock {
 }
 
 function ConteudoConfiguracoes() {
+  const { autenticado, carregando } = useAuthGuard();
   const searchParams = useSearchParams();
   const abaParam = searchParams.get("aba");
 
@@ -136,6 +138,26 @@ function ConteudoConfiguracoes() {
     carregarPerfil();
   }, []);
 
+  const handleSimularPlano = (tipo: "ativo" | "aviso" | "expirado") => {
+    if (typeof window === "undefined") return;
+
+    if (tipo === "ativo") {
+      localStorage.setItem("nutrindo_dias_restantes", "24");
+      localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
+      dispararToast("Modo Teste: Assinatura simulada como ATIVA (24 dias restantes).");
+    } else if (tipo === "aviso") {
+      localStorage.setItem("nutrindo_dias_restantes", "3");
+      localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
+      dispararToast("Modo Teste: Aviso de vencimento ativado (faltam 3 dias). Veja o banner no Dashboard.");
+    } else {
+      localStorage.setItem("nutrindo_dias_restantes", "0");
+      localStorage.setItem("nutrindo_status_assinatura", "EXPIRADO");
+      dispararToast("Modo Teste: Assinatura EXPIRADA. Acesse o Dashboard ou Cursos para testar a tela de bloqueio.");
+    }
+
+    window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
+  };
+
   const handleSalvarDados = async (e: React.FormEvent) => {
     e.preventDefault();
     setSalvandoDados(true);
@@ -242,6 +264,17 @@ function ConteudoConfiguracoes() {
   const handleSalvarPreferencias = () => {
     dispararToast("Preferências de notificação salvas com sucesso!");
   };
+
+  if (carregando || !autenticado) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#F0EAE1]">
+        <div className="flex items-center gap-3 bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 animate-in fade-in">
+          <div className="h-5 w-5 border-2 border-[#4C6C54] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-bold text-slate-700">Verificando autenticação segura...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#F0EAE1] overflow-hidden font-sans text-slate-800">
@@ -545,6 +578,47 @@ function ConteudoConfiguracoes() {
           {abaAtiva === "assinatura" && (
             <div className="space-y-6 animate-in fade-in duration-200">
               
+              {/* CARD DISCRETO: SIMULADOR DE VIGÊNCIA (MODO TESTE) */}
+              <div className="bg-gradient-to-r from-amber-50/80 via-emerald-50/40 to-slate-50/80 rounded-3xl p-5 border border-amber-200/80 shadow-2xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-amber-200/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🛠️</span>
+                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-800">
+                      Simulador de Vigência (Modo Teste)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-full self-start sm:self-auto border border-amber-200">
+                    Teste ao Vivo
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Alterne instantaneamente o status da assinatura neste navegador para validar os alertas e a tela de bloqueio:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSimularPlano("ativo")}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Simular Plano Ativo (24 dias)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSimularPlano("aviso")}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Simular Aviso (Faltam 3 dias)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSimularPlano("expirado")}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Simular Plano Expirado</span>
+                  </button>
+                </div>
+              </div>
+
               {/* CARD PRINCIPAL DA ASSINATURA */}
               <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-[#4C6C54]/30 shadow-sm space-y-5">
                 
@@ -873,6 +947,26 @@ function ConteudoConfiguracoes() {
                     className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors cursor-pointer text-center mt-4"
                   >
                     Salvar Preferências
+                  </button>
+                </div>
+
+                {/* SESSÃO ATIVA E DESCONEXÃO */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-3 lg:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-slate-500" />
+                      Sessão Ativa no Navegador
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Deseja desconectar sua conta deste dispositivo? Suas informações e progresso continuarão salvos com segurança.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={encerrarSessao}
+                    className="py-2.5 px-5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl border border-rose-200 transition-all cursor-pointer shrink-0 inline-flex items-center justify-center gap-2"
+                  >
+                    <span>Sair da Conta</span>
                   </button>
                 </div>
 

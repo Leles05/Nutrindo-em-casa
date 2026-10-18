@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { 
   PlayCircle, Calendar as CalendarIcon, Utensils, Sparkles, 
   ArrowRight, CheckCircle2, Plus, X, Check, Video, User,
   ChevronDown, CreditCard, ClipboardCheck, Settings, LogOut, Crown
 } from "lucide-react";
+import { encerrarSessao } from "@/hooks/useAuthGuard";
+import ModalCheckin4Semanas from "@/components/ModalCheckin4Semanas";
 
 interface RefeicaoHoje {
   id: number;
@@ -18,10 +20,36 @@ interface RefeicaoHoje {
 }
 
 export default function PaginaDashboard() {
-  const hoje = "2026-09-22";
+  const hoje = typeof window !== "undefined"
+    ? new Date().toLocaleDateString("en-CA")
+    : "2026-10-15";
 
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalCheckinAberto, setModalCheckinAberto] = useState(false);
   const [toastMensagem, setToastMensagem] = useState("");
+
+  // Estado do Ciclo de 4 Semanas (28 dias entre consultas)
+  const [cicloConsulta, setCicloConsulta] = useState<{
+    ultimaConsultaData: string | null;
+    proximoRetornoData: string | null;
+    temConsulta: boolean;
+  }>({
+    ultimaConsultaData: "2026-10-23",
+    proximoRetornoData: "2026-11-20",
+    temConsulta: true,
+  });
+
+  const dataConsultaFormatada = useMemo(() => {
+    if (!cicloConsulta.ultimaConsultaData) return "23/10";
+    const partes = cicloConsulta.ultimaConsultaData.split("-");
+    return `${partes[2]}/${partes[1]}`;
+  }, [cicloConsulta.ultimaConsultaData]);
+
+  const dataProximoRetornoFormatada = useMemo(() => {
+    if (!cicloConsulta.proximoRetornoData) return "20/11";
+    const partes = cicloConsulta.proximoRetornoData.split("-");
+    return `${partes[2]}/${partes[1]}`;
+  }, [cicloConsulta.proximoRetornoData]);
 
   // Estado do Perfil e Assinatura
   const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
@@ -129,12 +157,43 @@ export default function PaginaDashboard() {
   });
   const totalConquistasSemana = Object.values(contadoresSemana).reduce((acc, n) => acc + n, 0);
 
-  // Compromissos com suporte a check direto na Home
-  const [compromissosSemana, setCompromissosSemana] = useState([
+  // Formatação segura de dia e mês abreviado em português
+  const formatarDiaMes = (dataStr: string) => {
+    try {
+      const [ano, mes, dia] = dataStr.split("-").map(Number);
+      const d = new Date(ano, (mes || 1) - 1, dia || 1);
+      const diaTxt = String(dia || 15).padStart(2, "0");
+      const mesTxt = d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase();
+      return { dia: diaTxt, mes: mesTxt };
+    } catch {
+      return { dia: "15", mes: "OUT" };
+    }
+  };
+
+  const dataHojeFormatada = formatarDiaMes(hoje);
+  const dataFutura3Dias = formatarDiaMes(
+    new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString("en-CA")
+  );
+  const dataFutura7Dias = formatarDiaMes(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-CA")
+  );
+
+  // Compromissos dinâmicos com suporte a check direto na Home
+  const [compromissosSemana, setCompromissosSemana] = useState<Array<{
+    id: number | string;
+    dia: string;
+    mes: string;
+    ehHoje: boolean;
+    titulo: string;
+    horario: string;
+    tipo: string;
+    linkMeet?: string;
+    concluido: boolean;
+  }>>([
     {
       id: 1,
-      dia: "22",
-      mes: "SET",
+      dia: dataHojeFormatada.dia,
+      mes: dataHojeFormatada.mes,
       ehHoje: true,
       titulo: "Meta do Dia: Oferecer vegetal no prato de apoio",
       horario: "12:30",
@@ -143,10 +202,10 @@ export default function PaginaDashboard() {
     },
     {
       id: 2,
-      dia: "27",
-      mes: "SET",
+      dia: dataFutura7Dias.dia,
+      mes: dataFutura7Dias.mes,
       ehHoje: false,
-      titulo: "Consulta Nutricional (Retorno com Dra. Laís)",
+      titulo: "Consulta Nutricional de Acolhimento (Dra. Laís)",
       horario: "14:00 - 15:00",
       tipo: "Consulta",
       linkMeet: "https://meet.google.com",
@@ -154,8 +213,8 @@ export default function PaginaDashboard() {
     },
     {
       id: 3,
-      dia: "28",
-      mes: "SET",
+      dia: dataFutura3Dias.dia,
+      mes: dataFutura3Dias.mes,
       ehHoje: false,
       titulo: "Introduzir nova fruta (Maçã em fatias finas)",
       horario: "09:00 • Lembrete",
@@ -164,7 +223,73 @@ export default function PaginaDashboard() {
     }
   ]);
 
-  const toggleConcluirCompromisso = (id: number) => {
+  // Carrega agendamentos e consultas reais gravadas no Supabase
+  useEffect(() => {
+    async function carregarCompromissosReais() {
+      if (typeof window === "undefined") return;
+      const email = localStorage.getItem("nutrindo_user_email");
+      if (!email) return;
+
+      try {
+        const res = await fetch(`/api/agendamentos?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+
+        if (data.success) {
+          if (data.ultimaConsultaData) {
+            setCicloConsulta({
+              ultimaConsultaData: data.ultimaConsultaData,
+              proximoRetornoData: data.proximoRetornoDisponivelData,
+              temConsulta: true,
+            });
+          }
+        }
+
+        if (data.success && Array.isArray(data.agendamentos) && data.agendamentos.length > 0) {
+          const reaisFormatados = data.agendamentos.map((ag: {
+            id: string | number;
+            data: string;
+            horario: string;
+            titulo: string;
+            tipo: string;
+            link?: string;
+            concluido?: boolean;
+          }) => {
+            const { dia, mes } = formatarDiaMes(ag.data);
+            return {
+              id: ag.id,
+              dia,
+              mes,
+              ehHoje: ag.data === hoje,
+              titulo: ag.titulo,
+              horario: ag.horario,
+              tipo: ag.tipo === "consulta" ? "Consulta" : "Meta Alimentar",
+              linkMeet: ag.link || (ag.tipo === "consulta" ? "https://meet.google.com" : undefined),
+              concluido: Boolean(ag.concluido),
+            };
+          });
+
+          setCompromissosSemana((prev) => {
+            const mapa = new Map<string, any>();
+            // Prioriza agendamentos reais do usuário
+            reaisFormatados.forEach((c: any) => mapa.set(`${c.dia}-${c.mes}-${c.titulo}`, c));
+            // Adiciona metas padrão que não colidam
+            prev.forEach((p) => {
+              if (p.tipo !== "Consulta" && !mapa.has(`${p.dia}-${p.mes}-${p.titulo}`)) {
+                mapa.set(`${p.dia}-${p.mes}-${p.titulo}`, p);
+              }
+            });
+            return Array.from(mapa.values()).slice(0, 4);
+          });
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar compromissos reais no dashboard:", err);
+      }
+    }
+
+    carregarCompromissosReais();
+  }, [hoje]);
+
+  const toggleConcluirCompromisso = (id: number | string) => {
     setCompromissosSemana(prev =>
       prev.map(c => c.id === id ? { ...c, concluido: !c.concluido } : c)
     );
@@ -380,18 +505,48 @@ export default function PaginaDashboard() {
                   <span>Configurações de Conta</span>
                 </Link>
 
-                <Link
-                  href="/"
-                  onClick={() => setMenuPerfilAberto(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 font-semibold text-xs transition-colors cursor-pointer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuPerfilAberto(false);
+                    encerrarSessao();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 font-semibold text-xs transition-colors cursor-pointer text-left"
                 >
                   <LogOut className="h-4 w-4 text-red-500 shrink-0" />
                   <span>Sair</span>
-                </Link>
+                </button>
               </div>
             </div>
           )}
         </div>
+      </div>
+
+      {/* INDICADOR CLÍNICO DO CICLO DE 4 SEMANAS (28 DIAS ENTRE CONSULTAS) */}
+      <div className="bg-gradient-to-r from-[#2A546D] to-[#1E3B4D] text-white p-4 sm:p-5 rounded-3xl shadow-sm border border-sky-300/30 flex flex-col md:flex-row md:items-center justify-between gap-3 animation-fade-in">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-white/10 text-sky-200 flex items-center justify-center shrink-0">
+            <CalendarIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 tracking-wider">
+                Ciclo de Acompanhamento (4 em 4 semanas)
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm font-bold text-white mt-1 leading-snug">
+              Sua consulta atual está marcada para <strong>{dataConsultaFormatada}</strong>. Seu próximo retorno mensal estará disponível a partir de <strong>{dataProximoRetornoFormatada}</strong>.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setModalCheckinAberto(true)}
+          className="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+        >
+          <span>📝 Atualizar Evolução para a Próxima Consulta (Check-in 4 Semanas)</span>
+        </button>
       </div>
 
       {/* GRID PRINCIPAL: 7 COLUNAS / 5 COLUNAS */}
@@ -474,7 +629,7 @@ export default function PaginaDashboard() {
                         }`}
                         title={comp.concluido ? "Desmarcar" : "Marcar como concluída"}
                       >
-                        {comp.concluido ? <Check className="h-5 w-5" /> : <span className="text-xs font-black">22</span>}
+                        {comp.concluido ? <Check className="h-5 w-5" /> : <span className="text-xs font-black">{comp.dia}</span>}
                       </button>
                     ) : (
                       <div className="h-10 w-10 rounded-xl flex flex-col items-center justify-center font-bold shrink-0 bg-white border border-slate-200 text-slate-700">
@@ -840,6 +995,16 @@ export default function PaginaDashboard() {
           </div>
         </div>
       )}
+
+      {/* MODAL DE CHECK-IN DE 4 SEMANAS (PAIS ATUALIZANDO A NUTRI) */}
+      <ModalCheckin4Semanas
+        aberto={modalCheckinAberto}
+        onClose={() => setModalCheckinAberto(false)}
+        onSucesso={() => {
+          setToastMensagem("Check-in de 4 semanas enviado com sucesso para a Dra. Laís! Ela analisará suas respostas antes da sua consulta. 📝");
+          setTimeout(() => setToastMensagem(""), 4500);
+        }}
+      />
 
     </div>
   );

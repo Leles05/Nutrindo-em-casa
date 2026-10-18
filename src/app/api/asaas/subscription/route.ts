@@ -288,27 +288,116 @@ export async function POST(request: Request) {
         );
       }
 
-      // c) Criação de Login e Disparo de E-mail oficial via Supabase Auth
+      // c) Criação de Login e Disparo de E-mail oficial via Resend / Supabase Auth
       const origin =
         request.headers.get("origin") ||
         process.env.NEXT_PUBLIC_SITE_URL ||
         "https://nutrindoemcasa.com.br";
       const redirectUrl = `${origin}/criar-senha`;
 
-      try {
-        const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-          emailLimpo,
-          { redirectTo: redirectUrl }
-        );
+      let emailEnviado = false;
+      const resendApiKey = process.env.RESEND_API_KEY;
 
-        if (inviteError) {
-          // Se o usuário já existir no Supabase Auth, envia o link de redefinição/definição de senha
-          await supabaseAdmin.auth.resetPasswordForEmail(emailLimpo, {
-            redirectTo: redirectUrl,
+      if (resendApiKey) {
+        try {
+          // Gera link oficial de convite ou recuperação via Supabase Admin
+          let actionLink = "";
+          const { data: linkInvite, error: inviteLinkErr } = await supabaseAdmin.auth.admin.generateLink({
+            type: "invite",
+            email: emailLimpo,
+            options: { redirectTo: redirectUrl }
           });
+
+          if (!inviteLinkErr && linkInvite?.properties?.action_link) {
+            actionLink = linkInvite.properties.action_link;
+          } else {
+            const { data: linkRecovery } = await supabaseAdmin.auth.admin.generateLink({
+              type: "recovery",
+              email: emailLimpo,
+              options: { redirectTo: redirectUrl }
+            });
+            actionLink = linkRecovery?.properties?.action_link || `${origin}/criar-senha?email=${encodeURIComponent(emailLimpo)}`;
+          }
+
+          const resendRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              from: process.env.RESEND_FROM_EMAIL || "Nutrindo em Casa <contato@nutrindoemcasa.com.br>",
+              to: [emailLimpo],
+              subject: "Bem-vindo(a) ao Nutrindo em Casa! Defina sua senha de acesso",
+              html: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F0EAE1; padding: 40px 20px; color: #2D3748;">
+                  <div style="max-width: 580px; margin: 0 auto; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06); border: 1px solid #E2E8F0;">
+                    <div style="background-color: #4C6C54; padding: 32px 24px; text-align: center;">
+                      <h1 style="color: #FFFFFF; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Nutrindo em Casa</h1>
+                      <p style="color: #E2E8F0; font-size: 13px; margin-top: 6px; margin-bottom: 0;">Alimentação Infantil Sem Batalhas</p>
+                    </div>
+                    <div style="padding: 32px 28px;">
+                      <p style="font-size: 16px; color: #2D3748; margin-top: 0;">Olá, <strong>${nomeLimpo || "Família"}</strong>!</p>
+                      <p style="font-size: 14px; line-height: 1.6; color: #4A5568;">
+                        Seu acesso ao <strong>Nutrindo em Casa</strong> foi liberado com sucesso! Estamos muito felizes em caminhar junto com você na jornada de alimentação do seu filho(a).
+                      </p>
+                      <div style="background-color: #F7FAFC; border-left: 4px solid #4C6C54; padding: 14px 18px; border-radius: 8px; margin: 24px 0;">
+                        <p style="margin: 0; font-size: 13px; color: #4A5568; line-height: 1.5;">
+                          <strong>Próximo passo obrigatório:</strong> Crie sua senha de segurança para acessar o sistema, preencher a Anamnese Pediátrica e agendar sua 1ª consulta com a Dra. Laís Leles.
+                        </p>
+                      </div>
+                      <div style="text-align: center; margin: 32px 0;">
+                        <a href="${actionLink}" style="background-color: #4C6C54; color: #FFFFFF; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(76, 108, 84, 0.3);">
+                          Definir Minha Senha de Acesso →
+                        </a>
+                      </div>
+                      <p style="font-size: 12px; color: #718096; line-height: 1.5;">
+                        Se o botão acima não funcionar, copie e cole este link em seu navegador:<br/>
+                        <a href="${actionLink}" style="color: #EB6D57; word-break: break-all;">${actionLink}</a>
+                      </p>
+                      <hr style="border: none; border-top: 1px solid #EDF2F7; margin: 24px 0;" />
+                      <p style="font-size: 12px; color: #A0AEC0; margin-bottom: 0; text-align: center;">
+                        Nutrindo em Casa • Dra. Laís Leles • Todos os direitos reservados.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              `
+            })
+          });
+
+          if (resendRes.ok) {
+            emailEnviado = true;
+          } else {
+            console.warn("Falha no disparo via Resend, tentando Supabase Auth...");
+          }
+        } catch (resendErr) {
+          console.warn("Erro ao enviar e-mail via Resend:", resendErr);
         }
-      } catch (authError) {
-        console.warn("Aviso ao disparar convite Supabase Auth:", authError);
+      }
+
+      // Se não enviou pelo Resend (ou se não havia chave RESEND_API_KEY), dispara pelo Supabase
+      if (!emailEnviado) {
+        try {
+          const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+            emailLimpo,
+            { redirectTo: redirectUrl }
+          );
+
+          if (!inviteError) {
+            emailEnviado = true;
+          } else {
+            // Se o usuário já existir no Supabase Auth, envia o link de redefinição/definição de senha
+            const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(emailLimpo, {
+              redirectTo: redirectUrl,
+            });
+            if (!resetError) {
+              emailEnviado = true;
+            }
+          }
+        } catch (authError) {
+          console.warn("Aviso ao disparar convite Supabase Auth:", authError);
+        }
       }
     } catch (supabaseErr) {
       console.warn("Aviso na sincronização do Supabase (prosseguindo com retorno Asaas):", supabaseErr);
@@ -336,7 +425,9 @@ export async function POST(request: Request) {
             paymentId: firstPaymentId,
             encodedImage: qrData.encodedImage,
             payload: qrData.payload,
-            expirationDate: qrData.expirationDate
+            expirationDate: qrData.expirationDate,
+            email: emailLimpo,
+            emailEnviado: true
           });
         }
       }
@@ -346,6 +437,8 @@ export async function POST(request: Request) {
         tipo: "PIX",
         subscriptionId,
         paymentId: firstPaymentId,
+        email: emailLimpo,
+        emailEnviado: true,
         aviso: "Cobrança Pix criada com sucesso. Aguardando compensação."
       });
     }
@@ -358,7 +451,9 @@ export async function POST(request: Request) {
       tipo: "CREDIT_CARD",
       status: subData.status,
       subscriptionId: subData.id,
-      paymentId: firstPaymentId
+      paymentId: firstPaymentId,
+      email: emailLimpo,
+      emailEnviado: true
     });
   } catch (error: unknown) {
     console.error("Erro interno ao processar assinatura Asaas:", error);

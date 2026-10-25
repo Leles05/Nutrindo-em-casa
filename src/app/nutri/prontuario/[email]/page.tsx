@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   AlertTriangle,
+  Lightbulb,
   Sparkles,
   CheckCircle2,
   FileText,
@@ -25,6 +26,13 @@ import {
   ShieldCheck,
   Utensils,
   Camera,
+  Check,
+  X,
+  Target,
+  ClipboardList,
+  PenSquare,
+  Stethoscope,
+  MessageSquare,
 } from "lucide-react";
 import BancoRespostasRapidas from "@/components/nutri/BancoRespostasRapidas";
 import {
@@ -32,7 +40,10 @@ import {
   type ItemPergunta,
   type SecaoProntuario,
 } from "@/components/nutri/ProntuarioAnamnese56";
-import type { ProtocoloClinico } from "@/data/sugestoesClinicas";
+import {
+  salvarRespostaCustom,
+  type ProtocoloClinico,
+} from "@/data/sugestoesClinicas";
 
 interface PacienteData {
   profile: {
@@ -107,6 +118,9 @@ export default function ProntuarioDedicadoPage() {
   // Aba da coluna da direita: "devolutiva" vs "anotacoes"
   const [abaDireita, setAbaDireita] = useState<"devolutiva" | "anotacoes">("devolutiva");
 
+  // Seletor mobile entre ler o Prontuário e escrever a Devolutiva (< lg)
+  const [secaoMobile, setSecaoMobile] = useState<"prontuario" | "devolutiva">("prontuario");
+
   // Estados do formulário de Devolutiva
   const [semanaRef, setSemanaRef] = useState("Semana 1 - Avaliação Inicial e Transição Sensorial");
   const [parecerClinico, setParecerClinico] = useState("");
@@ -124,6 +138,11 @@ export default function ProntuarioDedicadoPage() {
   const [anotacoesInternas, setAnotacoesInternas] = useState("");
   const [salvandoAnotacoes, setSalvandoAnotacoes] = useState(false);
   const [feedbackAnotacoes, setFeedbackAnotacoes] = useState("");
+
+  // Estados para salvar modelo próprio no banco de respostas
+  const [salvandoModeloInline, setSalvandoModeloInline] = useState(false);
+  const [nomeModeloInput, setNomeModeloInput] = useState("");
+  const [erroSalvarModelo, setErroSalvarModelo] = useState("");
 
   // Histórico expandido de devolutivas anteriores
   const [historicoAberto, setHistoricoAberto] = useState(false);
@@ -183,38 +202,114 @@ export default function ProntuarioDedicadoPage() {
     return secoes.reduce((acc, sec) => acc + sec.itens.filter((i) => i.pontoAtencao).length, 0);
   }, [secoes]);
 
-  // Ação: Inserir sugestão de conduta de uma pergunta na Devolutiva
-  const handleInserirSugestaoNaDevolutiva = (item: ItemPergunta) => {
-    if (!item.sugestaoConduta) return;
-
-    const textoFormatado = `\n\n📌 [Conduta baseada na Pergunta #${item.numero} - ${item.pergunta}]:\n${item.sugestaoConduta}`;
-    setParecerClinico((prev) => (prev ? `${prev.trim()}${textoFormatado}` : textoFormatado.trim()));
-
-    setFeedbackSucesso(`Sugestão da Pergunta #${item.numero} copiada para o Parecer Clínico!`);
-    setTimeout(() => setFeedbackSucesso(""), 4000);
-
-    // Se estiver em outra aba na direita, muda automaticamente para devolutiva
+  // Ação 1: Inserir Sugestão Humanizada na Devolutiva Semanal + Meta Prática Sugerida
+  const handleInserirSugestao = (item: ItemPergunta) => {
+    // Garante que a aba Devolutiva esteja visível na coluna da direita
     if (abaDireita !== "devolutiva") {
       setAbaDireita("devolutiva");
     }
+
+    // Inserir parágrafo fluido, humano, acolhedor e em 1ª pessoa no Parecer Clínico (SEM colchetes, SEM alfinete)
+    const textoCru = (item.orientacaoPais || item.sugestaoConduta || "").trim();
+    const textoAcolhedor = textoCru
+      .replace(/^📌\s*/, "")
+      .replace(/^\[.*?\]:\s*/, "")
+      .trim();
+
+    if (textoAcolhedor) {
+      setParecerClinico((prev) => (prev ? `${prev.trim()}\n\n${textoAcolhedor}` : textoAcolhedor));
+    }
+
+    // Adicionar automaticamente a meta prática sugerida correspondente à lista de metas da família
+    const meta = item.metaSugerida || (item.metasSugeridas && item.metasSugeridas[0]);
+    if (meta && !metas.includes(meta)) {
+      setMetas((prev) => [...prev, meta]);
+    }
+
+    // Sugerir alimentos-alvo coerentes se o campo estiver vazio
+    if (!alimentosAlvo.trim()) {
+      const mapaAlimentos: Record<number, string> = {
+        8: "Batata rústica assada, cenoura em tiras finas, torradinha caseira",
+        17: "Prato com divisórias, palitos de legumes assados, pedaços individuais de frango",
+        20: "Purê aveludado de mandioquinha, maçã cozida com canela, caldo caseiro suave",
+        28: "Frango desfiado bem macio, ovo mexido cremoso, chips de queijo suave",
+        29: "Maçã fatiada finíssima em lâminas, morango fatiado, banana com aveia",
+        30: "Cenoura assada em palito, abobrinha em rodelas douradas, chips de batata-doce",
+        32: "Alimento de segurança favorito da criança + variação sutil de apresentação",
+        40: "Alimentos servidos em prato com divisórias ou potinhos individuais",
+        44: "Palitos de torrada com azeite, tiras de queijo firme, pepino em tiras",
+        47: "Alimentos de conforto favoritos da criança montados em formato lúdico",
+        50: "1 alimento de segurança 100% garantido + 1 preparação familiar sem pressão",
+        58: "Mamão em cubinhos, ameixa fresca, purê de pera, água fresca fracionada",
+      };
+      if (mapaAlimentos[item.numero]) {
+        setAlimentosAlvo(mapaAlimentos[item.numero]);
+      }
+    }
+
+    setFeedbackSucesso(`Orientação da Pergunta #${item.numero} inserida na Devolutiva Semanal!`);
+    setSecaoMobile("devolutiva");
+    setAbaDireita("devolutiva");
+    setTimeout(() => setFeedbackSucesso(""), 4000);
   };
 
-  // Ação: Aplicar protocolo do banco de respostas rápidas
+  // Ação 2: Guardar observação clínica técnica nas Anotações Internas (uso privado da Dra. Laís)
+  const handleGuardarNasAnotacoesInternas = (item: ItemPergunta) => {
+    const textoTecnico = item.leituraClinica || item.sugestaoConduta || item.motivoAtencao || "";
+    if (!textoTecnico) return;
+
+    const novaLinha = `[Pergunta #${item.numero} - ${item.pergunta}]:\n${item.motivoAtencao ? `Motivo de Alerta: ${item.motivoAtencao}\n` : ""}${textoTecnico}`;
+    setAnotacoesInternas((prev) => (prev ? `${prev.trim()}\n\n${novaLinha}` : novaLinha));
+
+    setFeedbackSucesso(`Observação técnica da Pergunta #${item.numero} guardada nas Anotações Internas!`);
+    setSecaoMobile("devolutiva");
+    setAbaDireita("anotacoes");
+    setTimeout(() => setFeedbackSucesso(""), 4000);
+  };
+
+  // Ação 3: Confirmar e salvar modelo atual no Banco de Respostas
+  const handleConfirmarSalvarModelo = () => {
+    if (!nomeModeloInput.trim()) {
+      setErroSalvarModelo("Digite o título do modelo (ex: Conduta para Desmame de Telas).");
+      return;
+    }
+    if (!parecerClinico.trim() && !alimentosAlvo.trim() && metas.length === 0) {
+      setErroSalvarModelo("Digite ao menos o texto do parecer para salvar como modelo.");
+      return;
+    }
+
+    const novoModelo = salvarRespostaCustom({
+      tituloCurto: nomeModeloInput.trim(),
+      categoria: "personalizado",
+      parecerClinicoSugerido: parecerClinico.trim(),
+      alimentosAlvoSugeridos: alimentosAlvo
+        ? alimentosAlvo
+            .split(",")
+            .map((a) => a.trim())
+            .filter(Boolean)
+        : [],
+      metasSemanaisSugeridas: metas,
+    });
+
+    setSalvandoModeloInline(false);
+    setNomeModeloInput("");
+    setErroSalvarModelo("");
+    setFeedbackSucesso(`Modelo "${novoModelo.tituloCurto}" salvo com sucesso no seu banco! ⭐`);
+    setTimeout(() => setFeedbackSucesso(""), 3500);
+  };
+
+  // Ação 4: Aplicar protocolo do banco de respostas rápidas (preenchimento automático)
   const handleAplicarProtocolo = (proto: ProtocoloClinico) => {
     if (proto.parecerClinicoSugerido) {
-      setParecerClinico((prev) => (prev ? `${prev}\n\n${proto.parecerClinicoSugerido}` : proto.parecerClinicoSugerido));
+      setParecerClinico(proto.parecerClinicoSugerido);
     }
 
     if (proto.alimentosAlvoSugeridos && proto.alimentosAlvoSugeridos.length > 0) {
-      const novosAlimentos = proto.alimentosAlvoSugeridos.join(", ");
-      setAlimentosAlvo((prev) => (prev ? `${prev}, ${novosAlimentos}` : novosAlimentos));
+      setAlimentosAlvo(proto.alimentosAlvoSugeridos.join(", "));
     }
 
     if (proto.metasSemanaisSugeridas && proto.metasSemanaisSugeridas.length > 0) {
-      setMetas((prev) => {
-        const setUnico = new Set([...prev, ...proto.metasSemanaisSugeridas]);
-        return Array.from(setUnico);
-      });
+      setMetas(proto.metasSemanaisSugeridas);
     }
 
     setFeedbackSucesso(`Modelo "${proto.tituloCurto || 'Clínico'}" aplicado com sucesso!`);
@@ -476,12 +571,47 @@ export default function ProntuarioDedicadoPage() {
           </div>
         </section>
 
+        {/* SELETOR MOBILE ENTRE PRONTUÁRIO E DEVOLUTIVA (< lg) */}
+        <div className="sticky top-2 z-20 flex items-center gap-2 lg:hidden bg-white/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setSecaoMobile("prontuario")}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              secaoMobile === "prontuario"
+                ? "bg-[#2A546D] text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <ClipboardList className="h-4 w-4" />
+            <span>📋 Prontuário & Respostas (56)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSecaoMobile("devolutiva")}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              secaoMobile === "devolutiva"
+                ? "bg-[#4C6C54] text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <PenSquare className="h-4 w-4" />
+            <span>✉️ Redigir Devolutiva / Notas</span>
+          </button>
+        </div>
+
         {/* CONTAINER COM DUAS ROLAGENS INDEPENDENTES */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 lg:overflow-hidden items-start">
           {/* ========================================================= */}
           {/* COLUNA DA ESQUERDA (7 COLS): ROLA AS 56 PERGUNTAS / DIÁRIO INDEPENDENTE */}
           {/* ========================================================= */}
-          <section className="lg:col-span-7 lg:h-full lg:overflow-y-auto pr-2 pb-12 space-y-4">
+          <section className={`${secaoMobile === "prontuario" ? "block" : "hidden"} lg:block lg:col-span-7 lg:h-full lg:overflow-y-auto pr-2 pb-12 space-y-4`}>
+            {/* TÍTULO CONCEITUAL DO PAINEL DA ESQUERDA */}
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <span>📋 Prontuário Clínico do Paciente (Anamnese & Diário)</span>
+              </h2>
+            </div>
+
             {/* BARRA DE CONTROLE & ABAS DE NAVEGAÇÃO DA ESQUERDA */}
             <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3 flex-wrap sticky top-0 z-10 backdrop-blur-md">
               <div className="flex items-center gap-2 flex-wrap">
@@ -519,7 +649,7 @@ export default function ProntuarioDedicadoPage() {
                   }`}
                 >
                   <Utensils className="h-3.5 w-3.5" />
-                  <span>🍽️ Diário Alimentar da Criança ({paciente.diario.length})</span>
+                  <span>Diário Alimentar da Criança ({paciente.diario.length})</span>
                 </button>
               </div>
 
@@ -535,7 +665,7 @@ export default function ProntuarioDedicadoPage() {
                   <Utensils className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <h3 className="font-extrabold text-sm text-amber-950">
-                      🍽️ Diário Alimentar & Escada do Comer de {nomeCrianca}
+                      Diário Alimentar & Escada do Comer de {nomeCrianca}
                     </h3>
                     <p className="leading-relaxed text-amber-900/90">
                       Consulte as refeições, alimentos testados e nível de tolerância sensorial sem precisar trocar de tela, enquanto redige a Devolutiva Semanal na coluna ao lado.
@@ -677,27 +807,75 @@ export default function ProntuarioDedicadoPage() {
                             </p>
                           )}
 
-                          {/* BOX DE SUGESTÃO DE CONDUTA COM BOTÃO PARA DEVOLUTIVA */}
-                          {item.pontoAtencao && item.sugestaoConduta && (
-                            <div className="mt-3.5 pt-3 border-t border-amber-200/80 space-y-2.5">
-                              <div className="bg-white/95 p-3.5 rounded-xl border border-amber-300 shadow-2xs space-y-1">
+                          {/* BOX DE SUGESTÃO DE CONDUTA COM DOIS BOTÕES CLAROS */}
+                          {item.pontoAtencao && (item.sugestaoConduta || item.leituraClinica || item.orientacaoPais) && (
+                            <div className="mt-3.5 pt-3 border-t border-amber-200/80 space-y-3">
+                              <div className="bg-white/95 p-3.5 sm:p-4 rounded-2xl border border-amber-200/90 shadow-2xs space-y-3">
+                                {/* CABEÇALHO COM ÍCONE SVG ÚNICO E TEXTO LIMPO (SEM ✨ 💡) */}
                                 <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-amber-950">
-                                  <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                                  <span>💡 Sugestão de Conduta para a Nutri (Apoio Clínico)</span>
+                                  <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+                                  <span>SUGESTÃO CLÍNICA DE APOIO PARA A NUTRI</span>
                                 </div>
-                                <p className="text-xs sm:text-sm font-medium text-slate-700 leading-relaxed">
-                                  {item.sugestaoConduta}
-                                </p>
+
+                                {/* 1. DIRECIONAMENTO TÉCNICO (PARA A NUTRI) */}
+                                {(item.leituraClinica || item.sugestaoConduta) && (
+                                  <div className="space-y-1 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                                      <Stethoscope className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                                      <span>Direcionamento Técnico (Para a Nutri):</span>
+                                    </span>
+                                    <p className="text-xs sm:text-[13px] text-slate-700 font-medium leading-relaxed">
+                                      {item.leituraClinica || item.sugestaoConduta}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* 2. SUGESTÃO DE TEXTO HUMANIZADO (PARA A FAMÍLIA) + META SUGERIDA */}
+                                {(item.orientacaoPais || item.metaSugerida || (item.metasSugeridas && item.metasSugeridas[0])) && (
+                                  <div className="space-y-2 bg-emerald-50/40 p-2.5 rounded-xl border border-emerald-100">
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                                      <MessageSquare className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+                                      <span>Sugestão de Texto Humanizado (Para a Família) + Meta Sugerida:</span>
+                                    </span>
+                                    {item.orientacaoPais && (
+                                      <p className="text-xs sm:text-[13px] text-slate-800 font-medium leading-relaxed italic">
+                                        &ldquo;{item.orientacaoPais}&rdquo;
+                                      </p>
+                                    )}
+                                    {(item.metaSugerida || (item.metasSugeridas && item.metasSugeridas[0])) && (
+                                      <div className="pt-1.5 border-t border-emerald-200/60">
+                                        <p className="text-xs text-emerald-950 font-bold flex items-center gap-1.5">
+                                          <Target className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+                                          <span>Meta Semanal Sugerida: {item.metaSugerida || item.metasSugeridas![0]}</span>
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleInserirSugestaoNaDevolutiva(item)}
-                                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#4C6C54] hover:bg-[#3D5A45] text-white text-xs sm:text-sm font-extrabold transition-all inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-md"
-                              >
-                                <Plus className="h-4 w-4" />
-                                <span>+ Inserir esta sugestão no rascunho da Devolutiva ao lado</span>
-                              </button>
+                              {/* DOIS BOTÕES DE AÇÃO CLAROS (SEM + DUPLICADO) */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleInserirSugestao(item)}
+                                  className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#4C6C54] hover:bg-[#3D5A45] text-white text-xs font-extrabold transition-all inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-md"
+                                  title="Inserir texto humanizado na Devolutiva Semanal ao lado e adicionar a meta prática correspondente"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  <span>Inserir esta sugestão na Devolutiva ao lado</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleGuardarNasAnotacoesInternas(item)}
+                                  className="w-full sm:w-auto px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold transition-all inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                                  title="Guardar leitura clínica nas Anotações Internas confidenciais do Prontuário"
+                                >
+                                  <Lock className="h-3.5 w-3.5 text-slate-500" />
+                                  <span>Guardar nas Anotações Internas</span>
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -713,33 +891,35 @@ export default function ProntuarioDedicadoPage() {
           {/* ========================================================= */}
           {/* COLUNA DA DIREITA (5 COLS): ROLA DE FORMA INDEPENDENTE ATÉ O BOTÃO ENVIAR */}
           {/* ========================================================= */}
-          <aside className="lg:col-span-5 lg:h-full lg:overflow-y-auto pl-2 pb-12 space-y-4">
+          <aside className={`${secaoMobile === "devolutiva" ? "block" : "hidden"} lg:block lg:col-span-5 lg:h-full lg:overflow-y-auto pl-2 pb-12 space-y-4`}>
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-md space-y-4">
-              {/* ABAS DO PAINEL LATERAL (2 ABAS: DEVOLUTIVA E ANOTAÇÕES) */}
+              {/* ABAS DO PAINEL LATERAL (2 ABAS COM DISTINÇÃO CONCEITUAL CLARA) */}
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <button
                   type="button"
                   onClick={() => setAbaDireita("devolutiva")}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer text-center inline-flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center inline-flex items-center justify-center gap-1.5 ${
                     abaDireita === "devolutiva"
                       ? "bg-[#4C6C54] text-white shadow-2xs"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
+                  title="Plano prático, acolhedor e metas semanais que serão enviados diretamente para os pais"
                 >
-                  <Send className="h-3.5 w-3.5" />
-                  <span>Devolutiva Semanal</span>
+                  <Send className="h-4 w-4" />
+                  <span>Enviar Devolutiva Semanal</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setAbaDireita("anotacoes")}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer text-center inline-flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer text-center inline-flex items-center justify-center gap-1.5 ${
                     abaDireita === "anotacoes"
                       ? "bg-slate-800 text-white shadow-2xs"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
+                  title="Registro clínico privado e sigiloso da Dra. Laís sobre a consulta, hipóteses e condutas internas"
                 >
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>Anotações Internas</span>
+                  <Lock className="h-4 w-4" />
+                  <span>Evolução & Anotações</span>
                 </button>
               </div>
 
@@ -747,10 +927,83 @@ export default function ProntuarioDedicadoPage() {
               {abaDireita === "devolutiva" && (
                 <div className="space-y-4">
                   {/* SELETOR DE MODELOS RÁPIDOS DA DRA. LAÍS */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Banco de Respostas / Modelos Próprios
-                    </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                        BANCO DE RESPOSTAS / MODELOS PRÓPRIOS
+                      </label>
+                      {!salvandoModeloInline && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!parecerClinico.trim() && !alimentosAlvo.trim() && metas.length === 0) {
+                              setFeedbackErro("Preencha ao menos o parecer para salvar como modelo.");
+                              setTimeout(() => setFeedbackErro(""), 3500);
+                              return;
+                            }
+                            setSalvandoModeloInline(true);
+                            setErroSalvarModelo("");
+                          }}
+                          className="text-xs font-extrabold text-[#4C6C54] hover:text-[#3a5340] hover:bg-[#4C6C54]/10 border border-[#4C6C54]/30 py-1 px-2.5 rounded-xl inline-flex items-center gap-1 cursor-pointer transition-all bg-white shadow-2xs"
+                          title="Salvar o parecer, alimentos e metas atuais como um modelo reutilizável"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>Salvar texto atual como modelo</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* MINI-FORM INLINE PARA SALVAR MODELO */}
+                    {salvandoModeloInline && (
+                      <div className="p-3 bg-amber-50/95 rounded-2xl border border-amber-300 shadow-2xs space-y-2 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
+                            <Save className="h-3.5 w-3.5 text-amber-700" />
+                            <span>Salvar modelo próprio (parecer, alimentos e metas)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSalvandoModeloInline(false);
+                              setNomeModeloInput("");
+                              setErroSalvarModelo("");
+                            }}
+                            className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                            title="Cancelar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={nomeModeloInput}
+                            onChange={(e) => setNomeModeloInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleConfirmarSalvarModelo();
+                              if (e.key === "Escape") setSalvandoModeloInline(false);
+                            }}
+                            placeholder="Título do Modelo (ex: Conduta para Desmame de Telas)"
+                            className="flex-1 px-3 py-1.5 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/30"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleConfirmarSalvarModelo}
+                            className="px-3.5 py-1.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Salvar Modelo</span>
+                          </button>
+                        </div>
+
+                        {erroSalvarModelo && (
+                          <p className="text-[11px] font-bold text-rose-600">{erroSalvarModelo}</p>
+                        )}
+                      </div>
+                    )}
+
                     <BancoRespostasRapidas
                       onAplicar={handleAplicarProtocolo}
                       dica="Selecione um modelo clínico que você salvou para aplicar no parecer"
@@ -771,9 +1024,9 @@ export default function ProntuarioDedicadoPage() {
                     />
                   </div>
 
-                  {/* PARECER CLÍNICO (TEXTAREA AMPLO COM FONTE text-base) */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
+                  {/* PARECER CLÍNICO DA SEMANA */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <label className="text-xs font-black uppercase tracking-wider text-slate-700">
                         Parecer Clínico da Semana (Visível para a Família)
                       </label>
@@ -781,6 +1034,7 @@ export default function ProntuarioDedicadoPage() {
                         {parecerClinico.length} caracteres
                       </span>
                     </div>
+
                     <textarea
                       value={parecerClinico}
                       onChange={(e) => setParecerClinico(e.target.value)}

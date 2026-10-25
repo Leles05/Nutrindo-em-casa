@@ -1330,12 +1330,12 @@ export default function AnamneseWizard() {
       {/* HEADER FIXO COM BOTÕES DE SAIR E SALVAR RASCUNHO */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2.5">
-          <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-2">
-            <div className="relative h-9 w-28 sm:h-11 sm:w-36 shrink-0">
+          <div className="flex flex-wrap items-center justify-between mb-1.5 sm:mb-2 gap-2">
+            <div className="relative h-8 w-26 sm:h-11 sm:w-36 shrink-0">
               <Image src="/logo-transparente.png" alt="Nutrindo em Casa" fill className="object-contain" priority />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {statusAutoSave === "salvando" && (
                 <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full text-[11px] font-semibold animate-in fade-in">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
@@ -1352,23 +1352,23 @@ export default function AnamneseWizard() {
                 type="button"
                 onClick={salvarRascunhoEPreencherDepois}
                 disabled={salvandoRascunho}
-                className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-[#4C6C54] border border-emerald-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1 sm:gap-1.5 py-1.5 px-2.5 sm:px-3 bg-emerald-50 hover:bg-emerald-100 text-[#4C6C54] border border-emerald-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
                 title="Salvar respostas parciais e continuar mais tarde"
               >
-                <Save className="h-3.5 w-3.5 text-[#4C6C54]" />
+                <Save className="h-3.5 w-3.5 text-[#4C6C54] shrink-0" />
                 <span className="hidden sm:inline">{salvandoRascunho ? "Salvando..." : "Salvar e Preencher Depois"}</span>
-                <span className="sm:hidden">Salvar</span>
+                <span className="sm:hidden font-extrabold">{salvandoRascunho ? "Salvando..." : "Salvar"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleSairConta}
-                className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                className="inline-flex items-center gap-1 sm:gap-1.5 py-1.5 px-2.5 sm:px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
                 title="Encerrar sessão e voltar ao login"
               >
-                <LogOut className="h-3.5 w-3.5 text-slate-500" />
+                <LogOut className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                 <span className="hidden sm:inline">Sair da Conta</span>
-                <span className="sm:hidden">Sair</span>
+                <span className="sm:hidden font-extrabold">Sair</span>
               </button>
             </div>
           </div>
@@ -1403,42 +1403,42 @@ export default function AnamneseWizard() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
 
         {/* JORNADA DE ONBOARDING - 3 PASSOS CLAROS E ACOLHEDORES */}
-        <div className="bg-white/95 backdrop-blur-xs border border-emerald-900/10 rounded-2xl p-3 sm:p-4 mb-4 shadow-xs">
-          <div className="flex items-center justify-between gap-1.5 sm:gap-3 max-w-2xl mx-auto">
+        <div className="bg-white/95 backdrop-blur-xs border border-emerald-900/10 rounded-2xl p-2.5 sm:p-4 mb-4 shadow-xs">
+          <div className="flex items-center justify-between gap-1 sm:gap-3 max-w-2xl mx-auto flex-nowrap">
             {/* Passo 1 */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-emerald-100 text-[#4C6C54] flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-emerald-100 text-[#4C6C54] flex items-center justify-center font-bold text-[10px] sm:text-xs shrink-0 shadow-2xs">
                 ✓
               </div>
               <div className="text-left">
-                <p className="text-[9px] sm:text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Passo 1 • Concluído ✓</p>
-                <p className="text-[11px] sm:text-xs font-bold text-slate-700 hidden xs:block">Assinatura & Senha</p>
+                <p className="text-[9px] sm:text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Passo 1 ✓</p>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-700 hidden xs:block">Assinatura</p>
               </div>
             </div>
 
-            <div className="h-0.5 flex-1 bg-emerald-300 mx-1 sm:mx-2 min-w-[12px]" />
+            <div className="h-0.5 flex-1 bg-emerald-300 mx-1 sm:mx-2 min-w-[6px]" />
 
             {/* Passo 2 */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm ring-2 ring-emerald-200">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-extrabold text-[10px] sm:text-xs shrink-0 shadow-sm ring-2 ring-emerald-200">
                 2
               </div>
               <div className="text-left">
-                <p className="text-[9px] sm:text-[10px] text-[#4C6C54] font-extrabold uppercase tracking-wider">Passo 2 • Em andamento</p>
-                <p className="text-[11px] sm:text-xs font-black text-[#4C6C54]">Anamnese Pediátrica</p>
+                <p className="text-[9px] sm:text-[10px] text-[#4C6C54] font-extrabold uppercase tracking-wider">Passo 2</p>
+                <p className="text-[10px] sm:text-xs font-black text-[#4C6C54]">Anamnese</p>
               </div>
             </div>
 
-            <div className="h-0.5 flex-1 bg-slate-200 mx-1 sm:mx-2 min-w-[12px]" />
+            <div className="h-0.5 flex-1 bg-slate-200 mx-1 sm:mx-2 min-w-[6px]" />
 
             {/* Passo 3 */}
-            <div className="flex items-center gap-2 shrink-0 opacity-60">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-300 flex items-center justify-center font-bold text-xs shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 opacity-60">
+              <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-300 flex items-center justify-center font-bold text-[10px] sm:text-xs shrink-0">
                 3
               </div>
               <div className="text-left">
                 <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passo 3</p>
-                <p className="text-[11px] sm:text-xs font-semibold text-slate-600 hidden xs:block">Agendar 1ª Consulta</p>
+                <p className="text-[10px] sm:text-xs font-semibold text-slate-600 hidden xs:block">1ª Consulta</p>
               </div>
             </div>
           </div>

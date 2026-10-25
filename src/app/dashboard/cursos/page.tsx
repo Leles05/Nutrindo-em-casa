@@ -174,7 +174,7 @@ export default function PaginaCursos() {
 
       {/* TOAST DE CONQUISTA AO FINALIZAR O MÓDULO */}
       {toastConquista && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-[#4C6C54] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-3 animation-fade-in border border-emerald-400/30">
+        <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#4C6C54] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-3 animation-fade-in border border-emerald-400/30">
           <Trophy className="h-5 w-5 text-amber-300 shrink-0" />
           <div>
             <p className="font-extrabold text-sm">Parabéns! Módulo 1 Concluído! 🎉</p>

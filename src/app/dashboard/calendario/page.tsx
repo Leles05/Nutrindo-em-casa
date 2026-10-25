@@ -65,7 +65,20 @@ function ConteudoCalendario() {
   // Ano e Mês de visualização do calendário (0 = Janeiro ... 11 = Dezembro)
   const [anoVisualizacao, setAnoVisualizacao] = useState(() => new Date().getFullYear());
   const [mesVisualizacao, setMesVisualizacao] = useState(() => new Date().getMonth());
-  const [dataSelecionada, setDataSelecionada] = useState(hoje);
+  const [diaSelecionado, setDiaSelecionado] = useState(() => {
+    const partes = hoje.split("-").map(Number);
+    return partes[2] || 1;
+  });
+
+  // A dataSelecionada é SEMPRE estritamente derivada de anoVisualizacao, mesVisualizacao e diaSelecionado
+  // Isso impede matematicamente que o painel do dia exiba um mês diferente do calendário visualizado!
+  const dataSelecionada = useMemo(() => {
+    const mesStr = String(mesVisualizacao + 1).padStart(2, "0");
+    const maxDiasNoMes = new Date(anoVisualizacao, mesVisualizacao + 1, 0).getDate();
+    const diaAjustado = Math.min(Math.max(diaSelecionado, 1), maxDiasNoMes);
+    const diaStr = String(diaAjustado).padStart(2, "0");
+    return `${anoVisualizacao}-${mesStr}-${diaStr}`;
+  }, [anoVisualizacao, mesVisualizacao, diaSelecionado]);
 
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "consulta" | "meta" | "google_calendar">("todos");
   const [modalAberto, setModalAberto] = useState(false);
@@ -141,6 +154,36 @@ function ConteudoCalendario() {
     return `${partes[2]}/${partes[1]}`;
   }, [ultimaConsulta]);
 
+  const carregarEventosGoogle = useCallback(async (ano: number, mes: number) => {
+    const emailUsuario =
+      typeof window !== "undefined"
+        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+        : "lucas@email.com";
+
+    try {
+      const gcalRes = await fetch(
+        `/api/google-calendar/events?email=${encodeURIComponent(emailUsuario)}&year=${ano}&month=${mes + 1}`
+      );
+      if (gcalRes.ok) {
+        const gcalData = await gcalRes.json();
+        if (gcalData.success) {
+          if (gcalData.sincronizado) {
+            setContaGoogleConectada(true);
+          }
+          if (Array.isArray(gcalData.eventos)) {
+            setEventos((prev) => {
+              const mapa = new Map<number | string, Evento>();
+              [...gcalData.eventos, ...prev].forEach((e) => mapa.set(e.id, e));
+              return Array.from(mapa.values());
+            });
+          }
+        }
+      }
+    } catch (gcalErr) {
+      console.warn("Aviso ao carregar eventos do Google Calendar:", gcalErr);
+    }
+  }, []);
+
   // Carrega agendamentos reais do Supabase
   useEffect(() => {
     const emailUsuario =
@@ -179,26 +222,7 @@ function ConteudoCalendario() {
         }
 
         // Busca compromissos sincronizados com o Google Calendar (Zero Mocks)
-        try {
-          const gcalRes = await fetch("/api/google-calendar/events");
-          if (gcalRes.ok) {
-            const gcalData = await gcalRes.json();
-            if (gcalData.success) {
-              if (gcalData.sincronizado) {
-                setContaGoogleConectada(true);
-              }
-              if (Array.isArray(gcalData.eventos) && gcalData.eventos.length > 0) {
-                setEventos((prev) => {
-                  const mapa = new Map<number | string, Evento>();
-                  [...gcalData.eventos, ...prev].forEach((e) => mapa.set(e.id, e));
-                  return Array.from(mapa.values());
-                });
-              }
-            }
-          }
-        } catch (gcalErr) {
-          console.warn("Aviso ao carregar eventos do Google Calendar:", gcalErr);
-        }
+        await carregarEventosGoogle(anoVisualizacao, mesVisualizacao);
 
         if (typeof document !== "undefined" && document.cookie.includes("google_calendar_token")) {
           setContaGoogleConectada(true);
@@ -209,32 +233,62 @@ function ConteudoCalendario() {
     }
 
     carregarAgendamentos();
-  }, []);
+  }, [anoVisualizacao, mesVisualizacao, carregarEventosGoogle]);
 
-  // Navegação de Mês Dinâmica
-  const voltarMes = () => {
-    if (mesVisualizacao === 0) {
-      setMesVisualizacao(11);
-      setAnoVisualizacao((prev) => prev - 1);
-    } else {
-      setMesVisualizacao((prev) => prev - 1);
+  // Normalização estrita para formato ISO YYYY-MM-DD
+  const normalizarDataISO = (dataRaw?: string): string => {
+    if (!dataRaw) return "";
+    let limpa = String(dataRaw).trim();
+    if (limpa.includes("T")) limpa = limpa.split("T")[0].trim();
+    if (limpa.includes(" ")) limpa = limpa.split(" ")[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) return limpa;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(limpa)) {
+      const [d, m, y] = limpa.split("/");
+      return `${y}-${m}-${d}`;
+    }
+    return limpa;
+  };
+
+  const selecionarDataISO = (dataIso: string) => {
+    const limpa = normalizarDataISO(dataIso);
+    if (!limpa) return;
+    const [y, m, d] = limpa.split("-").map(Number);
+    if (y && m && d) {
+      setAnoVisualizacao(y);
+      setMesVisualizacao(m - 1);
+      setDiaSelecionado(d);
     }
   };
 
-  const avancarMes = () => {
-    if (mesVisualizacao === 11) {
-      setMesVisualizacao(0);
-      setAnoVisualizacao((prev) => prev + 1);
-    } else {
-      setMesVisualizacao((prev) => prev + 1);
+  // Navegação de Mês Dinâmica com busca real de eventos do mês
+  const voltarMes = () => {
+    let novoAno = anoVisualizacao;
+    let novoMes = mesVisualizacao - 1;
+    if (novoMes < 0) {
+      novoMes = 11;
+      novoAno -= 1;
     }
+    setMesVisualizacao(novoMes);
+    setAnoVisualizacao(novoAno);
+    carregarEventosGoogle(novoAno, novoMes);
+  };
+
+  const avancarMes = () => {
+    let novoAno = anoVisualizacao;
+    let novoMes = mesVisualizacao + 1;
+    if (novoMes > 11) {
+      novoMes = 0;
+      novoAno += 1;
+    }
+    setMesVisualizacao(novoMes);
+    setAnoVisualizacao(novoAno);
+    carregarEventosGoogle(novoAno, novoMes);
   };
 
   const irParaHoje = () => {
     const d = new Date();
-    setAnoVisualizacao(d.getFullYear());
-    setMesVisualizacao(d.getMonth());
-    setDataSelecionada(hoje);
+    selecionarDataISO(hoje);
+    carregarEventosGoogle(d.getFullYear(), d.getMonth());
   };
 
   // Nomes dos Meses
@@ -269,13 +323,13 @@ function ConteudoCalendario() {
 
     // 1. Verifica na lista de consultas ocupadas da API da clínica
     const ocupadoApi = horariosOcupadosNutri.some(
-      (h) => h.data === dataStr && (h.horario === slotStr || h.horario.startsWith(slotStr))
+      (h) => normalizarDataISO(h.data) === dataStr && (h.horario === slotStr || h.horario.startsWith(slotStr))
     );
     if (ocupadoApi) return true;
 
     // 2. Verifica se o próprio usuário já marcou consulta no mesmo dia e horário
     const ocupadoLocal = eventos.some(
-      (e) => e.tipo === "consulta" && e.data === dataStr && (e.horario === slotStr || e.horario.startsWith(slotStr))
+      (e) => e.tipo === "consulta" && normalizarDataISO(e.data) === dataStr && (e.horario === slotStr || e.horario.startsWith(slotStr))
     );
     if (ocupadoLocal) return true;
 
@@ -291,7 +345,7 @@ function ConteudoCalendario() {
   const conflitoGoogleCalendar = useMemo(() => {
     if (novoTipo !== "consulta") return null;
     const eventosDoDiaGCal = eventos.filter(
-      (e) => (e.tipo === "google_calendar" || e.origem === "google_calendar") && e.data === novaData
+      (e) => (e.tipo === "google_calendar" || e.origem === "google_calendar") && normalizarDataISO(e.data) === novaData
     );
     if (eventosDoDiaGCal.length === 0) return null;
 
@@ -427,7 +481,7 @@ function ConteudoCalendario() {
     };
 
     setEventos([novo, ...eventos]);
-    setDataSelecionada(novaData);
+    selecionarDataISO(novaData);
     setNovoTitulo("");
     setModalAberto(false);
 
@@ -478,13 +532,22 @@ function ConteudoCalendario() {
     }
   };
 
-  const diasComEventos = eventos.reduce((acc, evt) => {
-    acc[evt.data] = acc[evt.data] || [];
-    acc[evt.data].push(evt.tipo);
-    return acc;
-  }, {} as Record<string, string[]>);
+  // Mapeamento estrito por data ISO exata (YYYY-MM-DD)
+  const diasComEventos = useMemo(() => {
+    return eventos.reduce((acc, evt) => {
+      const dataIso = normalizarDataISO(evt.data);
+      if (!dataIso) return acc;
+      acc[dataIso] = acc[dataIso] || [];
+      const tipo = evt.tipo === "google_calendar" || evt.origem === "google_calendar" ? "google_calendar" : evt.tipo;
+      acc[dataIso].push(tipo);
+      return acc;
+    }, {} as Record<string, string[]>);
+  }, [eventos]);
 
-  const eventosDoDiaBase = eventos.filter(evt => evt.data === dataSelecionada);
+  const eventosDoDiaBase = useMemo(() => {
+    return eventos.filter((evt) => normalizarDataISO(evt.data) === dataSelecionada);
+  }, [eventos, dataSelecionada]);
+
   const countTodos = eventosDoDiaBase.length;
   const countConsultas = eventosDoDiaBase.filter(evt => evt.tipo === "consulta").length;
   const countMetas = eventosDoDiaBase.filter(evt => evt.tipo === "meta").length;
@@ -497,10 +560,12 @@ function ConteudoCalendario() {
   });
 
   const formatarDataAmigavel = (dataIso: string) => {
-    const [ano, mes, dia] = dataIso.split("-").map(Number);
+    const limpa = normalizarDataISO(dataIso);
+    const [ano, mes, dia] = limpa.split("-").map(Number);
+    if (!ano || !mes || !dia) return dataIso;
     const dateObj = new Date(ano, mes - 1, dia);
     const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
-    return `${diasSemana[dateObj.getDay()]}, ${dia} de ${nomesMeses[dateObj.getMonth()]}`;
+    return `${diasSemana[dateObj.getDay()]}, ${dia} de ${nomesMeses[dateObj.getMonth()]} de ${ano}`;
   };
 
   const ehDataPassada = dataSelecionada < hoje;
@@ -510,7 +575,7 @@ function ConteudoCalendario() {
       
       {/* TOAST FLUTUANTE */}
       {toastMensagem && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-[#2A546D] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-2.5 animation-fade-in border border-sky-400/30">
+        <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#2A546D] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-2.5 animation-fade-in border border-sky-400/30">
           <Sparkles className="h-4 w-4 text-amber-300 shrink-0" />
           <span>{toastMensagem}</span>
           <button type="button" onClick={() => setToastMensagem("")} className="text-white/70 hover:text-white ml-2 p-1">
@@ -691,25 +756,25 @@ function ConteudoCalendario() {
 
             {/* Espaços vazios do início do mês */}
             {Array.from({ length: primeiroDiaSemana }).map((_, idx) => (
-              <div key={`empty-${idx}`} className="h-9"></div>
+              <div key={`empty-${idx}`} className="h-10 sm:h-12"></div>
             ))}
 
-            {/* Dias reais do mês */}
+            {/* Dias reais do mês (com comparação estrita de ano, mês e dia dataDiaISO) */}
             {diasDoMes.map((dia) => {
               const mesStr = String(mesVisualizacao + 1).padStart(2, "0");
               const diaStr = String(dia).padStart(2, "0");
-              const dataCompleta = `${anoVisualizacao}-${mesStr}-${diaStr}`;
-              const estaSelecionado = dataSelecionada === dataCompleta;
-              const ehHoje = hoje === dataCompleta;
-              const ehPassado = dataCompleta < hoje;
-              const tiposEventos = diasComEventos[dataCompleta];
+              const dataDiaISO = `${anoVisualizacao}-${mesStr}-${diaStr}`;
+              const estaSelecionado = dataSelecionada === dataDiaISO;
+              const ehHoje = hoje === dataDiaISO;
+              const ehPassado = dataDiaISO < hoje;
+              const tiposEventos = diasComEventos[dataDiaISO];
 
               return (
                 <button
                   key={dia}
                   type="button"
-                  onClick={() => setDataSelecionada(dataCompleta)}
-                  className={`h-9 w-full rounded-xl flex flex-col items-center justify-center relative transition-all cursor-pointer ${
+                  onClick={() => setDiaSelecionado(dia)}
+                  className={`h-10 sm:h-12 w-full rounded-xl flex flex-col items-center justify-center relative transition-all cursor-pointer ${
                     estaSelecionado 
                       ? 'bg-[#2A546D] text-white font-extrabold shadow-xs z-10 scale-105' 
                       : ehHoje
@@ -719,17 +784,17 @@ function ConteudoCalendario() {
                           : 'hover:bg-slate-50 text-slate-700 font-semibold'
                   }`}
                 >
-                  <span className="text-xs leading-none">{dia}</span>
+                  <span className="text-xs sm:text-sm leading-none font-bold">{dia}</span>
                   
                   {tiposEventos && (
                     <div className="flex gap-0.5 mt-0.5">
                       {tiposEventos.includes("consulta") && (
-                        <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-white' : 'bg-[#2A546D]'}`} />
+                        <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-white' : 'bg-[#2A546D]'}`} title="Consulta" />
                       )}
                       {tiposEventos.includes("meta") && (
-                        <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-amber-300' : 'bg-[#EB6D57]'}`} />
+                        <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-amber-300' : 'bg-[#EB6D57]'}`} title="Meta" />
                       )}
-                      {(tiposEventos.includes("google_calendar") || tiposEventos.some((t) => t === "google_calendar")) && (
+                      {tiposEventos.includes("google_calendar") && (
                         <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-sky-200' : 'bg-sky-500'}`} title="Agenda Google" />
                       )}
                     </div>
@@ -769,7 +834,7 @@ function ConteudoCalendario() {
               </div>
 
               {/* ABAS DE FILTRO */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
                 <button
                   type="button"
                   onClick={() => setFiltroTipo("todos")}
@@ -949,7 +1014,7 @@ function ConteudoCalendario() {
       {/* MODAL DE NOVO EVENTO / CONSULTA */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 animation-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div>
                 <h3 className="text-base font-extrabold text-slate-800">
@@ -1218,7 +1283,7 @@ function ConteudoCalendario() {
       {/* MODAL DE SINCRONIZAÇÃO COM O GOOGLE CALENDAR */}
       {modalGCalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 space-y-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">

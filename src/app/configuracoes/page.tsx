@@ -277,12 +277,12 @@ function ConteudoConfiguracoes() {
   }
 
   return (
-    <div className="flex h-screen bg-[#F0EAE1] overflow-hidden font-sans text-slate-800">
+    <div className="flex h-screen bg-[#F0EAE1] overflow-hidden font-sans text-slate-800 flex-col md:flex-row">
       {/* BARRA LATERAL REUTILIZÁVEL INTEGRADA */}
       <Sidebar />
 
       {/* ÁREA PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-4 lg:p-6 pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
           
           {/* TOAST DE FEEDBACK GLOBAL */}

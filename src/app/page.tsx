@@ -69,7 +69,7 @@ export default function PaginaInicialLanding() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F0EAE1] text-slate-800 font-sans selection:bg-[#4C6C54] selection:text-white relative">
+    <div className="min-h-screen bg-[#F0EAE1] text-slate-800 font-sans selection:bg-[#4C6C54] selection:text-white relative overflow-x-hidden">
       
       {/* ===================================================================== */}
       {/* 1. HEADER / NAVBAR SUPERIOR FIXO E MODERNO */}

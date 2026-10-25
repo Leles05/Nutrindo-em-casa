@@ -458,7 +458,7 @@ export default function PaginaDashboard() {
 
       {/* TOAST DE FEEDBACK */}
       {toastMensagem && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-[#3D5A45] text-white text-xs font-bold rounded-2xl shadow-xl flex items-center gap-2.5 animation-fade-in border border-emerald-400/30">
+        <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#3D5A45] text-white text-xs font-bold rounded-2xl shadow-xl flex items-center gap-2.5 animation-fade-in border border-emerald-400/30">
           <Sparkles className="h-4 w-4 text-amber-300 shrink-0" />
           <span>{toastMensagem}</span>
           <button
@@ -790,17 +790,19 @@ export default function PaginaDashboard() {
               </span>
             </div>
 
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 text-center">
               {[
                 { emoji: "👀", count: contadoresSemana.tolerou, label: "Tolerou", desc: "Tolerou no prato de apoio" },
                 { emoji: "👃", count: contadoresSemana.cheirou, label: "Cheirou", desc: "Sentiu o cheiro sem reclamar" },
                 { emoji: "🖐️", count: contadoresSemana.tocou, label: "Tocou", desc: "Tocou com a mão ou talher" },
                 { emoji: "👅", count: contadoresSemana.provou, label: "Provou", desc: "Lambeu ou mordeu um pedaço" },
                 { emoji: "😋", count: contadoresSemana.comeu, label: "Comeu", desc: "Engoliu com segurança" },
-              ].map((degrau) => (
+              ].map((degrau, idx) => (
                 <div
                   key={degrau.label}
-                  className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#3D5A45] transition-all"
+                  className={`bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#3D5A45] transition-all ${
+                    idx === 4 ? "col-span-2 sm:col-span-1" : ""
+                  }`}
                   title={`${degrau.label}: ${degrau.desc}`}
                 >
                   <span className="text-lg">{degrau.emoji}</span>
@@ -958,7 +960,7 @@ export default function PaginaDashboard() {
       {/* =================================================================== */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 animation-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-3.5 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-3.5 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div>
                 <h3 className="text-base font-extrabold text-slate-800">Registrar no Diário</h3>

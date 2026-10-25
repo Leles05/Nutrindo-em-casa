@@ -92,7 +92,7 @@ export default function BancoRespostasRapidas({
         >
           {banco.length === 0 ? (
             <option value="">
-              Nenhum modelo salvo ainda — digite um texto abaixo e clique em &apos;+ Salvar texto atual como modelo&apos;
+              Nenhum modelo salvo ainda — digite um parecer e clique em &apos;+ Salvar parecer atual como Modelo&apos;
             </option>
           ) : (
             <>
@@ -111,11 +111,11 @@ export default function BancoRespostasRapidas({
         <button
           type="button"
           onClick={handleExcluir}
-          className="h-9 px-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs inline-flex items-center gap-1 cursor-pointer shrink-0"
-          title="Excluir o modelo selecionado"
+          className="h-9 px-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+          title="Excluir este modelo salvo"
         >
           <Trash2 className="h-3.5 w-3.5" />
-          <span>Excluir Modelo</span>
+          <span>Excluir modelo</span>
         </button>
       )}
 

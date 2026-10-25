@@ -71,8 +71,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-[#F0EAE1] overflow-hidden font-sans text-slate-800 flex-col">
       {/* FAIXA SUPERIOR FIXA DE DIA DE CONSULTA (APENAS NAS PÁGINAS INTERNAS) */}
       {consultaHoje && pathname !== "/dashboard" && (
-        <div className="bg-gradient-to-r from-emerald-600 via-[#4C6C54] to-emerald-700 text-white px-4 py-2.5 border-b border-emerald-500 flex items-center justify-between gap-3 text-xs font-bold z-50 shadow-md">
-          <div className="flex items-center gap-2.5 max-w-4xl mx-auto flex-1 justify-center text-center">
+        <div className="bg-gradient-to-r from-emerald-600 via-[#4C6C54] to-emerald-700 text-white px-3 py-2 sm:px-4 sm:py-2.5 border-b border-emerald-500 flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs font-bold z-50 shadow-md">
+          <div className="flex items-center gap-2 max-w-4xl mx-auto flex-1 justify-center text-center flex-wrap">
             <span className="flex h-2.5 w-2.5 relative shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
@@ -80,7 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="uppercase font-black tracking-wider text-amber-300">
               🔴 HOJE É DIA DE CONSULTA!
             </span>
-            <span>
+            <span className="leading-snug">
               Sua videochamada individual com a Dra. Laís Leles é <strong>HOJE às {consultaHoje.horario}</strong>!
             </span>
           </div>
@@ -88,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             href={consultaHoje.link || "https://meet.google.com"}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-xl transition-all shadow-md shrink-0 cursor-pointer animate-pulse"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 py-1.5 px-3.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-xl transition-all shadow-md shrink-0 cursor-pointer animate-pulse text-center"
           >
             <Video className="h-3.5 w-3.5" />
             <span>Entrar na Sala da Consulta</span>
@@ -114,9 +114,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-5">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-4 lg:p-5 pb-24 md:pb-8">
           {children}
         </main>
       </div>

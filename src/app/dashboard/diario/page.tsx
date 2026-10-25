@@ -285,7 +285,7 @@ export default function PaginaDiarioAlimentar() {
       
       {/* TOAST DE FEEDBACK */}
       {toastMensagem && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-[#4C6C54] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-2.5 animation-fade-in border border-emerald-400/30">
+        <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#4C6C54] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-2.5 animation-fade-in border border-emerald-400/30">
           <Sparkles className="h-4 w-4 text-amber-300 shrink-0" />
           <span>{toastMensagem}</span>
           <button type="button" onClick={() => setToastMensagem("")} className="text-white/70 hover:text-white ml-2 p-1">
@@ -325,14 +325,14 @@ export default function PaginaDiarioAlimentar() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
           {[
             { degrau: "Tolerou", slug: "tolerou", total: historico.filter((i) => i.degrauSlug === "tolerou").length, icone: "👀", cor: "bg-blue-50 text-blue-700 border-blue-100 ring-blue-400" },
             { degrau: "Cheirou", slug: "cheirou", total: historico.filter((i) => i.degrauSlug === "cheirou").length, icone: "👃", cor: "bg-amber-50 text-amber-700 border-amber-100 ring-amber-400" },
             { degrau: "Tocou", slug: "tocou", total: historico.filter((i) => i.degrauSlug === "tocou").length, icone: "🖐️", cor: "bg-purple-50 text-purple-700 border-purple-100 ring-purple-400" },
             { degrau: "Provou", slug: "provou", total: historico.filter((i) => i.degrauSlug === "provou").length, icone: "👅", cor: "bg-rose-50 text-rose-700 border-rose-100 ring-rose-400" },
             { degrau: "Comeu", slug: "comeu", total: historico.filter((i) => i.degrauSlug === "comeu").length, icone: "😋", cor: "bg-emerald-50 text-emerald-700 border-emerald-100 ring-emerald-400" },
-          ].map((item) => {
+          ].map((item, idx) => {
             const isAtivo = filtroDegrau === item.slug;
             return (
               <button
@@ -340,6 +340,8 @@ export default function PaginaDiarioAlimentar() {
                 type="button"
                 onClick={() => setFiltroDegrau(isAtivo ? null : item.slug)}
                 className={`p-3 rounded-xl border ${item.cor} flex flex-col items-center justify-center text-center space-y-0.5 transition-all cursor-pointer ${
+                  idx === 4 ? "col-span-2 sm:col-span-1" : ""
+                } ${
                   isAtivo ? "ring-2 shadow-xs font-black scale-102" : "opacity-85 hover:opacity-100"
                 }`}
               >
@@ -476,7 +478,7 @@ export default function PaginaDiarioAlimentar() {
       {/* MODAL COMPACTO 100% SEM ROLAGEM COM AUTOCOMPLETE */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 animation-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-3.5 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-3.5 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             
             {/* CABEÇALHO DO MODAL */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">

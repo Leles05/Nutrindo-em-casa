@@ -632,7 +632,7 @@ export default function PortalNutricionista() {
       subtitulo: "56 Perguntas + Devolutiva Lado a Lado",
       description:
         "Abra a nova tela dedicada e ampla de Prontuário para ler as 56 perguntas com fontes legíveis, analisar os Pontos de Atenção e redigir a Devolutiva Semanal lado a lado de forma contínua.",
-      dicaPratica: "Clique em '📄 Prontuário' ou '✉️ Devolutiva' em qualquer paciente para abrir a tela ampla.",
+      dicaPratica: "Clique em 'Abrir Prontuário & Devolutiva' em qualquer paciente para abrir a tela ampla.",
       onEnter: () => setAbaAtiva("prontuarios"),
     },
     {
@@ -812,7 +812,7 @@ export default function PortalNutricionista() {
         {/* =================================================================== */}
         {/* NAVEGAÇÃO POR ABAS CLÍNICAS */}
         {/* =================================================================== */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             type="button"
             data-tour="nutri-aba-prontuarios"
@@ -887,7 +887,80 @@ export default function PortalNutricionista() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* LISTA EM CARDS NO MOBILE (< md) */}
+            <div className="block md:hidden space-y-3">
+              {pacientes.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  <Users className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-600">Nenhum paciente cadastrado no momento.</p>
+                </div>
+              ) : (
+                pacientes.map((p) => {
+                  const anamneseDoPaciente = anamneses.find((a) => a.user_email === p.email);
+                  return (
+                    <div key={p.id} className="p-4 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                            <span>👦 {p.nome_crianca || "Criança"}</span>
+                            {p.idade_crianca && (
+                              <span className="text-[10px] font-semibold text-slate-500">• {p.idade_crianca}</span>
+                            )}
+                          </h3>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Resp: <strong>{p.nome}</strong> • {p.email}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                            p.status_assinatura === "ATIVO"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
+                          }`}
+                        >
+                          {p.status_assinatura || "ATIVO"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                        <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {p.plano || "Trimestral"}
+                        </span>
+                        {anamneseDoPaciente ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" /> 56 itens preenchidos
+                          </span>
+                        ) : (
+                          <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            Anamnese Pendente
+                          </span>
+                        )}
+                        {p.consulta_agendada ? (
+                          <span className="text-[#2A546D] font-bold bg-[#2A546D]/10 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                            <CalendarIcon className="h-3 w-3" /> Consulta Agendada
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">Sem consulta</span>
+                        )}
+                      </div>
+
+                      <Link
+                        href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
+                        className="w-full py-2.5 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                        title="Abrir Prontuário Completo e Redigir Devolutiva Semanal"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>Abrir Prontuário & Devolutiva</span>
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* TABELA NO DESKTOP (md:block) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200/80 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -950,7 +1023,7 @@ export default function PortalNutricionista() {
                               type="button"
                               onClick={() =>
                                 handleAlternarStatusAssinatura(
-                                  p.email,
+                                   p.email,
                                   p.status_assinatura === "ATIVO" ? "EXPIRADO" : "ATIVO"
                                 )
                               }
@@ -984,23 +1057,14 @@ export default function PortalNutricionista() {
                         </td>
 
                         <td className="py-3.5 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            <Link
-                              href={`/nutri/prontuario/${encodeURIComponent(p.email)}?aba=devolutiva`}
-                              className="inline-flex items-center gap-1 py-1.5 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 font-extrabold text-[11px] transition-all cursor-pointer shadow-2xs"
-                              title="Abrir tela de Devolutiva Semanal para este paciente"
-                            >
-                              <Mail className="h-3 w-3" />
-                              <span>Devolutiva</span>
-                            </Link>
-
+                          <div className="flex items-center justify-end">
                             <Link
                               href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
-                              className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer"
-                              title="Abrir Prontuário Completo das 56 Perguntas e Parecer"
+                              className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs hover:shadow cursor-pointer"
+                              title="Abrir Prontuário Completo e Redigir Devolutiva Semanal"
                             >
                               <FileText className="h-3.5 w-3.5" />
-                              <span>Prontuário</span>
+                              <span>Abrir Prontuário & Devolutiva</span>
                             </Link>
                           </div>
                         </td>
@@ -1034,17 +1098,14 @@ export default function PortalNutricionista() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDevolutivaPacienteEmail(pacientes[0]?.email || "");
-                    setModalDevolutivaAberta(true);
-                  }}
+                <Link
+                  href={pacientes.length > 0 ? `/nutri/prontuario/${encodeURIComponent(pacientes[0].email)}` : "/nutri"}
                   className="py-2.5 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+                  title="Abrir a Estação Completa de Prontuário & Devolutiva do Paciente"
                 >
-                  <Mail className="h-4 w-4" />
-                  <span>📝 Enviar Devolutiva Semanal</span>
-                </button>
+                  <FileText className="h-4 w-4" />
+                  <span>Abrir Prontuário & Devolutiva</span>
+                </Link>
 
                 <button
                   type="button"

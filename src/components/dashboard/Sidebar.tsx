@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Home, Utensils, PlayCircle, Calendar, MessageCircle, Settings, LogOut, Lock, Eye, X, ArrowRight, CheckCircle2, UtensilsCrossed, FileText } from "lucide-react";
+import { Home, Utensils, PlayCircle, Calendar, MessageCircle, Settings, LogOut, Lock, Eye, X, ArrowRight, CheckCircle2, UtensilsCrossed, FileText, Menu } from "lucide-react";
 import { encerrarSessao } from "@/hooks/useAuthGuard";
+import NotificationBell from "@/components/dashboard/NotificationBell";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -15,6 +16,7 @@ export default function Sidebar() {
   const [visitouReceitas, setVisitouReceitas] = useState(false);
   const [modalBloqueioAberto, setModalBloqueioAberto] = useState(false);
   const [moduloBloqueadoNome, setModuloBloqueadoNome] = useState("");
+  const [drawerAberto, setDrawerAberto] = useState(false);
 
   const checarEstado = () => {
     if (typeof window === "undefined") return;
@@ -142,10 +144,62 @@ export default function Sidebar() {
     },
   ];
 
+  const mobileNavItems = [
+    {
+      name: "Início",
+      shortName: "Início",
+      href: "/dashboard",
+      icon: Home,
+      isActive: pathname === "/dashboard",
+      bloqueadoSemConsulta: false,
+    },
+    {
+      name: "Orientações da Nutri",
+      shortName: "Orientações",
+      href: "/dashboard/devolutivas",
+      icon: FileText,
+      isActive: pathname?.startsWith("/dashboard/devolutivas"),
+      bloqueadoSemConsulta: true,
+    },
+    {
+      name: "Diário",
+      shortName: "Diário",
+      href: "/dashboard/diario",
+      icon: Utensils,
+      isActive: pathname?.startsWith("/dashboard/diario"),
+      bloqueadoSemConsulta: true,
+    },
+    {
+      name: "Cursos",
+      shortName: "Cursos",
+      href: "/dashboard/cursos",
+      icon: PlayCircle,
+      isActive: pathname?.startsWith("/dashboard/cursos") || pathname?.startsWith("/cursos"),
+      bloqueadoSemConsulta: true,
+    },
+    {
+      name: "Calendário",
+      shortName: "Calendário",
+      href: "/dashboard/calendario",
+      icon: Calendar,
+      isActive: pathname?.startsWith("/dashboard/calendario"),
+      bloqueadoSemConsulta: false,
+    },
+    {
+      name: "Chat",
+      shortName: "Chat",
+      href: "/dashboard/chat",
+      icon: MessageCircle,
+      isActive: pathname?.startsWith("/dashboard/chat"),
+      bloqueadoSemConsulta: true,
+    },
+  ];
+
   return (
-    <aside className="w-52 bg-white border-r border-slate-200 flex flex-col shadow-xs shrink-0 z-20">
-      <div className="h-16 flex items-center justify-center border-b border-slate-100 px-3">
-        <Link href="/dashboard" className="relative h-10 w-28 block hover:opacity-85 transition-opacity">
+    <>
+      {/* 1. BARRA SUPERIOR MOBILE (< md) */}
+      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-2xs">
+        <Link href="/dashboard" className="relative h-8 w-28 block hover:opacity-85 transition-opacity">
           <Image 
             src="/logo-transparente.png" 
             alt="Nutrindo em Casa" 
@@ -154,31 +208,256 @@ export default function Sidebar() {
             priority 
           />
         </Link>
-      </div>
 
-      <nav className="flex-1 p-3 flex flex-col gap-1.5 overflow-y-auto">
-        {navItems.map((item) => {
+        <div className="flex items-center gap-2">
+          {isNutri && (
+            <Link
+              href="/nutri"
+              className="p-1.5 rounded-xl text-[#3D5A45] bg-[#E8F5E9] hover:bg-[#d8eed9] transition-colors"
+              title="Portal Clínico"
+            >
+              <Eye className="h-4 w-4" />
+            </Link>
+          )}
+          <NotificationBell />
+          <button
+            type="button"
+            onClick={() => setDrawerAberto(true)}
+            className="p-1.5 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Abrir menu completo"
+            aria-label="Abrir menu de navegação"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
+      </header>
+
+      {/* MENU GAVETA MOBILE (DRAWER COM OVERLAY) */}
+      {drawerAberto && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop escuro com blur */}
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-in fade-in"
+            onClick={() => setDrawerAberto(false)}
+          />
+
+          {/* Painel lateral drawer */}
+          <div className="relative w-72 max-w-[85vw] bg-white h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+            {/* Header da gaveta */}
+            <div className="h-16 px-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="relative h-9 w-28">
+                <Image
+                  src="/logo-transparente.png"
+                  alt="Nutrindo em Casa"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerAberto(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Fechar menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Links da gaveta */}
+            <nav className="flex-1 p-3 flex flex-col gap-1.5 overflow-y-auto">
+              {navItems.map((item) => {
+                const estaBloqueado = !isNutri && !consultaAgendada && item.bloqueadoSemConsulta;
+
+                if (estaBloqueado) {
+                  return (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => {
+                        setDrawerAberto(false);
+                        setModuloBloqueadoNome(item.name);
+                        setModalBloqueioAberto(true);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 bg-slate-50/60 hover:bg-slate-100 transition-all text-xs font-semibold cursor-pointer group text-left"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                        <span>{item.name}</span>
+                      </div>
+                      <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setDrawerAberto(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-xs font-bold ${
+                      item.isActive ? item.activeColor : `text-slate-600 bg-transparent ${item.color}`
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span>{item.name}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Rodapé da gaveta */}
+            <div className="p-3 border-t border-slate-100 space-y-1 bg-slate-50/50">
+              {isNutri && (
+                <Link
+                  href="/nutri"
+                  onClick={() => setDrawerAberto(false)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#3D5A45] bg-[#E8F5E9] hover:bg-[#d8eed9] transition-colors text-xs font-bold"
+                >
+                  <Eye className="h-4 w-4 shrink-0" />
+                  <span>Portal Clínico da Nutri</span>
+                </Link>
+              )}
+              <Link
+                href="/configuracoes"
+                onClick={() => setDrawerAberto(false)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-xs font-bold"
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                <span>Minha Conta & Configurações</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerAberto(false);
+                  encerrarSessao();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors text-xs font-bold cursor-pointer text-left"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span>Sair da Conta</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. SIDEBAR LATERAL DESKTOP (md:flex) */}
+      <aside className="hidden md:flex w-52 bg-white border-r border-slate-200 flex-col shadow-xs shrink-0 z-20">
+        <div className="h-16 flex items-center justify-center border-b border-slate-100 px-3">
+          <Link href="/dashboard" className="relative h-10 w-28 block hover:opacity-85 transition-opacity">
+            <Image 
+              src="/logo-transparente.png" 
+              alt="Nutrindo em Casa" 
+              fill 
+              className="object-contain" 
+              priority 
+            />
+          </Link>
+        </div>
+
+        <nav className="flex-1 p-3 flex flex-col gap-1.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const estaBloqueado = !isNutri && !consultaAgendada && item.bloqueadoSemConsulta;
+
+            if (estaBloqueado) {
+              return (
+                <button
+                  key={item.name}
+                  id={item.tourId}
+                  type="button"
+                  data-tour={item.tourId}
+                  onClick={() => {
+                    setModuloBloqueadoNome(item.name);
+                    setModalBloqueioAberto(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 bg-slate-50/60 hover:bg-slate-100 transition-all text-xs font-semibold cursor-pointer group text-left"
+                  title={`Clique para entender como desbloquear o módulo ${item.name}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span>{item.name}</span>
+                  </div>
+                  <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0 group-hover:scale-110 transition-transform" />
+                </button>
+              );
+            }
+
+            return (
+              <Link
+                key={item.name}
+                id={item.tourId}
+                href={item.href}
+                data-tour={item.tourId}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-xs font-bold ${
+                  item.isActive ? item.activeColor : `text-slate-500 bg-transparent ${item.color}`
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span>{item.name}</span>
+                  {anamneseConcluida && consultaAgendada && !visitouReceitas && item.name === "Plano & Receitas" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#4C6C54] shrink-0" />
+                  )}
+                </div>
+                {!isNutri && !consultaAgendada && item.name === "Calendário" && (
+                  <span className="text-[9px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-full">
+                    Passo 2
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-slate-100 space-y-1">
+          {/* Se for nutricionista em visita ao dashboard, botão de volta ao portal */}
+          {isNutri && (
+            <Link
+              href="/nutri"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#3D5A45] bg-[#E8F5E9] hover:bg-[#d8eed9] transition-colors text-xs font-bold"
+              title="Voltar ao Portal Clínico da Nutricionista"
+            >
+              <Eye className="h-4 w-4 shrink-0" />
+              <span>Portal Clínico</span>
+            </Link>
+          )}
+
+          <button 
+            type="button"
+            onClick={() => encerrarSessao()}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors text-xs font-bold cursor-pointer text-left"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span>Sair da Conta</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* 3. BARRA DE NAVEGAÇÃO INFERIOR FIXA (< md) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 px-1 py-1.5 flex justify-around items-center shadow-lg">
+        {mobileNavItems.map((item) => {
           const estaBloqueado = !isNutri && !consultaAgendada && item.bloqueadoSemConsulta;
 
           if (estaBloqueado) {
             return (
               <button
                 key={item.name}
-                id={item.tourId}
                 type="button"
-                data-tour={item.tourId}
                 onClick={() => {
                   setModuloBloqueadoNome(item.name);
                   setModalBloqueioAberto(true);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 bg-slate-50/60 hover:bg-slate-100 transition-all text-xs font-semibold cursor-pointer group text-left"
-                title={`Clique para entender como desbloquear o módulo ${item.name}`}
+                className="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-600 relative cursor-pointer"
+                title={`Clique para entender como desbloquear ${item.name}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span>{item.name}</span>
+                <div className="relative">
+                  <item.icon className="h-4 w-4" />
+                  <Lock className="h-2.5 w-2.5 text-amber-500 absolute -top-1 -right-1" />
                 </div>
-                <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold mt-0.5 truncate max-w-[54px]">{item.shortName}</span>
               </button>
             );
           }
@@ -186,54 +465,23 @@ export default function Sidebar() {
           return (
             <Link
               key={item.name}
-              id={item.tourId}
               href={item.href}
-              data-tour={item.tourId}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all text-xs font-bold ${
-                item.isActive ? item.activeColor : `text-slate-500 bg-transparent ${item.color}`
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all rounded-xl relative ${
+                item.isActive
+                  ? "text-[#4C6C54] font-black"
+                  : "text-slate-500 hover:text-slate-800 font-semibold"
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <item.icon className="h-4 w-4 shrink-0" />
-                <span>{item.name}</span>
-                {anamneseConcluida && consultaAgendada && !visitouReceitas && item.name === "Plano & Receitas" && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#4C6C54] shrink-0" />
-                )}
+              <div className={`p-1 rounded-xl transition-all ${item.isActive ? "bg-[#4C6C54]/10 scale-105" : ""}`}>
+                <item.icon className={`h-4 w-4 ${item.isActive ? "stroke-[2.5]" : ""}`} />
               </div>
-              {!isNutri && !consultaAgendada && item.name === "Calendário" && (
-                <span className="text-[9px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-full">
-                  Passo 2
-                </span>
-              )}
+              <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[56px]">{item.shortName}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-3 border-t border-slate-100 space-y-1">
-        {/* Se for nutricionista em visita ao dashboard, botão de volta ao portal */}
-        {isNutri && (
-          <Link
-            href="/nutri"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#3D5A45] bg-[#E8F5E9] hover:bg-[#d8eed9] transition-colors text-xs font-bold"
-            title="Voltar ao Portal Clínico da Nutricionista"
-          >
-            <Eye className="h-4 w-4 shrink-0" />
-            <span>Portal Clínico</span>
-          </Link>
-        )}
-
-        <button 
-          type="button"
-          onClick={() => encerrarSessao()}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors text-xs font-bold cursor-pointer text-left"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          <span>Sair da Conta</span>
-        </button>
-      </div>
-
-      {/* MODAL EXPLICATIVO DE ETAPA BLOQUEADA */}
+      {/* 4. MODAL EXPLICATIVO DE ETAPA BLOQUEADA */}
       {modalBloqueioAberto && (
         <div 
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
@@ -341,6 +589,6 @@ export default function Sidebar() {
           </div>
         </div>
       )}
-    </aside>
+    </>
   );
 }

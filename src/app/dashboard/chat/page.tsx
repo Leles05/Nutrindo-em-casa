@@ -259,7 +259,7 @@ export default function PaginaChat() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-68px)] flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animation-fade-in relative">
+    <div className="max-w-4xl mx-auto h-[calc(100dvh-140px)] md:h-[calc(100vh-68px)] flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animation-fade-in relative">
       
       {/* CABEÇALHO */}
       <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">

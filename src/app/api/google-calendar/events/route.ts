@@ -8,6 +8,10 @@ export async function GET(req: NextRequest) {
     const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
     const queryToken = req.nextUrl.searchParams.get("token");
     const queryEmail = req.nextUrl.searchParams.get("email");
+    const queryMonth = req.nextUrl.searchParams.get("month");
+    const queryYear = req.nextUrl.searchParams.get("year");
+    const queryTimeMin = req.nextUrl.searchParams.get("timeMin");
+    const queryTimeMax = req.nextUrl.searchParams.get("timeMax");
     const memoryToken = queryEmail ? await obterOuRenovarTokenGoogle(queryEmail) : null;
 
     let token = cookieToken || headerToken || queryToken || memoryToken;
@@ -26,12 +30,28 @@ export async function GET(req: NextRequest) {
 
     try {
       const agora = new Date();
-      const inicio = new Date(agora.getFullYear(), agora.getMonth() - 1, 1).toISOString();
-      const fim = new Date(agora.getFullYear(), agora.getMonth() + 2, 0).toISOString();
+      let inicio: string;
+      let fim: string;
+
+      if (queryTimeMin && queryTimeMax) {
+        inicio = new Date(queryTimeMin).toISOString();
+        fim = new Date(queryTimeMax).toISOString();
+      } else if (queryYear) {
+        const anoReq = parseInt(queryYear, 10);
+        const mesParam = queryMonth ? parseInt(queryMonth, 10) : agora.getMonth();
+        // Se mesParam estiver entre 1 e 12 (1-indexado), ajusta para 0-indexado
+        const mesReq = mesParam >= 1 && mesParam <= 12 ? mesParam - 1 : mesParam;
+        inicio = new Date(anoReq, mesReq - 1, 1, 0, 0, 0).toISOString();
+        fim = new Date(anoReq, mesReq + 2, 0, 23, 59, 59).toISOString();
+      } else {
+        // Janela ampla: do início do mês anterior até 6 meses à frente
+        inicio = new Date(agora.getFullYear(), agora.getMonth() - 1, 1, 0, 0, 0).toISOString();
+        fim = new Date(agora.getFullYear(), agora.getMonth() + 7, 0, 23, 59, 59).toISOString();
+      }
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(
         inicio
-      )}&timeMax=${encodeURIComponent(fim)}`;
+      )}&timeMax=${encodeURIComponent(fim)}&maxResults=250`;
 
       let googleRes = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -61,11 +81,40 @@ export async function GET(req: NextRequest) {
       }
 
       const data = await googleRes.json();
+      const formatadorDataSP = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Sao_Paulo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      const formatadorHoraSP = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+
       const eventosGoogle = (data.items || []).map((item: any) => {
-        const dataStr = (item.start?.dateTime || item.start?.date || "").split("T")[0];
-        const horarioStr = item.start?.dateTime
-          ? item.start.dateTime.split("T")[1]?.substring(0, 5) || "09:00"
-          : "Dia Todo";
+        let dataStr = "";
+        let horarioStr = "Dia Todo";
+
+        if (item.start?.dateTime) {
+          const d = new Date(item.start.dateTime);
+          try {
+            dataStr = formatadorDataSP.format(d); // Formato YYYY-MM-DD
+          } catch {
+            dataStr = item.start.dateTime.split("T")[0];
+          }
+
+          try {
+            horarioStr = formatadorHoraSP.format(d);
+          } catch {
+            horarioStr = item.start.dateTime.split("T")[1]?.substring(0, 5) || "09:00";
+          }
+        } else if (item.start?.date) {
+          dataStr = item.start.date; // Evento de dia todo já vem YYYY-MM-DD
+          horarioStr = "Dia Todo";
+        }
 
         return {
           id: `gcal-${item.id}`,

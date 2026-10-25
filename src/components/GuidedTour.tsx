@@ -119,7 +119,7 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
     const rolar = () => {
       const alvo = stepsRef.current[indice]?.target;
       const el = alvo ? document.querySelector<HTMLElement>(`[data-tour="${alvo}"], #${alvo}`) : null;
-      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      el?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
       medir();
     };
     timers.push(setTimeout(rolar, 60));
@@ -154,36 +154,74 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
 
   if (!aberto || !passo) return null;
 
+  const isMobile = viewport.w < 640;
   const larguraPopover = Math.min(POPOVER_LARGURA, viewport.w - MARGEM * 2);
 
-  // Cálculo da posição do balão (abaixo > direita > acima > esquerda), sempre dentro da tela
+  // Cálculo inteligente da posição do balão para que NUNCA fique em cima do spotlight
   let topPop: number;
-  let leftPop: number;
-  if (rect) {
-    const espacoAbaixo = viewport.h - (rect.top + rect.height);
-    const espacoAcima = rect.top;
-    const espacoDireita = viewport.w - (rect.left + rect.width);
-    const gap = MARGEM + PADDING_SPOTLIGHT;
+  let leftPop: number = MARGEM;
 
-    if (espacoAbaixo >= alturaPopover + gap) {
-      topPop = rect.top + rect.height + gap;
-      leftPop = rect.left;
-    } else if (espacoDireita >= larguraPopover + gap) {
-      leftPop = rect.left + rect.width + gap;
-      topPop = rect.top;
-    } else if (espacoAcima >= alturaPopover + gap) {
-      topPop = rect.top - alturaPopover - gap;
-      leftPop = rect.left;
+  if (isMobile) {
+    const gap = MARGEM + PADDING_SPOTLIGHT;
+    if (rect) {
+      const centroAlvoY = rect.top + rect.height / 2;
+      const centroTelaY = viewport.h / 2;
+
+      if (centroAlvoY < centroTelaY) {
+        // Alvo na metade superior: posiciona o card abaixo do recorte iluminado
+        topPop = Math.min(rect.top + rect.height + gap, viewport.h - alturaPopover - MARGEM);
+        // Garante que não invada o topo do spotlight
+        if (topPop < rect.top + rect.height + 4) {
+          topPop = rect.top + rect.height + 4;
+        }
+      } else {
+        // Alvo na metade inferior: posiciona o card acima do recorte iluminado
+        topPop = Math.max(MARGEM, rect.top - alturaPopover - gap);
+        // Garante que não invada a base do spotlight
+        if (topPop + alturaPopover > rect.top - 4) {
+          topPop = Math.max(8, rect.top - alturaPopover - 4);
+        }
+      }
     } else {
-      leftPop = rect.left - larguraPopover - gap;
-      topPop = rect.top;
+      topPop = Math.max(MARGEM, (viewport.h - alturaPopover) / 2);
     }
   } else {
-    topPop = (viewport.h - alturaPopover) / 2;
-    leftPop = (viewport.w - larguraPopover) / 2;
+    // DESKTOP: Abaixo > Direita > Acima > Esquerda
+    if (rect) {
+      const espacoAbaixo = viewport.h - (rect.top + rect.height);
+      const espacoAcima = rect.top;
+      const espacoDireita = viewport.w - (rect.left + rect.width);
+      const espacoEsquerda = rect.left;
+      const gap = MARGEM + PADDING_SPOTLIGHT;
+
+      if (espacoAbaixo >= alturaPopover + gap) {
+        topPop = rect.top + rect.height + gap;
+        leftPop = rect.left;
+      } else if (espacoDireita >= larguraPopover + gap) {
+        leftPop = rect.left + rect.width + gap;
+        topPop = Math.max(MARGEM, Math.min(rect.top, viewport.h - alturaPopover - MARGEM));
+      } else if (espacoAcima >= alturaPopover + gap) {
+        topPop = rect.top - alturaPopover - gap;
+        leftPop = rect.left;
+      } else if (espacoEsquerda >= larguraPopover + gap) {
+        leftPop = rect.left - larguraPopover - gap;
+        topPop = Math.max(MARGEM, Math.min(rect.top, viewport.h - alturaPopover - MARGEM));
+      } else {
+        if (espacoAbaixo >= espacoAcima) {
+          topPop = rect.top + rect.height + gap;
+          leftPop = rect.left;
+        } else {
+          topPop = Math.max(MARGEM, rect.top - alturaPopover - gap);
+          leftPop = rect.left;
+        }
+      }
+      leftPop = Math.max(MARGEM, Math.min(leftPop, viewport.w - larguraPopover - MARGEM));
+      topPop = Math.max(MARGEM, Math.min(topPop, viewport.h - alturaPopover - MARGEM));
+    } else {
+      topPop = Math.max(MARGEM, (viewport.h - alturaPopover) / 2);
+      leftPop = Math.max(MARGEM, (viewport.w - larguraPopover) / 2);
+    }
   }
-  leftPop = Math.max(MARGEM, Math.min(leftPop, viewport.w - larguraPopover - MARGEM));
-  topPop = Math.max(MARGEM, Math.min(topPop, viewport.h - alturaPopover - MARGEM));
 
   return (
     <div className="fixed inset-0 z-[9999]" role="dialog" aria-modal="true" aria-label="Guia rápido">
@@ -210,8 +248,12 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
       {/* Balão (popover) */}
       <div
         ref={popoverRef}
-        className="absolute bg-[#FFFDF8] rounded-2xl border border-[#3D5A45]/20 shadow-2xl p-4 sm:p-5 space-y-3 transition-all duration-300 ease-out"
-        style={{ top: topPop, left: leftPop, width: larguraPopover }}
+        className="fixed sm:absolute bg-[#FFFDF8] rounded-2xl border border-[#3D5A45]/20 shadow-2xl p-4 sm:p-5 space-y-3 transition-all duration-300 ease-out left-3 right-3 sm:left-auto sm:right-auto max-w-[calc(100vw-24px)] sm:max-w-md mx-auto sm:mx-0"
+        style={
+          isMobile
+            ? { top: topPop, zIndex: 10000 }
+            : { top: topPop, left: leftPop, width: larguraPopover, zIndex: 10000 }
+        }
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">

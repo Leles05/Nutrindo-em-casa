@@ -43,7 +43,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, respostas, concluida = true } = body;
 
-    const emailLimpo = String(email || "").toLowerCase().trim();
+    const emailLimpo = String(email || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "")
+      .toLowerCase()
+      .trim();
 
     if (!emailLimpo) {
       return NextResponse.json(
@@ -51,6 +56,15 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Extrai o nome real da criança preenchido na Pergunta 1
+    const nomeCrianca = String(
+      respostas?.nomeCrianca ||
+      respostas?.["1"] ||
+      respostas?.nome_crianca ||
+      respostas?.crianca_nome ||
+      ""
+    ).trim();
 
     const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
@@ -75,15 +89,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Atualiza flag de onboarding no perfil apenas se o formulário foi concluído (não rascunho)
+    // Atualiza nome da criança e status de conclusão no perfil
+    const updateProfile: any = {};
     if (Boolean(concluida)) {
+      updateProfile.anamnese_concluida = true;
+    }
+    if (nomeCrianca) {
+      updateProfile.nome_crianca = nomeCrianca;
+    }
+
+    if (Object.keys(updateProfile).length > 0) {
       try {
         await supabaseAdmin
           .from("profiles")
-          .update({ anamnese_concluida: true })
+          .update(updateProfile)
           .eq("email", emailLimpo);
       } catch (profileErr) {
-        console.warn("Aviso ao atualizar flag anamnese_concluida em profiles:", profileErr);
+        console.warn("Aviso ao atualizar perfil a partir da anamnese:", profileErr);
       }
     }
 

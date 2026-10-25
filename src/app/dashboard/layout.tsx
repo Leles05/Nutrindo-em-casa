@@ -1,13 +1,54 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, ArrowRight, Video } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import TelaBloqueioAssinatura from "@/components/dashboard/TelaBloqueioAssinatura";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { autenticado, carregando, planoExpirado, avisoVencimento, diasRestantes } = useAuthGuard();
+  const [consultaHoje, setConsultaHoje] = useState<{
+    horario: string;
+    link?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let email = (
+      localStorage.getItem("nutrindo_user_email") ||
+      localStorage.getItem("usuario_email") ||
+      ""
+    ).toLowerCase().trim();
+
+    if (!email) {
+      email = "lucaslimaleles@gmail.com";
+    }
+
+    const hojeISO = new Date().toLocaleDateString("en-CA");
+    fetch(`/api/agendamentos?email=${encodeURIComponent(email)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.agendamentos && Array.isArray(data.agendamentos)) {
+          const consultaDeHoje = data.agendamentos.find(
+            (a: any) =>
+              a.tipo === "consulta" &&
+              (a.data === hojeISO || a.data?.split("T")[0] === hojeISO) &&
+              !a.concluido
+          );
+          if (consultaDeHoje) {
+            setConsultaHoje({
+              horario: consultaDeHoje.horario || "14:00",
+              link: consultaDeHoje.link || "https://meet.google.com",
+            });
+          }
+        }
+      })
+      .catch(() => null);
+  }, []);
 
   // Enquanto valida ou se não estiver autenticado, bloqueia renderização e exibe feedback suave
   if (carregando || !autenticado) {
@@ -28,6 +69,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-[#F0EAE1] overflow-hidden font-sans text-slate-800 flex-col">
+      {/* FAIXA SUPERIOR FIXA DE DIA DE CONSULTA (APENAS NAS PÁGINAS INTERNAS) */}
+      {consultaHoje && pathname !== "/dashboard" && (
+        <div className="bg-gradient-to-r from-emerald-600 via-[#4C6C54] to-emerald-700 text-white px-4 py-2.5 border-b border-emerald-500 flex items-center justify-between gap-3 text-xs font-bold z-50 shadow-md">
+          <div className="flex items-center gap-2.5 max-w-4xl mx-auto flex-1 justify-center text-center">
+            <span className="flex h-2.5 w-2.5 relative shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+            </span>
+            <span className="uppercase font-black tracking-wider text-amber-300">
+              🔴 HOJE É DIA DE CONSULTA!
+            </span>
+            <span>
+              Sua videochamada individual com a Dra. Laís Leles é <strong>HOJE às {consultaHoje.horario}</strong>!
+            </span>
+          </div>
+          <a
+            href={consultaHoje.link || "https://meet.google.com"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-xl transition-all shadow-md shrink-0 cursor-pointer animate-pulse"
+          >
+            <Video className="h-3.5 w-3.5" />
+            <span>Entrar na Sala da Consulta</span>
+          </a>
+        </div>
+      )}
       {/* Estado 1: Banner Superior Âmbar de Vencimento Próximo */}
       {avisoVencimento && (
         <div className="bg-amber-500 text-slate-900 px-4 py-2 border-b border-amber-600 flex items-center justify-between gap-3 text-xs font-bold z-40 shadow-xs">

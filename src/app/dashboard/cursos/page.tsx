@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Play, CheckCircle2, FileText, ArrowRight, ArrowLeft,
-  Check, Trophy, Sparkles, ChevronLeft, ChevronRight, Circle, X
+  Check, Trophy, Sparkles, ChevronLeft, ChevronRight, Circle, X, Lock
 } from "lucide-react";
 import Link from "next/link";
 
@@ -18,21 +18,33 @@ interface Aula {
 
 export default function PaginaCursos() {
   const [toastConquista, setToastConquista] = useState(false);
+  const [avisoBloqueio, setAvisoBloqueio] = useState("");
+
+  const dispararAviso = (msg: string) => {
+    setAvisoBloqueio(msg);
+    setTimeout(() => setAvisoBloqueio(""), 3500);
+  };
+
+  const obterStorageKey = () => {
+    if (typeof window === "undefined") return "nutrindo_aulas_concluidas";
+    const email = localStorage.getItem("nutrindo_user_email") || "padrao";
+    return `nutrindo_aulas_concluidas_${email.toLowerCase().trim()}`;
+  };
 
   const [aulas, setAulas] = useState<Aula[]>([
     {
       id: 1,
       titulo: "Terapia Alimentar Descomplicada",
       duracao: "05:20",
-      concluido: true,
-      atual: false,
+      concluido: false,
+      atual: true,
       descricao: "Compreenda as bases da Escalada do Comer e como a aproximação gradual diminui a ansiedade da criança à mesa."
     },
     {
       id: 2,
       titulo: "Sinais de Alerta na Alimentação",
       duracao: "12:45",
-      concluido: true,
+      concluido: false,
       atual: false,
       descricao: "Aprenda a diferenciar uma fase passageira de desinteresse de uma verdadeira sensibilidade tátil e olfativa."
     },
@@ -40,7 +52,7 @@ export default function PaginaCursos() {
       id: 3,
       titulo: "Manejo da Recusa e Comunicação",
       duracao: "18:30",
-      concluido: true,
+      concluido: false,
       atual: false,
       descricao: "Ferramentas práticas de diálogo para evitar chantagens e barganhas na hora das principais refeições."
     },
@@ -49,10 +61,36 @@ export default function PaginaCursos() {
       titulo: "Construindo o Prato Seguro",
       duracao: "14:10",
       concluido: false,
-      atual: true,
+      atual: false,
       descricao: "Como combinar alimentos de conforto com novos alimentos de teste no mesmo prato sem gerar rejeição imediata."
     }
   ]);
+
+  // Carrega progresso salvo no localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = obterStorageKey();
+    const salvas = localStorage.getItem(key);
+    if (salvas) {
+      try {
+        const concluidasIds: number[] = JSON.parse(salvas);
+        setAulas((prev) => {
+          let encontrouAtual = false;
+          return prev.map((a, idx) => {
+            const concl = concluidasIds.includes(a.id);
+            let atual = false;
+            if (!encontrouAtual && !concl) {
+              atual = true;
+              encontrouAtual = true;
+            }
+            return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
+          });
+        });
+      } catch (err) {
+        console.warn("Aviso ao carregar progresso de aulas:", err);
+      }
+    }
+  }, []);
 
   const aulaAtualIndex = aulas.findIndex((a) => a.atual);
   const aulaAtual = aulas[aulaAtualIndex] || aulas[0];
@@ -60,26 +98,43 @@ export default function PaginaCursos() {
   const totalConcluidas = aulas.filter((a) => a.concluido).length;
   const porcentagemProgresso = Math.round((totalConcluidas / aulas.length) * 100);
 
-  // Alterna apenas o checkbox manual da aula atual
+  // Regra Sequencial: Aula N só fica desbloqueada se a Aula N-1 estiver concluída
+  const isAulaDesbloqueada = (index: number) => {
+    if (index === 0) return true;
+    return Boolean(aulas[index - 1]?.concluido);
+  };
+
+  const salvarProgresso = (novasAulas: Aula[]) => {
+    setAulas(novasAulas);
+    if (typeof window !== "undefined") {
+      const ids = novasAulas.filter((a) => a.concluido).map((a) => a.id);
+      localStorage.setItem(obterStorageKey(), JSON.stringify(ids));
+      window.dispatchEvent(new Event("nutrindo_cursos_atualizado"));
+    }
+  };
+
+  // Alterna o checkbox manual da aula atual
   const alternarConclusaoAtual = () => {
-    setAulas((prev) =>
-      prev.map((a, idx) =>
-        idx === aulaAtualIndex ? { ...a, concluido: !a.concluido } : a
-      )
+    const novas = aulas.map((a, idx) =>
+      idx === aulaAtualIndex ? { ...a, concluido: !a.concluido } : a
     );
+    salvarProgresso(novas);
   };
 
   // Garante a conclusão sem desmarcar e celebra a finalização
   const finalizarModulo = () => {
-    setAulas((prev) =>
-      prev.map((a, idx) =>
-        idx === aulaAtualIndex ? { ...a, concluido: true } : a
-      )
+    const novas = aulas.map((a, idx) =>
+      idx === aulaAtualIndex ? { ...a, concluido: true } : a
     );
+    salvarProgresso(novas);
     setToastConquista(true);
   };
 
   const irParaProximaAula = () => {
+    if (!aulaAtual.concluido) {
+      dispararAviso("Marque a aula atual como concluída para liberar a próxima aula.");
+      return;
+    }
     if (aulaAtualIndex < aulas.length - 1) {
       setAulas((prev) =>
         prev.map((a, idx) => ({
@@ -102,6 +157,10 @@ export default function PaginaCursos() {
   };
 
   const selecionarAula = (index: number) => {
+    if (!isAulaDesbloqueada(index)) {
+      dispararAviso("Marque a aula atual como concluída para liberar a próxima aula.");
+      return;
+    }
     setAulas((prev) =>
       prev.map((a, idx) => ({
         ...a,
@@ -134,12 +193,6 @@ export default function PaginaCursos() {
       {/* CABEÇALHO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <Link
-            href="/cursos"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#EB6D57] transition-colors mb-1"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Voltar aos Módulos
-          </Link>
           <h1 className="text-xl font-extrabold text-[#4C6C54]">
             Terapia Alimentar Descomplicada
           </h1>
@@ -289,51 +342,79 @@ export default function PaginaCursos() {
           </div>
 
           <div className="space-y-2">
-            {aulas.map((aula, idx) => (
-              <div
-                key={aula.id}
-                onClick={() => selecionarAula(idx)}
-                className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 cursor-pointer ${aula.atual
-                  ? 'border-[#EB6D57] bg-[#EB6D57]/5 shadow-xs ring-1 ring-[#EB6D57]/30'
-                  : 'border-slate-100 hover:bg-slate-50'
+            {aulas.map((aula, idx) => {
+              const desbloqueada = isAulaDesbloqueada(idx);
+
+              return (
+                <div
+                  key={aula.id}
+                  onClick={() => selecionarAula(idx)}
+                  className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                    !desbloqueada
+                      ? "border-slate-100 bg-slate-50/70 text-slate-400 opacity-60 hover:opacity-80"
+                      : aula.atual
+                        ? "border-[#EB6D57] bg-[#EB6D57]/5 shadow-xs ring-1 ring-[#EB6D57]/30"
+                        : "border-slate-100 hover:bg-slate-50"
                   }`}
-              >
-                <div className="flex items-center gap-2.5 overflow-hidden">
-                  {aula.concluido ? (
-                    <div className="h-5 w-5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
-                      <Check className="h-3 w-3 stroke-[3]" />
-                    </div>
-                  ) : aula.atual ? (
-                    <div className="h-5 w-5 rounded-full bg-[#EB6D57]/10 text-[#EB6D57] flex items-center justify-center shrink-0">
-                      <Play className="h-3 w-3 fill-current translate-x-0.2" />
-                    </div>
-                  ) : (
-                    <div className="h-5 w-5 rounded-full border border-slate-200 text-slate-300 flex items-center justify-center shrink-0">
-                      <Circle className="h-2 w-2 fill-slate-200" />
-                    </div>
-                  )}
+                  title={!desbloqueada ? "Conclua a aula anterior para desbloquear esta aula" : aula.titulo}
+                >
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    {!desbloqueada ? (
+                      <div className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200 text-amber-500 flex items-center justify-center shrink-0">
+                        <Lock className="h-3 w-3" />
+                      </div>
+                    ) : aula.concluido ? (
+                      <div className="h-5 w-5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
+                        <Check className="h-3 w-3 stroke-[3]" />
+                      </div>
+                    ) : aula.atual ? (
+                      <div className="h-5 w-5 rounded-full bg-[#EB6D57]/10 text-[#EB6D57] flex items-center justify-center shrink-0">
+                        <Play className="h-3 w-3 fill-current translate-x-0.2" />
+                      </div>
+                    ) : (
+                      <div className="h-5 w-5 rounded-full border border-slate-200 text-slate-300 flex items-center justify-center shrink-0">
+                        <Circle className="h-2 w-2 fill-slate-200" />
+                      </div>
+                    )}
 
-                  <div className="truncate">
-                    <h4 className={`text-xs font-bold truncate ${aula.atual ? 'text-[#EB6D57]' : aula.concluido ? 'text-slate-700' : 'text-slate-600'
+                    <div className="truncate">
+                      <h4 className={`text-xs font-bold truncate ${
+                        !desbloqueada
+                          ? "text-slate-400"
+                          : aula.atual
+                            ? "text-[#EB6D57]"
+                            : aula.concluido
+                              ? "text-slate-700"
+                              : "text-slate-600"
                       }`}>
-                      {aula.titulo}
-                    </h4>
-                    <span className="text-[10px] text-slate-400 font-medium">{aula.duracao}</span>
+                        {aula.titulo}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-medium">{aula.duracao}</span>
+                    </div>
                   </div>
-                </div>
 
-                {aula.atual && (
-                  <span className="text-[9px] font-extrabold text-[#EB6D57] bg-[#EB6D57]/10 px-1.5 py-0.5 rounded uppercase shrink-0">
-                    Assistindo
-                  </span>
-                )}
-              </div>
-            ))}
+                  {!desbloqueada ? (
+                    <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  ) : aula.atual ? (
+                    <span className="text-[9px] font-extrabold text-[#EB6D57] bg-[#EB6D57]/10 px-1.5 py-0.5 rounded uppercase shrink-0">
+                      Assistindo
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </div>
 
       </div>
 
+      {/* AVISO SUAVE DE BLOQUEIO SEQUENCIAL */}
+      {avisoBloqueio && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 p-3.5 bg-amber-500 text-slate-900 text-xs font-extrabold rounded-2xl shadow-xl flex items-center gap-2 border border-amber-600 animate-in fade-in slide-in-from-bottom-2">
+          <Lock className="h-4 w-4 shrink-0 text-slate-900" />
+          <span>{avisoBloqueio}</span>
+        </div>
+      )}
     </div>
   );
 }

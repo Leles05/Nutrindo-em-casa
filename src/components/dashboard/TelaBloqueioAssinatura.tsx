@@ -62,7 +62,7 @@ export default function TelaBloqueioAssinatura({
         </div>
 
         {/* BOTÕES DE AÇÃO */}
-        <div className="space-y-2.5 pt-1">
+        <div className="space-y-2 pt-1">
           <Link
             href="/pagamento?origem=upgrade"
             className="w-full py-3.5 px-6 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 group cursor-pointer"
@@ -71,10 +71,17 @@ export default function TelaBloqueioAssinatura({
             <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
           </Link>
 
+          <Link
+            href="/configuracoes?aba=faturas"
+            className="w-full py-2.5 px-4 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200/80"
+          >
+            <span>Visualizar Minhas Faturas &amp; Histórico</span>
+          </Link>
+
           <button
             type="button"
             onClick={encerrarSessao}
-            className="w-full py-2.5 px-4 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            className="w-full py-2 px-4 text-xs font-bold text-slate-400 hover:text-rose-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <LogOut className="h-3.5 w-3.5" />
             <span>Sair da Conta</span>

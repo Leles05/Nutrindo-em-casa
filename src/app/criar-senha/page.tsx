@@ -96,7 +96,12 @@ function ConteudoCriarSenha() {
     setCarregando(true);
 
     try {
-      const emailAlvo = email.trim().toLowerCase() || (typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "");
+      const emailAlvo = email
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toLowerCase() || (typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "");
 
       // 1. Atualização via cliente do Supabase Auth (se houver sessão ativa)
       if (isSupabaseConfigured()) {
@@ -126,7 +131,7 @@ function ConteudoCriarSenha() {
       }
 
       // 3. Redirecionamento com mensagem de confirmação para o Login
-      router.push(`/login?senhaCriada=true${emailAlvo ? `&email=${encodeURIComponent(emailAlvo)}` : ""}`);
+      router.push(`/login?email=${encodeURIComponent(emailAlvo)}&senhaCriada=true`);
     } catch (err: unknown) {
       console.warn("Erro ao definir senha (redirecionando para login):", err);
       router.push("/login?senhaCriada=true");

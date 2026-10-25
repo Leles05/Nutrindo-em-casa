@@ -41,22 +41,7 @@ export async function GET(request: Request) {
       horario: c.horario,
     }));
 
-    let listaAgendamentos = agendamentosUsuario || [];
-    if (listaAgendamentos.length === 0 && (!isSupabaseConfigured() || email === "lucas@email.com")) {
-      listaAgendamentos = [
-        {
-          id: "ag-1",
-          user_email: email,
-          titulo: "1ª Consulta Nutricional Pediátrica de Acolhimento",
-          tipo: "consulta",
-          data: "2026-10-23",
-          horario: "14:00 - 15:00",
-          plataforma: "Google Meet",
-          link: "https://meet.google.com/nutri-lais-acolhimento",
-          concluido: false,
-        },
-      ];
-    }
+    const listaAgendamentos = agendamentosUsuario || [];
 
     const consultasUsuario = listaAgendamentos.filter((a) => a.tipo === "consulta");
     const ultimaConsulta = consultasUsuario.length > 0 ? consultasUsuario[consultasUsuario.length - 1] : null;
@@ -101,11 +86,13 @@ export async function POST(request: Request) {
     } = body;
 
     const emailLimpo = String(email || "").toLowerCase().trim();
-    const tituloLimpo = String(titulo || "").trim();
+    const tituloLimpo = String(
+      titulo || (tipo === "consulta" ? "1ª Consulta Nutricional Pediátrica de Acolhimento" : "Meta Clínica")
+    ).trim();
     const dataLimpa = String(data || "").trim();
     const horarioLimpo = String(horario || "").trim();
 
-    if (!emailLimpo || !tituloLimpo || !dataLimpa || !horarioLimpo) {
+    if (!emailLimpo || !dataLimpa || !horarioLimpo) {
       return NextResponse.json(
         { success: false, message: "Campos obrigatórios ausentes para o agendamento." },
         { status: 400 }
@@ -124,11 +111,8 @@ export async function POST(request: Request) {
         .eq("tipo", "consulta")
         .order("data", { ascending: false });
 
-      let dataUltimaConsulta =
+      const dataUltimaConsulta =
         consultasAnteriores && consultasAnteriores.length > 0 ? consultasAnteriores[0].data : null;
-      if (!dataUltimaConsulta && (!isSupabaseConfigured() || emailLimpo === "lucas@email.com")) {
-        dataUltimaConsulta = "2026-10-23";
-      }
 
       if (dataUltimaConsulta) {
         const dRetorno = new Date(dataUltimaConsulta + "T00:00:00");
@@ -193,11 +177,10 @@ export async function POST(request: Request) {
       .insert([
         {
           user_email: emailLimpo,
-          titulo: tituloLimpo,
+          titulo: observacoes ? `${tituloLimpo} (${observacoes})` : tituloLimpo,
           tipo,
           data: dataLimpa,
           horario: horarioLimpo,
-          observacoes,
           plataforma,
           link,
           concluido: false,

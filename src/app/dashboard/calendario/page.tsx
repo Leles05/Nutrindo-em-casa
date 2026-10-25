@@ -9,17 +9,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ModalCheckin4Semanas from "@/components/ModalCheckin4Semanas";
+import { baixarArquivoICS } from "@/lib/googleCalendar";
 
 interface Evento {
   id: number | string;
   data: string; // YYYY-MM-DD
   titulo: string;
-  tipo: "consulta" | "meta" | "mentoria" | "lembrete";
+  tipo: "consulta" | "meta" | "mentoria" | "lembrete" | "google_calendar";
   horario: string;
   plataforma?: string;
   link?: string;
   concluido?: boolean;
   observacoes?: string;
+  origem?: string;
+  tag?: string;
+  resumo?: string;
 }
 
 function ConteudoCalendario() {
@@ -63,11 +67,18 @@ function ConteudoCalendario() {
   const [mesVisualizacao, setMesVisualizacao] = useState(() => new Date().getMonth());
   const [dataSelecionada, setDataSelecionada] = useState(hoje);
 
-  const [filtroTipo, setFiltroTipo] = useState<"todos" | "consulta" | "meta">("todos");
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | "consulta" | "meta" | "google_calendar">("todos");
   const [modalAberto, setModalAberto] = useState(false);
   const [modalCheckinAberto, setModalCheckinAberto] = useState(false);
   const [toastMensagem, setToastMensagem] = useState("");
   const [modalSucessoOnboarding, setModalSucessoOnboarding] = useState(false);
+
+  // Sincronização com Google Calendar
+  const [modalGCalAberto, setModalGCalAberto] = useState(false);
+  const [lembrete24h, setLembrete24h] = useState(true);
+  const [lembrete1h, setLembrete1h] = useState(true);
+  const [contaGoogleConectada, setContaGoogleConectada] = useState(false);
+  const [sincronizarGCalAutomatico, setSincronizarGCalAutomatico] = useState(true);
 
   // Status de Onboarding do Usuário
   const [anamneseConcluida, setAnamneseConcluida] = useState(true);
@@ -75,6 +86,16 @@ function ConteudoCalendario() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const role = localStorage.getItem("nutrindo_user_role");
+      const email = (localStorage.getItem("nutrindo_user_email") || "").toLowerCase().trim();
+      const ehNutri = role === "nutri" || email === "metodonutrindoemcasa@gmail.com";
+
+      if (ehNutri) {
+        setAnamneseConcluida(true);
+        setConsultaAgendada(true);
+        return;
+      }
+
       const anamneseSalva = localStorage.getItem("anamnese_concluida") === "true";
       const consultaSalva = localStorage.getItem("consulta_agendada") === "true";
       
@@ -86,26 +107,7 @@ function ConteudoCalendario() {
     }
   }, [modoOnboarding]);
 
-  const [eventos, setEventos] = useState<Evento[]>([
-    {
-      id: 1,
-      data: hoje,
-      titulo: "Meta do Dia: Oferecer vegetal no prato de apoio",
-      tipo: "meta",
-      horario: "12:30",
-      concluido: false
-    },
-    {
-      id: 2,
-      data: hoje,
-      titulo: "Consulta Nutricional de Acolhimento - Dra. Laís Leles",
-      tipo: "consulta",
-      horario: "14:00 - 15:00",
-      plataforma: "Google Meet",
-      link: "https://meet.google.com",
-      concluido: false
-    }
-  ]);
+  const [eventos, setEventos] = useState<Evento[]>([]);
 
   // Regra Clínica do Ciclo de 4 Semanas (28 dias entre consultas):
   const consultasUsuario = useMemo(() => {
@@ -174,6 +176,32 @@ function ConteudoCalendario() {
             [...formatados, ...prev].forEach((e) => mapa.set(e.id, e));
             return Array.from(mapa.values());
           });
+        }
+
+        // Busca compromissos sincronizados com o Google Calendar (Zero Mocks)
+        try {
+          const gcalRes = await fetch("/api/google-calendar/events");
+          if (gcalRes.ok) {
+            const gcalData = await gcalRes.json();
+            if (gcalData.success) {
+              if (gcalData.sincronizado) {
+                setContaGoogleConectada(true);
+              }
+              if (Array.isArray(gcalData.eventos) && gcalData.eventos.length > 0) {
+                setEventos((prev) => {
+                  const mapa = new Map<number | string, Evento>();
+                  [...gcalData.eventos, ...prev].forEach((e) => mapa.set(e.id, e));
+                  return Array.from(mapa.values());
+                });
+              }
+            }
+          }
+        } catch (gcalErr) {
+          console.warn("Aviso ao carregar eventos do Google Calendar:", gcalErr);
+        }
+
+        if (typeof document !== "undefined" && document.cookie.includes("google_calendar_token")) {
+          setContaGoogleConectada(true);
         }
       } catch (err) {
         console.warn("Aviso ao carregar agendamentos:", err);
@@ -258,6 +286,26 @@ function ConteudoCalendario() {
 
     return false;
   }, [temConsultaAgendadaOuRealizada, dataMinimaRetornoISO, dataMinimaConsultaISO, horariosOcupadosNutri, eventos]);
+
+  // Checa se o usuário já possui compromisso no Google Calendar próximo ao horário selecionado
+  const conflitoGoogleCalendar = useMemo(() => {
+    if (novoTipo !== "consulta") return null;
+    const eventosDoDiaGCal = eventos.filter(
+      (e) => (e.tipo === "google_calendar" || e.origem === "google_calendar") && e.data === novaData
+    );
+    if (eventosDoDiaGCal.length === 0) return null;
+
+    return (
+      eventosDoDiaGCal.find((e) => {
+        if (!e.horario || e.horario === "Dia Todo") return false;
+        if (e.horario === novoHorario) return true;
+        const [hSlot, mSlot = 0] = novoHorario.split(":").map(Number);
+        const [hEvt, mEvt = 0] = e.horario.split(":").map(Number);
+        const diffMin = Math.abs((hSlot * 60 + mSlot) - (hEvt * 60 + mEvt));
+        return diffMin <= 60; // Próximo em até 60 minutos
+      }) || null
+    );
+  }, [novoTipo, eventos, novaData, novoHorario]);
 
   const abrirModalNovoEvento = (tipoInicial: "consulta" | "meta" = "meta") => {
     setErroData("");
@@ -395,6 +443,21 @@ function ConteudoCalendario() {
       setTimeout(() => setToastMensagem(""), 3500);
     }
 
+    // Se for consulta, sincroniza o evento diretamente na agenda Google em background (sem abrir abas extras)
+    if (novoTipo === "consulta") {
+      fetch("/api/google-calendar/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: novo.titulo,
+          data: novo.data,
+          horario: novo.horario,
+          meetLink: novo.link,
+          detalhes: "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).",
+        }),
+      }).catch((err) => console.warn("Aviso ao criar evento direto no Google Calendar:", err));
+    }
+
     // Persistência no Supabase
     try {
       fetch("/api/agendamentos", {
@@ -425,8 +488,13 @@ function ConteudoCalendario() {
   const countTodos = eventosDoDiaBase.length;
   const countConsultas = eventosDoDiaBase.filter(evt => evt.tipo === "consulta").length;
   const countMetas = eventosDoDiaBase.filter(evt => evt.tipo === "meta").length;
+  const countGoogle = eventosDoDiaBase.filter(evt => evt.tipo === "google_calendar" || evt.origem === "google_calendar").length;
 
-  const eventosDoDia = eventosDoDiaBase.filter(evt => filtroTipo === "todos" || evt.tipo === filtroTipo);
+  const eventosDoDia = eventosDoDiaBase.filter(evt => {
+    if (filtroTipo === "todos") return true;
+    if (filtroTipo === "google_calendar") return evt.tipo === "google_calendar" || evt.origem === "google_calendar";
+    return evt.tipo === filtroTipo;
+  });
 
   const formatarDataAmigavel = (dataIso: string) => {
     const [ano, mes, dia] = dataIso.split("-").map(Number);
@@ -481,41 +549,70 @@ function ConteudoCalendario() {
 
       {/* CABEÇALHO DA PÁGINA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-800">Calendário de Acompanhamento</h1>
-          <p className="text-slate-500 text-xs">Consultas com a Dra. Laís, metas alimentares e lembretes diários.</p>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl font-extrabold text-slate-800">Calendário de Acompanhamento</h1>
+            {contaGoogleConectada ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-extrabold shadow-2xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span>✓ Sincronizado com Google Calendar • Seus compromissos pessoais estão visíveis na grade</span>
+              </span>
+            ) : (
+              <a
+                href="/api/auth/google?returnTo=/dashboard/calendario"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                title="Conectar com a conta Google para ver seus compromissos reais na grade"
+              >
+                <span>🔄 Conectar conta Google para exibir meus compromissos</span>
+              </a>
+            )}
+          </div>
+          <p className="text-slate-500 text-xs">Consultas com a Dra. Laís, metas alimentares e seus compromissos pessoais sincronizados do Google Calendar.</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setModalCheckinAberto(true)}
-            className="px-3.5 py-2.5 bg-[#4C6C54] hover:bg-[#3d5743] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>📝 Check-in 4 Semanas</span>
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {(!consultaAgendada || modoOnboarding) ? (
+            <button
+              type="button"
+              onClick={() => abrirModalNovoEvento("consulta")}
+              className="px-4 py-2.5 bg-[#2A546D] hover:bg-[#204054] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Video className="h-4 w-4" />
+              <span>Agendar 1ª Consulta</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setModalCheckinAberto(true)}
+                className="px-3.5 py-2 bg-[#4C6C54] hover:bg-[#3d5743] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>📝 Check-in 4 Semanas</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => abrirModalNovoEvento("consulta")}
-            className="px-4 py-2.5 bg-[#2A546D] hover:bg-[#204054] text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <Video className="h-3.5 w-3.5" /> Agendar Consulta
-          </button>
-          
-          <button
-            type="button"
-            disabled={ehDataPassada}
-            onClick={() => abrirModalNovoEvento("meta")}
-            className={`px-4 py-2.5 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
-              ehDataPassada
-                ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60"
-                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
-            }`}
-            title={ehDataPassada ? "Não é possível agendar em datas passadas" : "Adicionar Meta"}
-          >
-            <Plus className="h-3.5 w-3.5" /> Nova Meta / Lembrete
-          </button>
+              <button
+                type="button"
+                onClick={() => abrirModalNovoEvento("consulta")}
+                className="px-3.5 py-2 bg-[#2A546D] hover:bg-[#204054] text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Video className="h-3.5 w-3.5" /> Agendar Consulta
+              </button>
+
+              <button
+                type="button"
+                disabled={ehDataPassada}
+                onClick={() => abrirModalNovoEvento("meta")}
+                className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
+                  ehDataPassada
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                }`}
+                title={ehDataPassada ? "Não é possível agendar em datas passadas" : "Adicionar Meta"}
+              >
+                <Plus className="h-3.5 w-3.5" /> Nova Meta / Lembrete
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -632,6 +729,9 @@ function ConteudoCalendario() {
                       {tiposEventos.includes("meta") && (
                         <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-amber-300' : 'bg-[#EB6D57]'}`} />
                       )}
+                      {(tiposEventos.includes("google_calendar") || tiposEventos.some((t) => t === "google_calendar")) && (
+                        <span className={`h-1 w-1 rounded-full ${estaSelecionado ? 'bg-sky-200' : 'bg-sky-500'}`} title="Agenda Google" />
+                      )}
                     </div>
                   )}
                 </button>
@@ -639,12 +739,15 @@ function ConteudoCalendario() {
             })}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium flex-wrap gap-2">
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-[#2A546D]"></span> Consultas
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-[#EB6D57]"></span> Metas
+            </span>
+            <span className="flex items-center gap-1.5 text-sky-700 font-bold">
+              <span className="h-2 w-2 rounded-full bg-sky-500"></span> Agenda Google
             </span>
             <span className="flex items-center gap-1.5 text-[#4C6C54] font-bold">
               <span className="h-2 w-2 rounded-full border-2 border-[#4C6C54]"></span> Hoje
@@ -685,15 +788,28 @@ function ConteudoCalendario() {
                 >
                   Consultas ({countConsultas})
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroTipo("meta")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    filtroTipo === "meta" ? 'bg-white text-[#EB6D57] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Metas ({countMetas})
-                </button>
+                {consultaAgendada && !modoOnboarding && (
+                  <button
+                    type="button"
+                    onClick={() => setFiltroTipo("meta")}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      filtroTipo === "meta" ? 'bg-white text-[#EB6D57] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Metas ({countMetas})
+                  </button>
+                )}
+                {countGoogle > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFiltroTipo("google_calendar")}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      filtroTipo === "google_calendar" ? 'bg-white text-sky-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Agenda Google ({countGoogle})
+                  </button>
+                )}
               </div>
             </div>
 
@@ -718,89 +834,106 @@ function ConteudoCalendario() {
                   </p>
                 </div>
               ) : (
-                eventosDoDia.map((evt) => (
-                  <div 
-                    key={evt.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      evt.concluido 
-                        ? 'bg-slate-50/70 border-slate-100 opacity-60' 
-                        : evt.tipo === 'consulta'
-                          ? 'bg-[#2A546D]/5 border-[#2A546D]/20'
-                          : 'bg-white border-slate-100 hover:border-slate-200 shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleConcluido(evt.id)}
-                        className={`h-4 w-4 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
-                          evt.concluido
-                            ? 'bg-[#4C6C54] border-[#4C6C54] text-white'
-                            : 'border-slate-300 bg-white hover:border-[#2A546D]'
-                        }`}
-                        title={evt.concluido ? "Marcar como pendente" : "Marcar como concluído"}
-                      >
-                        {evt.concluido && <Check className="h-3 w-3" />}
-                      </button>
+                eventosDoDia.map((evt) => {
+                  const ehGoogle = evt.tipo === "google_calendar" || evt.origem === "google_calendar";
+                  return (
+                    <div 
+                      key={evt.id}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        evt.concluido 
+                          ? 'bg-slate-50/70 border-slate-100 opacity-60' 
+                          : ehGoogle
+                            ? 'bg-sky-50/50 border-sky-200/90 shadow-2xs'
+                            : evt.tipo === 'consulta'
+                              ? 'bg-[#2A546D]/5 border-[#2A546D]/20'
+                              : 'bg-white border-slate-100 hover:border-slate-200 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {ehGoogle ? (
+                          <div className="h-5 w-5 rounded-md bg-sky-100 text-sky-700 flex items-center justify-center shrink-0" title="Evento do Google Calendar">
+                            <CalendarIcon className="h-3 w-3" />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleConcluido(evt.id)}
+                            className={`h-4 w-4 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                              evt.concluido
+                                ? 'bg-[#4C6C54] border-[#4C6C54] text-white'
+                                : 'border-slate-300 bg-white hover:border-[#2A546D]'
+                            }`}
+                            title={evt.concluido ? "Marcar como pendente" : "Marcar como concluído"}
+                          >
+                            {evt.concluido && <Check className="h-3 w-3" />}
+                          </button>
+                        )}
 
-                      <div className="space-y-0.5 truncate">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                            evt.tipo === 'consulta' 
-                              ? 'bg-[#2A546D] text-white' 
-                              : 'bg-[#EB6D57]/10 text-[#EB6D57]'
-                          }`}>
-                            {evt.tipo}
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> {evt.horario}
-                          </span>
+                        <div className="space-y-0.5 truncate">
+                          <div className="flex items-center gap-2">
+                            {ehGoogle ? (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-300 inline-flex items-center gap-1">
+                                <span>Google Calendar</span>
+                              </span>
+                            ) : (
+                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                evt.tipo === 'consulta' 
+                                  ? 'bg-[#2A546D] text-white' 
+                                  : 'bg-[#EB6D57]/10 text-[#EB6D57]'
+                              }`}>
+                                {evt.tipo}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> {evt.horario}
+                            </span>
+                          </div>
+                          <h4 className={`text-xs font-bold text-slate-800 truncate ${evt.concluido ? 'line-through text-slate-400' : ''}`}>
+                            {evt.titulo}
+                          </h4>
+                          {evt.resumo && (
+                            <p className="text-[10px] text-slate-500 font-medium truncate">
+                              {evt.resumo}
+                            </p>
+                          )}
                         </div>
-                        <h4 className={`text-xs font-bold text-slate-800 truncate ${evt.concluido ? 'line-through text-slate-400' : ''}`}>
-                          {evt.titulo}
-                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {evt.link && !evt.concluido && evt.tipo === "consulta" && (
+                          <a
+                            href={evt.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2A546D] hover:bg-[#204054] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+                          >
+                            <Video className="h-3.5 w-3.5" /> Entrar
+                          </a>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* BOTÃO INTEGRADO COM O GOOGLE CALENDAR */}
-                      <a
-                        href={gerarLinkGoogleCalendar(evt)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
-                        title="Salvar evento na sua conta do Google Calendar"
-                      >
-                        <CalendarIcon className="h-3 w-3 text-blue-600" />
-                        <span>Google Calendar</span>
-                        <ExternalLink className="h-2.5 w-2.5 text-slate-400" />
-                      </a>
-
-                      {evt.link && !evt.concluido && evt.tipo === "consulta" && (
-                        <a
-                          href={evt.link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2A546D] hover:bg-[#204054] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
-                        >
-                          <Video className="h-3.5 w-3.5" /> Entrar
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+                  );
+                })
+            )}
             </div>
           </div>
 
           {/* BOTÃO DE AÇÃO CONDICIONAL */}
-          {!ehDataPassada ? (
+          {!ehDataPassada && consultaAgendada && !modoOnboarding ? (
             <button
               type="button"
               onClick={() => abrirModalNovoEvento("meta")}
               className="w-full py-2.5 border border-dashed border-[#2A546D]/40 text-[#2A546D] hover:bg-[#2A546D]/5 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer mt-1"
             >
               <Plus className="h-3.5 w-3.5" /> Adicionar Meta ou Compromisso neste Dia
+            </button>
+          ) : !ehDataPassada && (!consultaAgendada || modoOnboarding) ? (
+            <button
+              type="button"
+              onClick={() => abrirModalNovoEvento("consulta")}
+              className="w-full py-2.5 bg-[#2A546D] hover:bg-[#204054] text-white font-extrabold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer mt-1 shadow-xs"
+            >
+              <Video className="h-4 w-4" /> Agendar 1ª Consulta de Avaliação com a Dra. Laís
             </button>
           ) : (
             <div className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold text-xs rounded-xl text-center border border-slate-200">
@@ -811,56 +944,7 @@ function ConteudoCalendario() {
 
       </div>
 
-      {/* METAS TERAPÊUTICAS */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-[#EB6D57]" />
-            <h2 className="text-sm font-extrabold text-slate-800">
-              Metas Terapêuticas em Andamento
-            </h2>
-            <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
-              • Acompanhamento quinzenal traçado com a nutricionista
-            </span>
-          </div>
 
-          <Link
-            href="/dashboard/diario"
-            className="text-xs font-bold text-[#4C6C54] hover:underline flex items-center gap-0.5"
-          >
-            Registrar no Diário <ArrowUpRight className="h-3 w-3" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[
-            { id: 1, icone: "🥦", meta: "Tolerar 3 novos vegetais", descricao: "Apresentar no prato de apoio sem forçar o consumo.", progresso: 2, total: 3, prazo: "Quinzenal", corBadge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-            { id: 2, icone: "📱", meta: "Telas < 15min na refeição", descricao: "Transição gradual focada em conversar à mesa.", progresso: 4, total: 7, prazo: "Semanal", corBadge: "bg-blue-50 text-blue-700 border-blue-200" },
-            { id: 3, icone: "🍉", meta: "Toque em frutas úmidas", descricao: "Exploração tátil com pedaços de mamão e melancia.", progresso: 1, total: 2, prazo: "Em andamento", corBadge: "bg-amber-50 text-amber-700 border-amber-200" }
-          ].map((meta) => (
-            <div 
-              key={meta.id} 
-              className="p-3.5 bg-slate-50/70 border border-slate-100 rounded-xl space-y-2 hover:border-slate-200 transition-colors"
-            >
-              <div className="flex justify-between items-start gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{meta.icone}</span>
-                  <h3 className="text-xs font-bold text-slate-800 leading-tight">
-                    {meta.meta}
-                  </h3>
-                </div>
-                <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded border shrink-0 ${meta.corBadge}`}>
-                  {meta.prazo}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-500 leading-snug">
-                {meta.descricao}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* MODAL DE NOVO EVENTO / CONSULTA */}
       {modalAberto && (
@@ -892,45 +976,54 @@ function ConteudoCalendario() {
             )}
 
             <form onSubmit={adicionarEvento} className="space-y-3.5">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Tipo de Agendamento
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovoTipo("consulta");
-                      if (!novoTitulo || novoTitulo.startsWith("Meta:")) {
-                        setNovoTitulo("Consulta Nutricional Pediátrica com Dra. Laís");
-                      }
-                    }}
-                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      novoTipo === "consulta"
-                        ? "bg-[#2A546D] text-white border-[#2A546D] shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <Video className="h-3.5 w-3.5" /> Consulta Oficial
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovoTipo("meta");
-                      if (!novoTitulo || novoTitulo.startsWith("Consulta")) {
-                        setNovoTitulo("Oferecer novo vegetal no prato de apoio");
-                      }
-                    }}
-                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      novoTipo === "meta"
-                        ? "bg-[#EB6D57] text-white border-[#EB6D57] shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <Target className="h-3.5 w-3.5" /> Meta ou Lembrete
-                  </button>
+              {consultaAgendada && !modoOnboarding ? (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Tipo de Agendamento
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNovoTipo("consulta");
+                        if (!novoTitulo || novoTitulo.startsWith("Meta:")) {
+                          setNovoTitulo("Consulta Nutricional Pediátrica com Dra. Laís");
+                        }
+                      }}
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        novoTipo === "consulta"
+                          ? "bg-[#2A546D] text-white border-[#2A546D] shadow-xs"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Video className="h-3.5 w-3.5" /> Consulta Oficial
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNovoTipo("meta");
+                        if (!novoTitulo || novoTitulo.startsWith("Consulta")) {
+                          setNovoTitulo("Oferecer novo vegetal no prato de apoio");
+                        }
+                      }}
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        novoTipo === "meta"
+                          ? "bg-[#EB6D57] text-white border-[#EB6D57] shadow-xs"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Target className="h-3.5 w-3.5" /> Meta ou Lembrete
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 bg-[#2A546D]/10 rounded-xl border border-[#2A546D]/20 flex items-center gap-2.5">
+                  <Video className="h-4 w-4 text-[#2A546D] shrink-0" />
+                  <span className="text-xs font-extrabold text-[#2A546D]">
+                    1ª Consulta de Avaliação com Dra. Laís Leles (Sessão Oficial)
+                  </span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -1001,6 +1094,21 @@ function ConteudoCalendario() {
                         );
                       })}
                     </div>
+
+                    {/* AVISO AMIGÁVEL DE CONFLITO COM GOOGLE CALENDAR */}
+                    {conflitoGoogleCalendar && (
+                      <div className="mt-2.5 p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs font-semibold text-amber-900 flex items-start gap-2.5 animate-in fade-in">
+                        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">
+                            ⚠️ Você possui um compromisso no seu Google Calendar próximo a este horário:
+                          </p>
+                          <p className="text-[11px] text-amber-800 mt-0.5">
+                            <strong>{conflitoGoogleCalendar.titulo}</strong> às <strong>{conflitoGoogleCalendar.horario}</strong>. Verifique sua disponibilidade antes de confirmar.
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {novaData < (temConsultaAgendadaOuRealizada ? dataMinimaRetornoISO : dataMinimaConsultaISO) && (
                       <p className="text-[11px] text-slate-500 font-medium mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
@@ -1106,6 +1214,128 @@ function ConteudoCalendario() {
           setTimeout(() => setToastMensagem(""), 4500);
         }}
       />
+
+      {/* MODAL DE SINCRONIZAÇÃO COM O GOOGLE CALENDAR */}
+      {modalGCalAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                  <CalendarIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Sincronização com Google Calendar
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Lembretes automáticos e exportação universal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalGCalAberto(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Status da Conta */}
+              <div className="p-3 bg-blue-50/70 rounded-2xl border border-blue-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <div>
+                    <span className="font-extrabold text-slate-800 block">Conta Google da Família</span>
+                    <span className="text-[11px] text-slate-500">lucas@gmail.com • Ativa</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                  Conectada ✅
+                </span>
+              </div>
+
+              {/* Opções de Lembrete */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                  Lembretes Automáticos de Consulta:
+                </span>
+
+                <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={lembrete24h}
+                    onChange={(e) => setLembrete24h(e.target.checked)}
+                    className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block">Notificação 24 horas antes</span>
+                    <span className="text-[11px] text-slate-500">Aviso prévio para rever as metas da semana e dúvidas.</span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={lembrete1h}
+                    onChange={(e) => setLembrete1h(e.target.checked)}
+                    className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block">Alerta 1 hora antes com Link do Meet</span>
+                    <span className="text-[11px] text-slate-500">Receba o link direto da videochamada com a Dra. Laís.</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Botão de Exportação iCalendar */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                  Exportação Manual Universal:
+                </span>
+                <p className="text-[11px] text-slate-600 font-medium">
+                  Baixe o arquivo universal <strong>.ics</strong> contendo todas as consultas agendadas e metas prescritas para importar de uma só vez no Google Calendar, iPhone ou Android.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    baixarArquivoICS(eventos, "agenda-nutrindo-em-casa.ics");
+                    setToastMensagem("Arquivo .ics baixado com sucesso! 📥");
+                    setTimeout(() => setToastMensagem(""), 3500);
+                  }}
+                  className="w-full py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 font-extrabold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>📥 Baixar Agenda Completa (.ics)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModalGCalAberto(false)}
+                className="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setToastMensagem("Preferências de sincronização salvas com sucesso! 🔄");
+                  setTimeout(() => setToastMensagem(""), 3500);
+                  setModalGCalAberto(false);
+                }}
+                className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span>Salvar Preferências</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

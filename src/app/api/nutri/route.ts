@@ -3,36 +3,163 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userEmailParam = searchParams.get("user_email")?.trim().toLowerCase();
+    const tipoParam = searchParams.get("tipo")?.trim().toLowerCase();
+
     const supabaseAdmin = getSupabaseAdmin();
+
+    // Consulta específica para Banco de Respostas Rápidas
+    if (tipoParam === "respostas_rapidas") {
+      let respostasRapidas: any[] = [];
+      if (isSupabaseConfigured()) {
+        try {
+          const { data } = await supabaseAdmin
+            .from("respostas_rapidas_nutri")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (data) respostasRapidas = data;
+        } catch (err) {
+          console.warn("Aviso ao buscar respostas rápidas:", err);
+        }
+      }
+      return NextResponse.json({ success: true, respostas_rapidas: respostasRapidas });
+    }
+
+    // Consulta específica para o Dashboard/Receitas do Paciente
+    // Consulta específica para o Prontuário / Dashboard do Paciente
+    if (userEmailParam) {
+      let devolutivas: any[] = [];
+      let prescricao: any = null;
+      let agendamentos: any[] = [];
+      let profile: any = null;
+      let anamnese: any = null;
+      let diario: any[] = [];
+      let listaPacientes: any[] = [];
+
+      if (isSupabaseConfigured()) {
+        try {
+          const [dRes, pRes, aRes, profRes, anamRes, diaRes, pacientesRes] = await Promise.all([
+            supabaseAdmin
+              .from("devolutivas_semanais")
+              .select("*")
+              .eq("user_email", userEmailParam)
+              .order("created_at", { ascending: false }),
+            supabaseAdmin
+              .from("prescricoes_plano")
+              .select("*")
+              .eq("user_email", userEmailParam)
+              .maybeSingle(),
+            supabaseAdmin
+              .from("agendamentos")
+              .select("*")
+              .eq("user_email", userEmailParam)
+              .order("data", { ascending: true }),
+            supabaseAdmin
+              .from("profiles")
+              .select("*")
+              .eq("email", userEmailParam)
+              .maybeSingle(),
+            supabaseAdmin
+              .from("anamneses")
+              .select("*")
+              .eq("user_email", userEmailParam)
+              .maybeSingle(),
+            supabaseAdmin
+              .from("diario_refeicoes")
+              .select("*")
+              .eq("user_email", userEmailParam)
+              .order("data_registro", { ascending: false }),
+            supabaseAdmin
+              .from("profiles")
+              .select("email, nome, nome_crianca, idade_crianca")
+              .neq("email", "metodonutrindoemcasa@gmail.com")
+              .neq("plano", "nutri")
+              .order("nome_crianca", { ascending: true }),
+          ]);
+
+          if (dRes.data) devolutivas = dRes.data;
+          if (pRes.data) prescricao = pRes.data;
+          if (aRes.data) agendamentos = aRes.data;
+          if (profRes.data) profile = profRes.data;
+          if (anamRes.data) anamnese = anamRes.data;
+          if (diaRes.data) diario = diaRes.data;
+          if (pacientesRes.data) listaPacientes = pacientesRes.data;
+        } catch (dbErr) {
+          console.warn("Aviso ao buscar dados do paciente no Supabase:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        user_email: userEmailParam,
+        profile,
+        anamnese,
+        devolutivas,
+        prescricao,
+        agendamentos,
+        diario,
+        lista_pacientes: listaPacientes,
+      });
+    }
 
     let profiles: any[] = [];
     let anamneses: any[] = [];
     let diario: any[] = [];
     let mensagens: any[] = [];
     let agendamentos: any[] = [];
+    let devolutivas: any[] = [];
+    let prescricoes: any[] = [];
+    let respostasRapidas: any[] = [];
 
     if (isSupabaseConfigured()) {
       try {
-        const [pRes, aRes, dRes, mRes, agRes] = await Promise.all([
+        const [pRes, aRes, dRes, mRes, agRes, devRes, presRes, respRes] = await Promise.all([
           supabaseAdmin.from("profiles").select("*").neq("plano", "nutri").order("created_at", { ascending: false }),
           supabaseAdmin.from("anamneses").select("*").order("updated_at", { ascending: false }),
           supabaseAdmin.from("diario_refeicoes").select("*").order("data_registro", { ascending: false }),
           supabaseAdmin.from("mensagens_chat").select("*").order("created_at", { ascending: true }),
           supabaseAdmin.from("agendamentos").select("*").order("data", { ascending: true }),
+          supabaseAdmin.from("devolutivas_semanais").select("*").order("created_at", { ascending: false }),
+          supabaseAdmin.from("prescricoes_plano").select("*"),
+          supabaseAdmin.from("respostas_rapidas_nutri").select("*").order("created_at", { ascending: false }),
         ]);
 
-        if (pRes.data) profiles = pRes.data;
-        if (aRes.data) anamneses = aRes.data;
-        if (dRes.data) diario = dRes.data;
-        if (mRes.data) mensagens = mRes.data;
-        if (agRes.data) agendamentos = agRes.data;
+        const emailNutriOficial = "metodonutrindoemcasa@gmail.com";
+        const ehNutri = (e?: string) => (e || "").toLowerCase().trim() === emailNutriOficial;
+
+        if (pRes.data) profiles = pRes.data.filter((p: any) => !ehNutri(p.email) && p.plano !== "nutri");
+        if (aRes.data) anamneses = aRes.data.filter((a: any) => !ehNutri(a.user_email));
+        if (dRes.data) {
+          diario = dRes.data
+            .filter((d: any) => !ehNutri(d.user_email))
+            .map((m: any) => {
+              let foto = m.foto || null;
+              let obs = m.observacoes || "";
+              const match = typeof obs === "string" ? obs.match(/^\[FOTO:([^\]]+)\]\s*([\s\S]*)$/) : null;
+              if (match) {
+                foto = match[1];
+                obs = match[2];
+              }
+              return {
+                ...m,
+                foto,
+                observacoes: obs,
+              };
+            });
+        }
+        if (mRes.data) mensagens = mRes.data.filter((m: any) => !ehNutri(m.user_email));
+        if (agRes.data) agendamentos = agRes.data.filter((a: any) => !ehNutri(a.user_email));
+        if (devRes.data) devolutivas = devRes.data.filter((d: any) => !ehNutri(d.user_email));
+        if (presRes.data) prescricoes = presRes.data.filter((p: any) => !ehNutri(p.user_email));
+        if (respRes.data) respostasRapidas = respRes.data;
       } catch (dbErr) {
         console.warn("Aviso ao buscar dados no Supabase para painel da nutri:", dbErr);
       }
     }
 
-    // Se a base estiver vazia no ambiente local de testes ou apresentação, injeta dados reais de demonstração
-    if (profiles.length === 0) {
+    // Base de pacientes real (sem mocks fictícios em produção)
+    if (false) {
       profiles = [
         {
           id: "paciente-1",
@@ -85,171 +212,33 @@ export async function GET(request: Request) {
       ];
     }
 
-    if (anamneses.length === 0) {
-      anamneses = [
-        {
-          id: "anamnese-1",
-          user_email: "lucas@email.com",
-          concluida: true,
-          updated_at: new Date().toISOString(),
-          anotacoes_clinicas: "Paciente com sensibilidade tátil e olfativa acentuada. Hipersensibilidade moderada a folhas. Recomendado iniciar tolerância visual no prato de apoio por 7 dias.",
-          respostas: {
-            nomeCrianca: "Pedro Lima",
-            dataNascimento: "2023-05-10",
-            sexo: "Masculino",
-            nomeResponsavel: "Lucas Lima",
-            parentesco: "Pai",
-            participaAlimentacao: ["Mãe", "Pai", "Escola"],
-            motivos: ["Seletividade alimentar severa", "Pouca variedade de alimentos", "Recusa a experimentar"],
-            diagnosticos: ["Suspeita de TEA", "Sensibilidade sensorial"],
-            nivelTEA: "Nível 1 de suporte",
-            comunicacao: "Fala frases curtas e aponta",
-            comunicacaoGeral: "Boa compreensão verbal",
-            gestacao: ["A termo (39 semanas)", "Parto cesárea sem intercorrências"],
-            pesoNascer: "3.250g",
-            aleitamento: "Materno exclusivo até 6 meses",
-            inicioDificuldadesAtuais: "Por volta de 1 ano e 6 meses",
-            pesoAtual: "14.2 kg",
-            alturaAtual: "96 cm",
-            cereais: ["Arroz branco", "Biscoito de polvilho", "Pão francês", "Macarrão"],
-            proteinas: ["Ovo mexido", "Frango desfiado"],
-            frutas: ["Banana", "Maçã em fatias finas"],
-            vegetais: ["Batata doce cozida"],
-            leguminosas: ["Feijão carioca (apenas o caldo)"],
-            qntAlimentos: "11–20",
-            comerFora: "Dificuldade em restaurantes com muito barulho",
-            exigeTodoDia: "Biscoito de polvilho",
-            sofrimentoFalta: "Choro intenso se o alimento de conforto não estiver visível",
-            influencias: ["Cheiro forte", "Mistura de texturas no mesmo prato"],
-            mudancasMatriz: "Aceita fruta se fatiada finamente",
-            comportamentoNovo: "Tolerou vegetal no prato de apoio sem empurrar",
-            utensilios: "Usa colher própria, recusa garfo de metal",
-            independencia: "Come sozinho com as mãos ou colher",
-            horarios: {
-              cafeDaManha: { horario: "08:00", naoFaz: false },
-              almoco: { horario: "12:30", naoFaz: false },
-              lancheTarde: { horario: "16:00", naoFaz: false },
-              jantar: { horario: "19:30", naoFaz: false },
-            },
-            locaisRefeicao: ["Mesa da cozinha em cadeirão"],
-            usoTelas: "Ocasional quando a recusa é intensa",
-            sentimentosPais: ["Ansiedade nas refeições", "Esperança no método"],
-            aguaQuantidade: "Aproximadamente 600ml por dia",
-            freqIntestino: "1 vez ao dia",
-            tipoBristol: "Tipo 3 e 4 (Normal)",
-            interessesFavoritos: "Dinossauros, carrinhos e blocos de montar",
-            expectativas: "Conseguir fazer refeições em família sem estresse e introduzir 2 novos vegetais.",
-            checkins: [
-              {
-                id: "chk-demo-1",
-                dataEnvio: new Date(Date.now() - 86400000 * 2).toISOString(),
-                novosAlimentos: "Tolerou e provou pedacinhos de cenoura crua em palitinhos e morango fresco.",
-                refeicoesFamilia: "Conseguimos jantar juntos à mesa 4 vezes nesta semana sem choro ou fuga da cadeira.",
-                medidasRecentes: "Peso: 14.5 kg | Estatura: 97 cm (medição do pediatra em 12/10)",
-                duvidasConsulta: "Como avançar da exploração visual do brócolis para levar até os lábios sem forçar?",
-              },
-            ],
-          },
-        },
-      ];
-    }
+    // Sem mocks fictícios quando banco estiver vazio - dados reais apenas
+    // Anamneses, agendamentos, mensagens e diário permanecem como vieram do banco (ou vazios)
 
-    if (agendamentos.length === 0) {
-      agendamentos = [
-        {
-          id: "ag-1",
-          user_email: "lucas@email.com",
-          titulo: "1ª Consulta Nutricional Pediátrica de Acolhimento",
-          tipo: "consulta",
-          data: "2026-10-23",
-          horario: "14:00 - 15:00",
-          plataforma: "Google Meet",
-          link: "https://meet.google.com/nutri-lais-acolhimento",
-          concluido: false,
-        },
-        {
-          id: "ag-2",
-          user_email: "mariana.souza@gmail.com",
-          titulo: "1ª Consulta Nutricional Pediátrica de Acolhimento",
-          tipo: "consulta",
-          data: "2026-10-24",
-          horario: "10:30 - 11:30",
-          plataforma: "Google Meet",
-          link: "https://meet.google.com/nutri-lais-theo",
-          concluido: false,
-        },
-        {
-          id: "ag-3",
-          user_email: "lucas@email.com",
-          titulo: "Meta: Oferecer cenoura ralada no prato de apoio",
-          tipo: "meta",
-          data: "2026-10-18",
-          horario: "12:30",
-          concluido: false,
-        },
-      ];
-    }
-
-    if (mensagens.length === 0) {
-      mensagens = [
-        {
-          id: "msg-1",
-          user_email: "lucas@email.com",
-          remetente: "nutri",
-          texto: "Olá Lucas! Analisei a anamnese do Pedro com carinho. Vamos focar nos alimentos de textura crocante seca primeiro. Qualquer dúvida, estou aqui!",
-          horario: "10:15",
-          created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-        },
-        {
-          id: "msg-2",
-          user_email: "lucas@email.com",
-          remetente: "usuario",
-          texto: "Muito obrigado, Dra. Laís! Ele tolerou a cenoura ralada ontem no prato de apoio sem reclamar. Estamos muito animados!",
-          horario: "11:20",
-          created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        },
-      ];
-    }
-
-    if (diario.length === 0) {
-      diario = [
-        {
-          id: "d-1",
-          user_email: "lucas@email.com",
-          alimento: "Cenoura ralada",
-          refeicao: "Almoço",
-          degrau: "tolerou",
-          observacoes: "Ficou no prato de apoio durante todo o almoço sem empurrar",
-          data_registro: new Date().toISOString(),
-        },
-        {
-          id: "d-2",
-          user_email: "lucas@email.com",
-          alimento: "Brócolis cozido",
-          refeicao: "Jantar",
-          degrau: "cheirou",
-          observacoes: "Cheirou voluntariamente quando o pai ofereceu para adivinhar",
-          data_registro: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          id: "d-3",
-          user_email: "mariana.souza@gmail.com",
-          alimento: "Manga fatiada",
-          refeicao: "Lanche",
-          degrau: "tocou",
-          observacoes: "Ajudou a colocar no prato com as mãos",
-          data_registro: new Date().toISOString(),
-        },
-      ];
-    }
+    const profilesEnriquecidos = profiles.map((p) => {
+      const temAnamnese = anamneses.some(
+        (a) => a.user_email?.toLowerCase() === p.email?.toLowerCase() && a.concluida
+      );
+      const temConsulta = agendamentos.some(
+        (ag) => ag.user_email?.toLowerCase() === p.email?.toLowerCase() && ag.tipo === "consulta"
+      );
+      return {
+        ...p,
+        anamnese_concluida: temAnamnese,
+        consulta_agendada: temConsulta,
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      profiles,
+      profiles: profilesEnriquecidos,
       anamneses,
       diario,
       mensagens,
       agendamentos,
+      devolutivas,
+      prescricoes,
+      respostas_rapidas: respostasRapidas,
     });
   } catch (error: unknown) {
     console.error("Erro interno no painel da nutricionista:", error);
@@ -533,6 +522,253 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         message: "Consulta concluída com sucesso! Próximo retorno mensal (ciclo de 4 semanas) liberado.",
+      });
+    }
+
+    // Ação 8: Enviar Devolutiva Semanal & Sincronizar Metas
+    if (action === "enviar_devolutiva") {
+      const { user_email, semana_ref, parecer_clinico, alimentos_alvo, metas_semana, profissional } = body;
+      const emailLimpo = String(user_email || "").trim().toLowerCase();
+      const parecerLimpo = String(parecer_clinico || "").trim();
+
+      if (!emailLimpo || !parecerLimpo) {
+        return NextResponse.json(
+          { success: false, message: "E-mail do paciente e parecer clínico são obrigatórios." },
+          { status: 400 }
+        );
+      }
+
+      const listaAlimentos = Array.isArray(alimentos_alvo)
+        ? alimentos_alvo
+        : typeof alimentos_alvo === "string"
+        ? alimentos_alvo.split(",").map((a: string) => a.trim()).filter(Boolean)
+        : [];
+
+      const listaMetas = Array.isArray(metas_semana) ? metas_semana : [];
+
+      let novaDevolutiva: any = null;
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("devolutivas_semanais")
+            .insert([
+              {
+                user_email: emailLimpo,
+                semana_ref: semana_ref || "Devolutiva Semanal de Acompanhamento",
+                parecer_clinico: parecerLimpo,
+                alimentos_alvo: listaAlimentos,
+                metas_semana: listaMetas,
+                profissional: profissional || "Dra. Laís Leles • CRN-8 18878",
+                created_at: new Date().toISOString(),
+              },
+            ])
+            .select()
+            .single();
+
+          if (error) console.warn("Aviso ao salvar devolutiva no Supabase:", error);
+          if (data) novaDevolutiva = data;
+
+          // Sincroniza as metas na tabela agendamentos do paciente
+          if (listaMetas.length > 0) {
+            const dataHoje = new Date().toISOString().split("T")[0];
+            for (const meta of listaMetas) {
+              const textoMeta = typeof meta === "string" ? meta : meta?.texto;
+              if (textoMeta && textoMeta.trim()) {
+                await supabaseAdmin.from("agendamentos").insert([
+                  {
+                    user_email: emailLimpo,
+                    titulo: `Meta: ${textoMeta.trim()}`,
+                    tipo: "meta",
+                    data: dataHoje,
+                    horario: "12:30",
+                    concluido: Boolean(meta?.concluida),
+                  },
+                ]);
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn("Aviso ao sincronizar devolutiva com Supabase:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Devolutiva Semanal enviada e sincronizada com sucesso! 💌",
+        devolutiva: novaDevolutiva || {
+          id: `dev-${Date.now()}`,
+          user_email: emailLimpo,
+          semana_ref: semana_ref || "Devolutiva Semanal",
+          parecer_clinico: parecerLimpo,
+          alimentos_alvo: listaAlimentos,
+          metas_semana: listaMetas,
+          profissional: profissional || "Dra. Laís Leles • CRN-8 18878",
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+
+    // Ação 8.1: Salvar Anotações Internas do Prontuário
+    if (action === "salvar_anotacoes_prontuario") {
+      const { user_email, anotacoes_clinicas } = body;
+      const emailLimpo = String(user_email || "").trim().toLowerCase();
+      if (!emailLimpo) {
+        return NextResponse.json({ success: false, message: "E-mail do paciente obrigatório." }, { status: 400 });
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: anam } = await supabaseAdmin
+            .from("anamneses")
+            .select("respostas")
+            .eq("user_email", emailLimpo)
+            .maybeSingle();
+
+          const respostasAtuais = (anam?.respostas as Record<string, any>) || {};
+          await supabaseAdmin
+            .from("anamneses")
+            .upsert(
+              {
+                user_email: emailLimpo,
+                respostas: {
+                  ...respostasAtuais,
+                  anotacoes_clinicas: String(anotacoes_clinicas || "").trim(),
+                },
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_email" }
+            );
+        } catch (dbErr) {
+          console.warn("Aviso ao salvar anotações no Supabase:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Anotações internas do prontuário salvas com sucesso! 📝",
+      });
+    }
+
+    // Ação 9: Salvar Prescrição do Plano Alimentar & Receitas Recomendadas
+    if (action === "salvar_prescricao_plano") {
+      const {
+        user_email,
+        orientacao_prato_seguro,
+        composicao_prato,
+        refeicoes_estruturadas,
+        receitas_recomendadas_ids,
+      } = body;
+      const emailLimpo = String(user_email || "").trim().toLowerCase();
+
+      if (!emailLimpo) {
+        return NextResponse.json(
+          { success: false, message: "E-mail do paciente é obrigatório para salvar a prescrição." },
+          { status: 400 }
+        );
+      }
+
+      const payload = {
+        user_email: emailLimpo,
+        orientacao_prato_seguro: String(orientacao_prato_seguro || "").trim(),
+        composicao_prato: composicao_prato || { conforto: 70, ponte: 20, desafio: 10 },
+        refeicoes_estruturadas: Array.isArray(refeicoes_estruturadas) ? refeicoes_estruturadas : [],
+        receitas_recomendadas_ids: Array.isArray(receitas_recomendadas_ids) ? receitas_recomendadas_ids : [],
+        updated_at: new Date().toISOString(),
+      };
+
+      let prescricaoSalva: any = null;
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("prescricoes_plano")
+            .upsert(payload, { onConflict: "user_email" })
+            .select()
+            .maybeSingle();
+
+          if (error) console.warn("Aviso ao salvar prescrição no Supabase:", error);
+          if (data) prescricaoSalva = data;
+        } catch (dbErr) {
+          console.warn("Aviso ao persistir prescrição:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Prescrição do Plano e Receitas Recomendadas salvas com sucesso! 🍲",
+        prescricao: prescricaoSalva || payload,
+      });
+    }
+
+    // Ação 10: Salvar Nova Resposta Rápida Personalizada da Nutri
+    if (action === "salvar_resposta_rapida") {
+      const { categoria, titulo, texto } = body;
+      const tituloLimpo = String(titulo || "").trim();
+      const textoLimpo = typeof texto === "string" ? texto.trim() : JSON.stringify(texto);
+
+      if (!tituloLimpo || !textoLimpo) {
+        return NextResponse.json(
+          { success: false, message: "Título e texto são obrigatórios." },
+          { status: 400 }
+        );
+      }
+
+      let novaResposta: any = null;
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("respostas_rapidas_nutri")
+            .insert([
+              {
+                categoria: categoria || "personalizado",
+                titulo: tituloLimpo,
+                texto: textoLimpo,
+                created_at: new Date().toISOString(),
+              },
+            ])
+            .select()
+            .single();
+
+          if (error) console.warn("Aviso ao salvar resposta rápida no Supabase:", error);
+          if (data) novaResposta = data;
+        } catch (dbErr) {
+          console.warn("Aviso ao persistir resposta rápida:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Resposta rápida salva com sucesso no banco de dados! ⭐",
+        resposta: novaResposta || {
+          id: `custom-${Date.now()}`,
+          categoria: categoria || "personalizado",
+          titulo: tituloLimpo,
+          texto: textoLimpo,
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+
+    // Ação 11: Excluir Resposta Rápida
+    if (action === "excluir_resposta_rapida") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ success: false, message: "ID da resposta rápida é obrigatório." }, { status: 400 });
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseAdmin.from("respostas_rapidas_nutri").delete().eq("id", id);
+        } catch (dbErr) {
+          console.warn("Aviso ao excluir resposta rápida no Supabase:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Resposta rápida excluída com sucesso.",
       });
     }
 

@@ -204,6 +204,452 @@ export default function AnamneseWizard() {
   const [erroValidacaoEtapa8, setErroValidacaoEtapa8] = useState("");
 
   // ==========================================
+  // AUTO-SAVE EM TEMPO REAL (LOCAL + DEBOUNCE NUVEM 1200ms)
+  // ==========================================
+  const [statusAutoSave, setStatusAutoSave] = useState<"ocioso" | "salvando" | "salvo">("ocioso");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const montadoRef = useRef(false);
+  const payloadRef = useRef<Record<string, any> | null>(null);
+
+  const obterPayloadRespostas = () => {
+    return {
+      etapaAtual,
+      // Etapa 1
+      nomeCrianca,
+      dataNascimento,
+      sexo,
+      nomeResponsavel,
+      parentesco,
+      outroParentescoTexto,
+      participaAlimentacao,
+      outroParticipaTexto,
+      motivos,
+      outroMotivoTexto,
+      diagnosticos,
+      outroDiagnosticoTexto,
+      nivelTEA,
+      comunicacao,
+      outroComunicacaoTexto,
+      comunicacaoGeral,
+      // Etapa 2
+      gestacao,
+      gestacaoIntercorrencia,
+      semanasNascimento,
+      pesoNascer,
+      aleitamento,
+      aleitamentoFimMeses,
+      formulaInicioMeses,
+      dificuldadesAmamentacao,
+      outroDificuldadeAmamentacaoTexto,
+      idadeInicioIA,
+      metodoIA,
+      outroMetodoIATexto,
+      dificuldadesIA,
+      outroDificuldadeIATexto,
+      inicioDificuldadesAtuais,
+      eventosAssociados,
+      outroEventoAssociadoTexto,
+      gastro,
+      gastroDetalhes,
+      outroGastroTexto,
+      sintomasAdversos,
+      sintomasAdversosDetalhes,
+      pesoAtual,
+      dataMedidaPeso,
+      medidaPesoPor,
+      alturaAtual,
+      dataMedidaAltura,
+      medidaAlturaPor,
+      medicamentos,
+      medicamentosDetalhes,
+      suplementos,
+      outroSuplementoTexto,
+      exames,
+      // Etapa 3
+      cereais,
+      outroCerealTexto,
+      proteinas,
+      outroProteinaTexto,
+      frutas,
+      outroFrutaTexto,
+      vegetais,
+      outroVegetalTexto,
+      leguminosas,
+      outroLeguminosaTexto,
+      qntAlimentos,
+      alimentosContados,
+      // Etapa 4
+      comerFora,
+      comerForaQual,
+      exigeTodoDia,
+      exigeTodoDiaQual,
+      sofrimentoFalta,
+      sofrimentoFaltaQual,
+      influencias,
+      outraInfluenciaTexto,
+      mudancasMatriz,
+      comportamentoNovo,
+      outroComportamentoNovoTexto,
+      utensilios,
+      independencia,
+      dificuldadeMastigacao,
+      // Etapa 5
+      horarios,
+      locaisRefeicao,
+      outroLocalRefeicaoTexto,
+      usoTelas,
+      reacaoSemTela,
+      outraReacaoSemTelaTexto,
+      refeicoesIncompletas,
+      // Etapa 6
+      acoesRecusa,
+      outraAcaoRecusaTexto,
+      freqSubstituicao,
+      motivosSubstituicao,
+      outroMotivoSubstituicaoTexto,
+      sentimentosPais,
+      outroSentimentoTexto,
+      // Etapa 7
+      situacoesNutricionais,
+      outraSituacaoNutricionalTexto,
+      medosAlimentares,
+      outroMedoAlimentarTexto,
+      comportamentosAtipicos,
+      outroComportamentoAtipicoTexto,
+      // Etapa 8
+      aguaQuantidade,
+      tamanhoCopoMl,
+      freqIntestino,
+      tipoBristol,
+      sintomasIntestino,
+      outroSintomaIntestinoTexto,
+      interessesFavoritos,
+      motivacaoCrianca,
+      informacoesAdicionais,
+    };
+  };
+
+  const restaurarCampos = (dados: Record<string, any>) => {
+    if (!dados || typeof dados !== "object") return;
+    if (typeof dados.etapaAtual === "number" && dados.etapaAtual >= 1 && dados.etapaAtual <= totalEtapas) {
+      setEtapaAtual(dados.etapaAtual);
+    }
+    // Etapa 1
+    if (typeof dados.nomeCrianca === "string") setNomeCrianca(dados.nomeCrianca);
+    if (typeof dados.dataNascimento === "string") setDataNascimento(dados.dataNascimento);
+    if (typeof dados.sexo === "string") setSexo(dados.sexo);
+    if (typeof dados.nomeResponsavel === "string") setNomeResponsavel(dados.nomeResponsavel);
+    if (typeof dados.parentesco === "string") setParentesco(dados.parentesco);
+    if (typeof dados.outroParentescoTexto === "string") setOutroParentescoTexto(dados.outroParentescoTexto);
+    if (Array.isArray(dados.participaAlimentacao)) setParticipaAlimentacao(dados.participaAlimentacao);
+    if (typeof dados.outroParticipaTexto === "string") setOutroParticipaTexto(dados.outroParticipaTexto);
+    if (Array.isArray(dados.motivos)) setMotivos(dados.motivos);
+    if (typeof dados.outroMotivoTexto === "string") setOutroMotivoTexto(dados.outroMotivoTexto);
+    if (Array.isArray(dados.diagnosticos)) setDiagnosticos(dados.diagnosticos);
+    if (typeof dados.outroDiagnosticoTexto === "string") setOutroDiagnosticoTexto(dados.outroDiagnosticoTexto);
+    if (typeof dados.nivelTEA === "string") setNivelTEA(dados.nivelTEA);
+    if (typeof dados.comunicacao === "string") setComunicacao(dados.comunicacao);
+    if (typeof dados.outroComunicacaoTexto === "string") setOutroComunicacaoTexto(dados.outroComunicacaoTexto);
+    if (typeof dados.comunicacaoGeral === "string") setComunicacaoGeral(dados.comunicacaoGeral);
+
+    // Etapa 2
+    if (Array.isArray(dados.gestacao)) setGestacao(dados.gestacao);
+    if (typeof dados.gestacaoIntercorrencia === "string") setGestacaoIntercorrencia(dados.gestacaoIntercorrencia);
+    if (typeof dados.semanasNascimento === "string") setSemanasNascimento(dados.semanasNascimento);
+    if (typeof dados.pesoNascer === "string") setPesoNascer(dados.pesoNascer);
+    if (typeof dados.aleitamento === "string") setAleitamento(dados.aleitamento);
+    if (typeof dados.aleitamentoFimMeses === "string") setAleitamentoFimMeses(dados.aleitamentoFimMeses);
+    if (typeof dados.formulaInicioMeses === "string") setFormulaInicioMeses(dados.formulaInicioMeses);
+    if (Array.isArray(dados.dificuldadesAmamentacao)) setDificuldadesAmamentacao(dados.dificuldadesAmamentacao);
+    if (typeof dados.outroDificuldadeAmamentacaoTexto === "string") setOutroDificuldadeAmamentacaoTexto(dados.outroDificuldadeAmamentacaoTexto);
+    if (typeof dados.idadeInicioIA === "string") setIdadeInicioIA(dados.idadeInicioIA);
+    if (typeof dados.metodoIA === "string") setMetodoIA(dados.metodoIA);
+    if (typeof dados.outroMetodoIATexto === "string") setOutroMetodoIATexto(dados.outroMetodoIATexto);
+    if (Array.isArray(dados.dificuldadesIA)) setDificuldadesIA(dados.dificuldadesIA);
+    if (typeof dados.outroDificuldadeIATexto === "string") setOutroDificuldadeIATexto(dados.outroDificuldadeIATexto);
+    if (typeof dados.inicioDificuldadesAtuais === "string") setInicioDificuldadesAtuais(dados.inicioDificuldadesAtuais);
+    if (Array.isArray(dados.eventosAssociados)) setEventosAssociados(dados.eventosAssociados);
+    if (typeof dados.outroEventoAssociadoTexto === "string") setOutroEventoAssociadoTexto(dados.outroEventoAssociadoTexto);
+    if (Array.isArray(dados.gastro)) setGastro(dados.gastro);
+    if (typeof dados.gastroDetalhes === "string") setGastroDetalhes(dados.gastroDetalhes);
+    if (typeof dados.outroGastroTexto === "string") setOutroGastroTexto(dados.outroGastroTexto);
+    if (typeof dados.sintomasAdversos === "string") setSintomasAdversos(dados.sintomasAdversos);
+    if (typeof dados.sintomasAdversosDetalhes === "string") setSintomasAdversosDetalhes(dados.sintomasAdversosDetalhes);
+    if (typeof dados.pesoAtual === "string") setPesoAtual(dados.pesoAtual);
+    if (typeof dados.dataMedidaPeso === "string") setDataMedidaPeso(dados.dataMedidaPeso);
+    if (typeof dados.medidaPesoPor === "string") setMedidaPesoPor(dados.medidaPesoPor);
+    if (typeof dados.alturaAtual === "string") setAlturaAtual(dados.alturaAtual);
+    if (typeof dados.dataMedidaAltura === "string") setDataMedidaAltura(dados.dataMedidaAltura);
+    if (typeof dados.medidaAlturaPor === "string") setMedidaAlturaPor(dados.medidaAlturaPor);
+    if (typeof dados.medicamentos === "string") setMedicamentos(dados.medicamentos);
+    if (typeof dados.medicamentosDetalhes === "string") setMedicamentosDetalhes(dados.medicamentosDetalhes);
+    if (Array.isArray(dados.suplementos)) setSuplementos(dados.suplementos);
+    if (typeof dados.outroSuplementoTexto === "string") setOutroSuplementoTexto(dados.outroSuplementoTexto);
+    if (typeof dados.exames === "string") setExames(dados.exames);
+
+    // Etapa 3
+    if (Array.isArray(dados.cereais)) setCereais(dados.cereais);
+    if (typeof dados.outroCerealTexto === "string") setOutroCerealTexto(dados.outroCerealTexto);
+    if (Array.isArray(dados.proteinas)) setProteinas(dados.proteinas);
+    if (typeof dados.outroProteinaTexto === "string") setOutroProteinaTexto(dados.outroProteinaTexto);
+    if (Array.isArray(dados.frutas)) setFrutas(dados.frutas);
+    if (typeof dados.outroFrutaTexto === "string") setOutroFrutaTexto(dados.outroFrutaTexto);
+    if (Array.isArray(dados.vegetais)) setVegetais(dados.vegetais);
+    if (typeof dados.outroVegetalTexto === "string") setOutroVegetalTexto(dados.outroVegetalTexto);
+    if (Array.isArray(dados.leguminosas)) setLeguminosas(dados.leguminosas);
+    if (typeof dados.outroLeguminosaTexto === "string") setOutroLeguminosaTexto(dados.outroLeguminosaTexto);
+    if (typeof dados.qntAlimentos === "string") setQntAlimentos(dados.qntAlimentos);
+
+    // Etapa 4
+    if (typeof dados.comerFora === "string") setComerFora(dados.comerFora);
+    if (typeof dados.comerForaQual === "string") setComerForaQual(dados.comerForaQual);
+    if (typeof dados.exigeTodoDia === "string") setExigeTodoDia(dados.exigeTodoDia);
+    if (typeof dados.exigeTodoDiaQual === "string") setExigeTodoDiaQual(dados.exigeTodoDiaQual);
+    if (typeof dados.sofrimentoFalta === "string") setSofrimentoFalta(dados.sofrimentoFalta);
+    if (typeof dados.sofrimentoFaltaQual === "string") setSofrimentoFaltaQual(dados.sofrimentoFaltaQual);
+    if (Array.isArray(dados.influencias)) setInfluencias(dados.influencias);
+    if (typeof dados.outraInfluenciaTexto === "string") setOutraInfluenciaTexto(dados.outraInfluenciaTexto);
+    if (dados.mudancasMatriz && typeof dados.mudancasMatriz === "object") {
+      setMudancasMatriz(prev => ({ ...prev, ...dados.mudancasMatriz }));
+    }
+    if (Array.isArray(dados.comportamentoNovo)) setComportamentoNovo(dados.comportamentoNovo);
+    if (typeof dados.outroComportamentoNovoTexto === "string") setOutroComportamentoNovoTexto(dados.outroComportamentoNovoTexto);
+    if (Array.isArray(dados.utensilios)) setUtensilios(dados.utensilios);
+    if (typeof dados.independencia === "string") setIndependencia(dados.independencia);
+    if (Array.isArray(dados.dificuldadeMastigacao)) setDificuldadeMastigacao(dados.dificuldadeMastigacao);
+
+    // Etapa 5
+    if (dados.horarios && typeof dados.horarios === "object") {
+      setHorarios(prev => ({ ...prev, ...dados.horarios }));
+    }
+    if (Array.isArray(dados.locaisRefeicao)) setLocaisRefeicao(dados.locaisRefeicao);
+    if (typeof dados.outroLocalRefeicaoTexto === "string") setOutroLocalRefeicaoTexto(dados.outroLocalRefeicaoTexto);
+    if (typeof dados.usoTelas === "string") setUsoTelas(dados.usoTelas);
+    if (Array.isArray(dados.reacaoSemTela)) setReacaoSemTela(dados.reacaoSemTela);
+    if (typeof dados.outraReacaoSemTelaTexto === "string") setOutraReacaoSemTelaTexto(dados.outraReacaoSemTelaTexto);
+
+    // Etapa 6
+    if (Array.isArray(dados.acoesRecusa)) setAcoesRecusa(dados.acoesRecusa);
+    if (typeof dados.outraAcaoRecusaTexto === "string") setOutraAcaoRecusaTexto(dados.outraAcaoRecusaTexto);
+    if (typeof dados.freqSubstituicao === "string") setFreqSubstituicao(dados.freqSubstituicao);
+    if (Array.isArray(dados.motivosSubstituicao)) setMotivosSubstituicao(dados.motivosSubstituicao);
+    if (typeof dados.outroMotivoSubstituicaoTexto === "string") setOutroMotivoSubstituicaoTexto(dados.outroMotivoSubstituicaoTexto);
+    if (Array.isArray(dados.sentimentosPais)) setSentimentosPais(dados.sentimentosPais);
+    if (typeof dados.outroSentimentoTexto === "string") setOutroSentimentoTexto(dados.outroSentimentoTexto);
+
+    // Etapa 7
+    if (Array.isArray(dados.situacoesNutricionais)) setSituacoesNutricionais(dados.situacoesNutricionais);
+    if (typeof dados.outraSituacaoNutricionalTexto === "string") setOutraSituacaoNutricionalTexto(dados.outraSituacaoNutricionalTexto);
+    if (Array.isArray(dados.medosAlimentares)) setMedosAlimentares(dados.medosAlimentares);
+    if (typeof dados.outroMedoAlimentarTexto === "string") setOutroMedoAlimentarTexto(dados.outroMedoAlimentarTexto);
+    if (Array.isArray(dados.comportamentosAtipicos)) setComportamentosAtipicos(dados.comportamentosAtipicos);
+    if (typeof dados.outroComportamentoAtipicoTexto === "string") setOutroComportamentoAtipicoTexto(dados.outroComportamentoAtipicoTexto);
+
+    // Etapa 8
+    if (typeof dados.aguaQuantidade === "string") setAguaQuantidade(dados.aguaQuantidade);
+    if (typeof dados.tamanhoCopoMl === "string") setTamanhoCopoMl(dados.tamanhoCopoMl);
+    if (typeof dados.freqIntestino === "string") setFreqIntestino(dados.freqIntestino);
+    if (typeof dados.tipoBristol === "string") setTipoBristol(dados.tipoBristol);
+    if (Array.isArray(dados.sintomasIntestino)) setSintomasIntestino(dados.sintomasIntestino);
+    if (typeof dados.outroSintomaIntestinoTexto === "string") setOutroSintomaIntestinoTexto(dados.outroSintomaIntestinoTexto);
+    if (typeof dados.interessesFavoritos === "string") setInteressesFavoritos(dados.interessesFavoritos);
+    if (typeof dados.motivacaoCrianca === "string") setMotivacaoCrianca(dados.motivacaoCrianca);
+    if (typeof dados.informacoesAdicionais === "string") setInformacoesAdicionais(dados.informacoesAdicionais);
+  };
+
+  const salvarRascunhoSilencioso = (proximaEtapaNum: number) => {
+    try {
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || ""
+          : "";
+
+      const rascunho = {
+        ...obterPayloadRespostas(),
+        etapaAtual: proximaEtapaNum,
+      };
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
+      }
+
+      if (emailUsuario) {
+        fetch("/api/anamnese", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: emailUsuario,
+            respostas: rascunho,
+            concluida: false,
+          }),
+        }).catch((e) => console.warn("Aviso ao auto-salvar anamnese:", e));
+      }
+      setStatusAutoSave("salvo");
+    } catch (e) {
+      console.warn("Aviso no auto-save silencioso:", e);
+    }
+  };
+
+  // 1. Salvamento Imediato Local + 2. Auto-Save com Debounce na Nuvem (1200ms)
+  useEffect(() => {
+    if (!montadoRef.current || formularioConcluido) return;
+
+    const payload = obterPayloadRespostas();
+    payloadRef.current = payload;
+
+    // 1. Salvamento Imediato Local
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(payload));
+      }
+    } catch (err) {
+      console.warn("Aviso ao salvar localmente no localStorage:", err);
+    }
+
+    // 2. Auto-Save com Debounce na Nuvem (1200ms)
+    setStatusAutoSave("salvando");
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const emailUsuario =
+          typeof window !== "undefined"
+            ? localStorage.getItem("nutrindo_user_email") || ""
+            : "";
+
+        if (emailUsuario) {
+          await fetch("/api/anamnese", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: emailUsuario,
+              respostas: payloadRef.current || payload,
+              concluida: false,
+            }),
+          });
+        }
+        setStatusAutoSave("salvo");
+      } catch (e) {
+        console.warn("Aviso no auto-save debounced da anamnese:", e);
+        setStatusAutoSave("salvo");
+      }
+    }, 1200);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [
+    etapaAtual,
+    nomeCrianca,
+    dataNascimento,
+    sexo,
+    nomeResponsavel,
+    parentesco,
+    outroParentescoTexto,
+    participaAlimentacao,
+    outroParticipaTexto,
+    motivos,
+    outroMotivoTexto,
+    diagnosticos,
+    outroDiagnosticoTexto,
+    nivelTEA,
+    comunicacao,
+    outroComunicacaoTexto,
+    comunicacaoGeral,
+    gestacao,
+    gestacaoIntercorrencia,
+    semanasNascimento,
+    pesoNascer,
+    aleitamento,
+    aleitamentoFimMeses,
+    formulaInicioMeses,
+    dificuldadesAmamentacao,
+    outroDificuldadeAmamentacaoTexto,
+    idadeInicioIA,
+    metodoIA,
+    outroMetodoIATexto,
+    dificuldadesIA,
+    outroDificuldadeIATexto,
+    inicioDificuldadesAtuais,
+    eventosAssociados,
+    outroEventoAssociadoTexto,
+    gastro,
+    gastroDetalhes,
+    outroGastroTexto,
+    sintomasAdversos,
+    sintomasAdversosDetalhes,
+    pesoAtual,
+    dataMedidaPeso,
+    medidaPesoPor,
+    alturaAtual,
+    dataMedidaAltura,
+    medidaAlturaPor,
+    medicamentos,
+    medicamentosDetalhes,
+    suplementos,
+    outroSuplementoTexto,
+    exames,
+    cereais,
+    outroCerealTexto,
+    proteinas,
+    outroProteinaTexto,
+    frutas,
+    outroFrutaTexto,
+    vegetais,
+    outroVegetalTexto,
+    leguminosas,
+    outroLeguminosaTexto,
+    qntAlimentos,
+    comerFora,
+    comerForaQual,
+    exigeTodoDia,
+    exigeTodoDiaQual,
+    sofrimentoFalta,
+    sofrimentoFaltaQual,
+    influencias,
+    outraInfluenciaTexto,
+    mudancasMatriz,
+    comportamentoNovo,
+    outroComportamentoNovoTexto,
+    utensilios,
+    independencia,
+    dificuldadeMastigacao,
+    horarios,
+    locaisRefeicao,
+    outroLocalRefeicaoTexto,
+    usoTelas,
+    reacaoSemTela,
+    outraReacaoSemTelaTexto,
+    refeicoesIncompletas,
+    acoesRecusa,
+    outraAcaoRecusaTexto,
+    freqSubstituicao,
+    motivosSubstituicao,
+    outroMotivoSubstituicaoTexto,
+    sentimentosPais,
+    outroSentimentoTexto,
+    situacoesNutricionais,
+    outraSituacaoNutricionalTexto,
+    medosAlimentares,
+    outroMedoAlimentarTexto,
+    comportamentosAtipicos,
+    outroComportamentoAtipicoTexto,
+    aguaQuantidade,
+    tamanhoCopoMl,
+    freqIntestino,
+    tipoBristol,
+    sintomasIntestino,
+    outroSintomaIntestinoTexto,
+    interessesFavoritos,
+    motivacaoCrianca,
+    informacoesAdicionais,
+  ]);
+
+  // ==========================================
   // ESTADOS DE VALIDAÇÃO E REFS
   // ==========================================
   const [errosValidacao, setErrosValidacao] = useState<Record<string, boolean>>({});
@@ -641,31 +1087,7 @@ export default function AnamneseWizard() {
           ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
           : "lucas@email.com";
 
-      const payloadRespostas = {
-        nomeCrianca,
-        dataNascimento,
-        sexo,
-        nomeResponsavel,
-        parentesco,
-        outroParentescoTexto,
-        participaAlimentacao,
-        motivos,
-        diagnosticos,
-        nivelTEA,
-        comunicacao,
-        gestacao,
-        pesoAtual,
-        alturaAtual,
-        cereais,
-        proteinas,
-        frutas,
-        vegetais,
-        leguminosas,
-        qntAlimentos,
-        comerFora,
-        exigeTodoDia,
-        sofrimentoFalta,
-      };
+      const payloadRespostas = obterPayloadRespostas();
 
       try {
         fetch("/api/anamnese", {
@@ -683,20 +1105,24 @@ export default function AnamneseWizard() {
 
       if (typeof window !== "undefined") {
         localStorage.setItem("anamnese_concluida", "true");
+        localStorage.setItem("nutrindo_anamnese_concluida", "true");
+        if (nomeCrianca.trim()) {
+          localStorage.setItem("nutrindo_crianca_nome", nomeCrianca.trim());
+          localStorage.setItem("nutrindo_nome_crianca", nomeCrianca.trim());
+        }
       }
 
       setFormularioConcluido(true);
       window.scrollTo(0, 0);
 
-      // Redireciona automaticamente após 2 segundos de exibição da tela de sucesso
-      setTimeout(() => {
-        router.push("/dashboard/calendario?onboarding=consulta");
-      }, 2500);
-
       return;
     }
 
-    if (etapaAtual < totalEtapas) setEtapaAtual(etapaAtual + 1);
+    if (etapaAtual < totalEtapas) {
+      const prox = etapaAtual + 1;
+      setEtapaAtual(prox);
+      salvarRascunhoSilencioso(prox);
+    }
     window.scrollTo(0, 0);
   };
 
@@ -716,41 +1142,24 @@ export default function AnamneseWizard() {
   // Salvar rascunho parcial e sair da sessão
   const salvarRascunhoEPreencherDepois = async () => {
     setSalvandoRascunho(true);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     const emailUsuario =
       typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "";
 
-    const rascunho = {
-      etapaAtual,
-      nomeCrianca,
-      dataNascimento,
-      sexo,
-      nomeResponsavel,
-      parentesco,
-      outroParentescoTexto,
-      participaAlimentacao,
-      motivos,
-      diagnosticos,
-      nivelTEA,
-      comunicacao,
-      comunicacaoGeral,
-      gestacao,
-      pesoAtual,
-      alturaAtual,
-      cereais,
-      proteinas,
-      frutas,
-      vegetais,
-      leguminosas,
-      qntAlimentos,
-      comerFora,
-      exigeTodoDia,
-      sofrimentoFalta,
-      influencias,
-    };
+    const rascunho = obterPayloadRespostas();
 
     if (typeof window !== "undefined") {
       localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
       localStorage.removeItem("nutrindo_auth_token");
+      localStorage.removeItem("nutrindo_user_email");
+      localStorage.removeItem("nutrindo_user_nome");
+      localStorage.removeItem("nutrindo_user_role");
+      localStorage.removeItem("anamnese_concluida");
+      localStorage.removeItem("nutrindo_anamnese_concluida");
+      localStorage.removeItem("consulta_agendada");
+      localStorage.removeItem("nutrindo_consulta_agendada");
     }
 
     if (emailUsuario) {
@@ -779,17 +1188,20 @@ export default function AnamneseWizard() {
   };
 
   const handleSairConta = async () => {
-    const rascunho = {
-      etapaAtual,
-      nomeCrianca,
-      dataNascimento,
-      sexo,
-      nomeResponsavel,
-      parentesco,
-    };
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    const rascunho = obterPayloadRespostas();
     if (typeof window !== "undefined") {
       localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
       localStorage.removeItem("nutrindo_auth_token");
+      localStorage.removeItem("nutrindo_user_email");
+      localStorage.removeItem("nutrindo_user_nome");
+      localStorage.removeItem("nutrindo_user_role");
+      localStorage.removeItem("anamnese_concluida");
+      localStorage.removeItem("nutrindo_anamnese_concluida");
+      localStorage.removeItem("consulta_agendada");
+      localStorage.removeItem("nutrindo_consulta_agendada");
     }
     if (isSupabaseConfigured()) {
       try {
@@ -799,43 +1211,37 @@ export default function AnamneseWizard() {
     router.replace("/login");
   };
 
-  // Restaura rascunho salvo do localStorage ao montar
+  // Restaura rascunho salvo do localStorage ao montar (com fallback na nuvem)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const rascunhoSalvo = localStorage.getItem("nutrindo_anamnese_rascunho");
-      if (rascunhoSalvo) {
-        const dados = JSON.parse(rascunhoSalvo);
-        if (dados.etapaAtual && typeof dados.etapaAtual === "number") {
-          setEtapaAtual(dados.etapaAtual);
+    const carregarRascunho = async () => {
+      try {
+        const rascunhoSalvo = localStorage.getItem("nutrindo_anamnese_rascunho");
+        if (rascunhoSalvo) {
+          const dados = JSON.parse(rascunhoSalvo);
+          restaurarCampos(dados);
+          setStatusAutoSave("salvo");
+        } else {
+          const emailUsuario = localStorage.getItem("nutrindo_user_email") || "";
+          if (emailUsuario) {
+            const res = await fetch(`/api/anamnese?email=${encodeURIComponent(emailUsuario)}`);
+            if (res.ok) {
+              const resData = await res.json();
+              if (resData?.anamnese?.respostas) {
+                restaurarCampos(resData.anamnese.respostas);
+                setStatusAutoSave("salvo");
+              }
+            }
+          }
         }
-        if (dados.nomeCrianca) setNomeCrianca(dados.nomeCrianca);
-        if (dados.dataNascimento) setDataNascimento(dados.dataNascimento);
-        if (dados.sexo) setSexo(dados.sexo);
-        if (dados.nomeResponsavel) setNomeResponsavel(dados.nomeResponsavel);
-        if (dados.parentesco) setParentesco(dados.parentesco);
-        if (dados.outroParentescoTexto) setOutroParentescoTexto(dados.outroParentescoTexto);
-        if (dados.participaAlimentacao) setParticipaAlimentacao(dados.participaAlimentacao);
-        if (dados.motivos) setMotivos(dados.motivos);
-        if (dados.diagnosticos) setDiagnosticos(dados.diagnosticos);
-        if (dados.nivelTEA) setNivelTEA(dados.nivelTEA);
-        if (dados.comunicacao) setComunicacao(dados.comunicacao);
-        if (dados.comunicacaoGeral) setComunicacaoGeral(dados.comunicacaoGeral);
-        if (dados.pesoAtual) setPesoAtual(dados.pesoAtual);
-        if (dados.alturaAtual) setAlturaAtual(dados.alturaAtual);
-        if (dados.cereais) setCereais(dados.cereais);
-        if (dados.proteinas) setProteinas(dados.proteinas);
-        if (dados.frutas) setFrutas(dados.frutas);
-        if (dados.vegetais) setVegetais(dados.vegetais);
-        if (dados.leguminosas) setLeguminosas(dados.leguminosas);
-        if (dados.qntAlimentos) setQntAlimentos(dados.qntAlimentos);
-        if (dados.comerFora) setComerFora(dados.comerFora);
-        if (dados.exigeTodoDia) setExigeTodoDia(dados.exigeTodoDia);
-        if (dados.sofrimentoFalta) setSofrimentoFalta(dados.sofrimentoFalta);
+      } catch (e) {
+        console.warn("Aviso ao carregar rascunho da anamnese:", e);
+      } finally {
+        montadoRef.current = true;
       }
-    } catch (e) {
-      console.warn("Aviso ao carregar rascunho da anamnese:", e);
-    }
+    };
+
+    carregarRascunho();
   }, []);
 
   if (carregando || !autenticado) {
@@ -880,8 +1286,13 @@ export default function AnamneseWizard() {
                 &ldquo;Obrigada por compartilhar essas informações comigo. 💚 Agora consigo conhecer melhor sua criança e entender quais pontos merecem mais atenção durante o acompanhamento.&rdquo;
               </p>
               <div className="flex items-center gap-2.5 pt-1.5">
-                <div className="w-8 h-8 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-xs shadow">
-                  DL
+                <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-[#4C6C54]/30 shadow-xs shrink-0 bg-[#4C6C54]/10">
+                  <Image
+                    src="/dra-lais.jpg"
+                    alt="Dra. Laís Leles"
+                    fill
+                    className="object-cover object-top"
+                  />
                 </div>
                 <div>
                   <h4 className="text-xs sm:text-sm font-extrabold text-slate-800">Dra. Laís Leles</h4>
@@ -907,10 +1318,6 @@ export default function AnamneseWizard() {
                 <span>Agendar 1ª Consulta de Avaliação →</span>
               </button>
             </div>
-
-            <p className="text-[11px] text-slate-400">
-              Redirecionando automaticamente em instantes...
-            </p>
           </div>
         </main>
       </div>
@@ -929,6 +1336,18 @@ export default function AnamneseWizard() {
             </div>
 
             <div className="flex items-center gap-2">
+              {statusAutoSave === "salvando" && (
+                <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full text-[11px] font-semibold animate-in fade-in">
+                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                  <span>Salvando...</span>
+                </div>
+              )}
+              {statusAutoSave === "salvo" && (
+                <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-[#4C6C54] border border-emerald-200/80 rounded-full text-[11px] font-semibold animate-in fade-in">
+                  <span>✓ Alterações salvas automaticamente</span>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={salvarRascunhoEPreencherDepois}
@@ -954,6 +1373,18 @@ export default function AnamneseWizard() {
             </div>
           </div>
 
+          {statusAutoSave === "salvando" && (
+            <div className="sm:hidden flex items-center justify-center gap-1.5 py-0.5 mb-1 text-amber-700 text-[10px] font-semibold animate-in fade-in">
+              <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+              <span>Salvando...</span>
+            </div>
+          )}
+          {statusAutoSave === "salvo" && (
+            <div className="sm:hidden flex items-center justify-center gap-1.5 py-0.5 mb-1 text-[#4C6C54] text-[10px] font-semibold animate-in fade-in">
+              <span>✓ Alterações salvas automaticamente</span>
+            </div>
+          )}
+
           <div className="space-y-1">
             <div className="flex justify-between text-xs sm:text-sm font-bold">
               <span className="text-[#4C6C54]">Etapa {etapaAtual} de {totalEtapas}</span>
@@ -970,6 +1401,49 @@ export default function AnamneseWizard() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
+
+        {/* JORNADA DE ONBOARDING - 3 PASSOS CLAROS E ACOLHEDORES */}
+        <div className="bg-white/95 backdrop-blur-xs border border-emerald-900/10 rounded-2xl p-3 sm:p-4 mb-4 shadow-xs">
+          <div className="flex items-center justify-between gap-1.5 sm:gap-3 max-w-2xl mx-auto">
+            {/* Passo 1 */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-emerald-100 text-[#4C6C54] flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                ✓
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] sm:text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Passo 1 • Concluído ✓</p>
+                <p className="text-[11px] sm:text-xs font-bold text-slate-700 hidden xs:block">Assinatura & Senha</p>
+              </div>
+            </div>
+
+            <div className="h-0.5 flex-1 bg-emerald-300 mx-1 sm:mx-2 min-w-[12px]" />
+
+            {/* Passo 2 */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm ring-2 ring-emerald-200">
+                2
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] sm:text-[10px] text-[#4C6C54] font-extrabold uppercase tracking-wider">Passo 2 • Em andamento</p>
+                <p className="text-[11px] sm:text-xs font-black text-[#4C6C54]">Anamnese Pediátrica</p>
+              </div>
+            </div>
+
+            <div className="h-0.5 flex-1 bg-slate-200 mx-1 sm:mx-2 min-w-[12px]" />
+
+            {/* Passo 3 */}
+            <div className="flex items-center gap-2 shrink-0 opacity-60">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-300 flex items-center justify-center font-bold text-xs shrink-0">
+                3
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passo 3</p>
+                <p className="text-[11px] sm:text-xs font-semibold text-slate-600 hidden xs:block">Agendar 1ª Consulta</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} noValidate className="bg-white p-5 sm:p-8 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 space-y-6 sm:space-y-8">
 
           {/* ================================================================ */}

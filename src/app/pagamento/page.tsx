@@ -141,18 +141,21 @@ function ConteudoCheckout() {
       precoCobradoTotal: 97.00,
       subtotal: 97.00,
       periodicidade: "Cobrado mensalmente",
-      descricao: "Flexibilidade para testar o método mês a mês",
+      descricao: "Flexibilidade para testar mês a mês",
       beneficios: [
-        "Acesso total à plataforma Nutrindo em Casa",
-        "Anamnese alimentar pediátrica completa",
-        "Diário de evolução e suporte contínuo",
-        "Cancele a qualquer momento sem fidelidade"
+        "Acesso total à plataforma",
+        "Anamnese completa com 56 parâmetros",
+        "Consulta individual por videochamada",
+        "Devolutivas semanais via plataforma",
+        "Central de dúvidas com especialista de segunda a sexta (horário comercial)",
+        "Plano alimentar e receitas individualizadas, com foco nos interesses da criança e realidade familiar",
+        "Cancele a qualquer momento"
       ]
     },
     trimestral: {
       id: "trimestral",
       nome: "Plano Trimestral",
-      badge: ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido",
+      badge: ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido pelas Famílias",
       badgeCor: ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white",
       precoEquivalenteMes: "R$ 79,90",
       precoCobradoTotal: 239.70,
@@ -160,13 +163,12 @@ function ConteudoCheckout() {
       economiaTexto: "Economize 18%",
       economiaValor: 51.30,
       periodicidade: "Cobrado R$ 239,70 a cada 3 meses",
-      descricao: "O equilíbrio perfeito entre economia e tempo hábil para evolução",
+      descricao: "Tempo ideal para consolidação das rotinas",
       destaque: !ehUpgrade,
       beneficios: [
-        "Todos os benefícios do plano Mensal",
-        "Acompanhamento estruturado das metas alimentares",
-        "1 Encontro de alinhamento com especialista",
-        "Economia acumulada de 18% no trimestre"
+        "Todos os benefícios do Mensal",
+        "Consulta por videochamada (encontro de alinhamento com especialista) a cada 45 dias (ou 6 semanas)",
+        "Economia de 18% no ciclo"
       ]
     },
     anual: {
@@ -180,13 +182,12 @@ function ConteudoCheckout() {
       economiaTexto: "Economize 38%",
       economiaValor: 445.20,
       periodicidade: "Cobrado R$ 718,80 ao ano",
-      descricao: "Transformação completa e acompanhamento integral por 12 meses",
+      descricao: "Consolidação dos ganhos e continuação do progresso",
       destaque: ehUpgrade,
       beneficios: [
-        "Todos os benefícios do plano Trimestral",
-        "Prioridade máxima nas devolutivas e reavaliações",
-        "Acesso ilimitado a novos cursos e masterclasses",
-        "Menor valor mensal (R$ 59,90/mês)"
+        "Todos os benefícios do Mensal",
+        "Consulta mensal por videochamada com especialista (a cada 30 dias / 4 semanas)",
+        "Menor valor mensal garantido"
       ]
     }
   };
@@ -206,8 +207,22 @@ function ConteudoCheckout() {
     setPixErro("");
 
     try {
-      const emailEnvio = clienteEmail.trim().toLowerCase() || (ehUpgrade ? "lucas@email.com" : "cliente@nutrindoemcasa.com.br");
+      const emailEnvio = clienteEmail
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toLowerCase() || (ehUpgrade ? "lucas@email.com" : "cliente@nutrindoemcasa.com.br");
       const nomeEnvio = clienteNome.trim() || cartaoNome || (ehUpgrade ? "Lucas Lima" : "Cliente Nutrindo");
+
+      // Limpa quaisquer flags antigas de onboarding para conta nova
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("anamnese_concluida");
+        localStorage.removeItem("nutrindo_anamnese_concluida");
+        localStorage.removeItem("consulta_agendada");
+        localStorage.removeItem("nutrindo_consulta_agendada");
+        localStorage.removeItem("nutrindo_anamnese_rascunho");
+      }
 
       const res = await fetch("/api/asaas/subscription", {
         method: "POST",
@@ -251,7 +266,7 @@ function ConteudoCheckout() {
     } finally {
       setPixCarregando(false);
     }
-  }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal]);
+  }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal, ehUpgrade]);
 
   // Dispara a geração de Pix do Asaas ao trocar para aba Pix ou trocar de plano
   useEffect(() => {
@@ -502,8 +517,22 @@ function ConteudoCheckout() {
       setProcessando(true);
 
       try {
-        const emailEnvio = clienteEmail.trim().toLowerCase();
+        const emailEnvio = clienteEmail
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\s+/g, "")
+          .trim()
+          .toLowerCase();
         const nomeEnvio = clienteNome.trim() || cartaoNome;
+
+        // Limpa quaisquer flags antigas de onboarding para conta nova
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("anamnese_concluida");
+          localStorage.removeItem("nutrindo_anamnese_concluida");
+          localStorage.removeItem("consulta_agendada");
+          localStorage.removeItem("nutrindo_consulta_agendada");
+          localStorage.removeItem("nutrindo_anamnese_rascunho");
+        }
 
         const res = await fetch("/api/asaas/subscription", {
           method: "POST",
@@ -609,7 +638,7 @@ function ConteudoCheckout() {
       </header>
 
       {/* CONTEÚDO PRINCIPAL COM PADDING ADEQUADO */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-16">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-20">
         
         {/* TÍTULO E SUBTÍTULO / HERO BANNER */}
         <div className="text-center max-w-3xl mx-auto mb-10 overflow-visible">
@@ -750,7 +779,7 @@ function ConteudoCheckout() {
                 <span className={`px-3.5 py-1 rounded-full text-[11px] font-extrabold shadow-sm tracking-wide ${
                   ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white"
                 }`}>
-                  {ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido"}
+                  {ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido pelas Famílias"}
                 </span>
               </div>
 
@@ -758,7 +787,7 @@ function ConteudoCheckout() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900">Plano Trimestral</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Equilíbrio de economia e tempo</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Tempo ideal para consolidação das rotinas</p>
                   </div>
                   {!ehUpgrade && (
                     <div
@@ -797,6 +826,10 @@ function ConteudoCheckout() {
                     </li>
                   ))}
                 </ul>
+
+                <div className="mt-3.5 p-3 rounded-2xl bg-[#F4F9F5] border border-[#3D5A45]/15 text-xs text-slate-700 font-medium leading-snug">
+                  ✨ <strong>Diferencial do Ciclo:</strong> Inclui acompanhamentos ao vivo por vídeo a cada 45 dias para ajuste fino da rotina.
+                </div>
               </div>
 
               <div className="mt-4 pt-3">
@@ -850,7 +883,7 @@ function ConteudoCheckout() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900">Plano Anual</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Transformação completa e suporte contínuo</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Consolidação dos ganhos e continuação do progresso</p>
                   </div>
                   <div
                     className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${
@@ -887,6 +920,10 @@ function ConteudoCheckout() {
                     </li>
                   ))}
                 </ul>
+
+                <div className="mt-3.5 p-3 rounded-2xl bg-[#F4F9F5] border border-[#3D5A45]/15 text-xs text-slate-700 font-medium leading-snug">
+                  👑 <strong>Diferencial VIP:</strong> Acompanhamento VIP com consultas mensais por vídeo e suporte contínuo por 12 meses.
+                </div>
               </div>
 
               <div className="mt-4 pt-3">
@@ -967,7 +1004,15 @@ function ConteudoCheckout() {
                   <input
                     type="email"
                     value={clienteEmail}
-                    onChange={(e) => setClienteEmail(e.target.value)}
+                    onChange={(e) =>
+                      setClienteEmail(
+                        e.target.value
+                          .normalize("NFD")
+                          .replace(/[\u0300-\u036f]/g, "")
+                          .replace(/\s+/g, "")
+                          .toLowerCase()
+                      )
+                    }
                     placeholder="seuemail@exemplo.com"
                     className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"
                   />
@@ -1578,9 +1623,9 @@ function ConteudoCheckout() {
                   <Award className="h-4 w-4" />
                 </div>
                 <div>
-                  <strong className="text-slate-800 block text-xs">Garantia Incondicional de 7 Dias</strong>
+                  <strong className="text-slate-800 block text-xs">Garantia de 7 Dias de Atendimento e Direcionamento</strong>
                   <span className="text-slate-500 text-[11px] leading-relaxed block">
-                    Se você não notar valor real na evolução do seu filho, devolvemos 100% do seu dinheiro sem perguntas.
+                    Como o plano prático é personalizado após a avaliação clínica, a garantia de 7 dias assegura o agendamento do seu atendimento individualizado, a primeira consulta com a especialista e a devolutiva do caso da criança com as estratégias iniciais.
                   </span>
                 </div>
               </div>
@@ -1604,7 +1649,14 @@ function ConteudoCheckout() {
                 <div>
                   <strong className="text-slate-800 block text-xs">Privacidade e Proteção LGPD</strong>
                   <span className="text-slate-500 text-[11px] leading-relaxed block">
-                    As informações clínicas e nutricionais do seu filho nunca são compartilhadas com terceiros.
+                    As informações clínicas e nutricionais do seu filho nunca são compartilhadas com terceiros. Consulte nossa{" "}
+                    <Link href="/privacidade" target="_blank" className="text-[#4C6C54] font-bold underline hover:text-[#3a5340]">
+                      Política de Privacidade
+                    </Link>{" "}
+                    e nossos{" "}
+                    <Link href="/termos" target="_blank" className="text-[#4C6C54] font-bold underline hover:text-[#3a5340]">
+                      Termos de Uso & Garantia
+                    </Link>.
                   </span>
                 </div>
               </div>
@@ -1671,33 +1723,44 @@ function ConteudoCheckout() {
               </p>
             </div>
 
-            {/* BOTÃO PRINCIPAL: IR PARA O LOGIN */}
+            {/* BOTÃO PRINCIPAL DESTACADO: DEFINIR SENHA AGORA */}
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                const emailSanitizado = clienteEmail
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/\s+/g, "")
+                  .trim()
+                  .toLowerCase();
                 router.push(
-                  `/login${
-                    clienteEmail.trim()
-                      ? `?email=${encodeURIComponent(clienteEmail.trim().toLowerCase())}`
-                      : ""
-                  }`
-                )
-              }
-              className="w-full py-3.5 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer text-center"
+                  `/criar-senha${emailSanitizado ? `?email=${encodeURIComponent(emailSanitizado)}` : ""}`
+                );
+              }}
+              className="w-full py-4 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-center"
             >
-              <span>Ir para o Login</span>
+              <span>Definir Minha Senha Agora →</span>
               <ChevronRight className="h-4 w-4" />
             </button>
 
-            {/* LINK SECUNDÁRIO DIRETO DE DEFINIR SENHA */}
-            <Link
-              href={`/criar-senha?email=${encodeURIComponent(
-                clienteEmail.trim().toLowerCase()
-              )}`}
-              className="text-[11px] text-slate-500 hover:text-slate-800 underline underline-offset-2 block text-center pt-1"
+            {/* BOTÃO SECUNDÁRIO: IR DIRETO PARA LOGIN */}
+            <button
+              type="button"
+              onClick={() => {
+                const emailSanitizado = clienteEmail
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/\s+/g, "")
+                  .trim()
+                  .toLowerCase();
+                router.push(
+                  `/login${emailSanitizado ? `?email=${encodeURIComponent(emailSanitizado)}` : ""}`
+                );
+              }}
+              className="w-full py-2.5 px-4 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors text-center cursor-pointer block"
             >
-              Prefere definir sua senha agora? Clique aqui →
-            </Link>
+              Já defini minha senha (Ir para Login)
+            </button>
           </div>
         </div>
       )}

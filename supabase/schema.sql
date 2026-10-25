@@ -95,8 +95,12 @@ CREATE TABLE IF NOT EXISTS public.diario_refeicoes (
     refeicao TEXT NOT NULL,
     degrau TEXT NOT NULL CHECK (degrau IN ('tolerou', 'cheirou', 'tocou', 'provou', 'comeu')),
     observacoes TEXT,
+    foto TEXT,
     data_registro TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Suporte retroativo caso a tabela já tenha sido criada anteriormente sem a coluna foto:
+ALTER TABLE public.diario_refeicoes ADD COLUMN IF NOT EXISTS foto TEXT;
 
 -- Índices para Diário
 CREATE INDEX IF NOT EXISTS idx_diario_user_email ON public.diario_refeicoes (user_email);
@@ -156,3 +160,67 @@ BEGIN
         CREATE POLICY "Allow individual read/write agendamentos" ON public.agendamentos FOR ALL USING (auth.jwt() ->> 'email' = user_email);
     END IF;
 END $$;
+
+-- -------------------------------------------------------------------------
+-- 7. TABELA DEVOLUTIVAS_SEMANAIS (Parecer Clínico, Alimentos-Alvo e Metas)
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.devolutivas_semanais (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL,
+    semana_ref TEXT,
+    parecer_clinico TEXT NOT NULL,
+    alimentos_alvo JSONB DEFAULT '[]'::jsonb,
+    metas_semana JSONB DEFAULT '[]'::jsonb,
+    profissional TEXT DEFAULT 'Dra. Laís Leles • CRN-8 18878',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Índices para Devolutivas Semanais
+CREATE INDEX IF NOT EXISTS idx_devolutivas_user_email ON public.devolutivas_semanais (user_email);
+CREATE INDEX IF NOT EXISTS idx_devolutivas_created_at ON public.devolutivas_semanais (user_email, created_at DESC);
+
+-- -------------------------------------------------------------------------
+-- 8. TABELA PRESCRICOES_PLANO (Prato Seguro, Orientações e Receitas Recomendadas)
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.prescricoes_plano (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT UNIQUE NOT NULL,
+    orientacao_prato_seguro TEXT,
+    composicao_prato JSONB DEFAULT '{"conforto": 70, "ponte": 20, "desafio": 10}'::jsonb,
+    refeicoes_estruturadas JSONB DEFAULT '[]'::jsonb,
+    receitas_recomendadas_ids JSONB DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Índices para Prescrições do Plano
+CREATE INDEX IF NOT EXISTS idx_prescricoes_user_email ON public.prescricoes_plano (user_email);
+
+-- -------------------------------------------------------------------------
+-- 9. TABELA RESPOSTAS_RAPIDAS_NUTRI (Banco Clínico Personalizado da Nutricionista)
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.respostas_rapidas_nutri (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    categoria TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    texto TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- RLS para as Novas Tabelas
+ALTER TABLE public.devolutivas_semanais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prescricoes_plano ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.respostas_rapidas_nutri ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow individual read/write devolutivas' AND tablename = 'devolutivas_semanais') THEN
+        CREATE POLICY "Allow individual read/write devolutivas" ON public.devolutivas_semanais FOR ALL USING (auth.jwt() ->> 'email' = user_email);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow individual read/write prescricoes' AND tablename = 'prescricoes_plano') THEN
+        CREATE POLICY "Allow individual read/write prescricoes" ON public.prescricoes_plano FOR ALL USING (auth.jwt() ->> 'email' = user_email);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow read all respostas rapidas' AND tablename = 'respostas_rapidas_nutri') THEN
+        CREATE POLICY "Allow read all respostas rapidas" ON public.respostas_rapidas_nutri FOR ALL USING (true);
+    END IF;
+END $$;
+

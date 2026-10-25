@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { 
   Send, Paperclip, CheckCheck, MoreVertical, FileText, 
   ExternalLink, Download, Sparkles, X, ChevronLeft, ChevronRight 
@@ -15,7 +16,7 @@ interface ArquivoAnexo {
 }
 
 interface Mensagem {
-  id: number;
+  id: number | string;
   remetente: "nutri" | "usuario";
   texto?: string;
   arquivos?: ArquivoAnexo[];
@@ -42,25 +43,11 @@ export default function PaginaChat() {
 
   const [conversas, setConversas] = useState<Mensagem[]>([
     {
-      id: 0,
+      id: "boas-vindas",
       remetente: "nutri",
-      texto: "Olá! Seja muito bem-vinda ao Nutrindo em Casa 💚 Este é o nosso canal direto: pode me contar como foram as refeições, tirar dúvidas e compartilhar fotos dos pratos a qualquer momento.",
-      horario: "09:30",
-      dataEnvio: "Hoje às 09:30"
-    },
-    {
-      id: 1,
-      remetente: "nutri",
-      texto: "Olá, mãe! Vi que vocês preencheram o Diário Alimentar ontem. Como foi a aceitação do brócolis no jantar?",
-      horario: "09:41",
-      dataEnvio: "Hoje às 09:41"
-    },
-    {
-      id: 2,
-      remetente: "usuario",
-      texto: "Bom dia, Dra! Ele cheirou e tocou no brócolis, mas na hora de colocar na boca ele chorou um pouco. Nós não forçamos, conforme combinamos.",
-      horario: "10:15",
-      dataEnvio: "Hoje às 10:15"
+      texto: "Olá! Seja muito bem-vinda ao Nutrindo em Casa 💚 Este é o canal direto da sua família com a Dra. Laís Leles: sinta-se à vontade para compartilhar como foram as refeições, tirar dúvidas e enviar fotos dos pratos a qualquer momento.",
+      horario: "09:00",
+      dataEnvio: "Canal Aberto"
     }
   ]);
 
@@ -277,8 +264,13 @@ export default function PaginaChat() {
       {/* CABEÇALHO */}
       <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-            DL
+          <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-[#4C6C54]/30 shadow-xs shrink-0 bg-[#4C6C54]/10">
+            <Image
+              src="/dra-lais.jpg"
+              alt="Dra. Laís Leles"
+              fill
+              className="object-cover object-top"
+            />
           </div>
           <div>
             <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -310,8 +302,13 @@ export default function PaginaChat() {
             className={`flex items-end gap-2 ${msg.remetente === "usuario" ? "justify-end" : "justify-start"}`}
           >
             {msg.remetente === "nutri" && (
-              <div className="w-7 h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-[10px] shrink-0 mb-0.5 shadow-2xs">
-                DL
+              <div className="relative w-7 h-7 rounded-full overflow-hidden border border-[#4C6C54]/30 shadow-2xs shrink-0 mb-0.5 bg-[#4C6C54]/10">
+                <Image
+                  src="/dra-lais.jpg"
+                  alt="Dra. Laís Leles"
+                  fill
+                  className="object-cover object-top"
+                />
               </div>
             )}
 
@@ -418,8 +415,13 @@ export default function PaginaChat() {
         {/* INDICADOR DE DIGITAÇÃO DA DRA. LAÍS */}
         {digitando && (
           <div className="flex items-end gap-2 justify-start animation-fade-in">
-            <div className="w-7 h-7 rounded-full bg-[#4C6C54] text-white flex items-center justify-center font-bold text-[10px] shrink-0 mb-0.5 shadow-2xs">
-              DL
+            <div className="relative w-7 h-7 rounded-full overflow-hidden border border-[#4C6C54]/30 shadow-2xs shrink-0 mb-0.5 bg-[#4C6C54]/10">
+              <Image
+                src="/dra-lais.jpg"
+                alt="Dra. Laís Leles"
+                fill
+                className="object-cover object-top"
+              />
             </div>
             <div
               className="px-4 py-3 rounded-2xl rounded-tl-xs bg-white border border-slate-100 shadow-xs flex items-center gap-1"

@@ -13,7 +13,50 @@ interface RegistroRefeicao {
   degrauSlug: "tolerou" | "cheirou" | "tocou" | "provou" | "comeu";
   reacao: "positivo" | "neutro" | "desafiador";
   detalhe: string;
+  foto?: string;
 }
+
+// Compressão inteligente de imagem no navegador via HTML5 Canvas
+const comprimirImagemEmCanvas = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new (window as any).Image();
+      img.onload = () => {
+        const maxDim = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        // Comprime para JPEG 0.7 (fica super leve ~30-50KB)
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
 
 export default function PaginaDiarioAlimentar() {
   // Obtém a data de hoje no fuso horário local do navegador (YYYY-MM-DD)
@@ -43,6 +86,23 @@ export default function PaginaDiarioAlimentar() {
   const [novaEtapaSlug, setNovaEtapaSlug] = useState<"tolerou" | "cheirou" | "tocou" | "provou" | "comeu">("cheirou");
   const [novaReacao, setNovaReacao] = useState<"positivo" | "neutro" | "desafiador">("positivo");
   const [novoDetalhe, setNovoDetalhe] = useState("");
+  const [novaFoto, setNovaFoto] = useState<string | null>(null);
+  const [comprimindoFoto, setComprimindoFoto] = useState(false);
+  const [fotoModalZoom, setFotoModalZoom] = useState<{ foto: string; alimento: string } | null>(null);
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setComprimindoFoto(true);
+    try {
+      const compressed = await comprimirImagemEmCanvas(file);
+      setNovaFoto(compressed);
+    } catch (err) {
+      console.warn("Erro ao comprimir foto do prato:", err);
+    } finally {
+      setComprimindoFoto(false);
+    }
+  };
 
   // Base de alimentos para Autocomplete (simulando futuro BD)
   const bancoAlimentos = [
@@ -60,58 +120,7 @@ export default function PaginaDiarioAlimentar() {
       )
     : [];
 
-  const [historico, setHistorico] = useState<RegistroRefeicao[]>([
-    { 
-      id: 1, 
-      data: "2026-09-22", 
-      refeicao: "Almoço", 
-      alimento: "Brócolis 🥦", 
-      etapa: "👃 Cheirou voluntariamente", 
-      degrauSlug: "cheirou",
-      reacao: "positivo", 
-      detalhe: "Aproximou do prato e cheirou sem afastar." 
-    },
-    { 
-      id: 2, 
-      data: "2026-09-22", 
-      refeicao: "Lanche", 
-      alimento: "Maçã em fatias 🍎", 
-      etapa: "👀 Tolerou no prato", 
-      degrauSlug: "tolerou",
-      reacao: "neutro", 
-      detalhe: "Permaneceu no prato sem demonstrar incômodo." 
-    },
-    { 
-      id: 3, 
-      data: "2026-09-21", 
-      refeicao: "Jantar", 
-      alimento: "Cenoura baby 🥕", 
-      etapa: "🖐️ Tocou com talher", 
-      degrauSlug: "tocou",
-      reacao: "positivo", 
-      detalhe: "Espetou o vegetal com o garfo por iniciativa própria." 
-    },
-    { 
-      id: 4, 
-      data: "2026-09-21", 
-      refeicao: "Almoço", 
-      alimento: "Arroz com Feijão 🍚", 
-      etapa: "😋 Comeu e engoliu", 
-      degrauSlug: "comeu",
-      reacao: "positivo", 
-      detalhe: "Comeu 3 colheres cheias com boa autonomia." 
-    },
-    { 
-      id: 5, 
-      data: "2026-09-16", 
-      refeicao: "Café", 
-      alimento: "Mamão 🥭", 
-      etapa: "👀 Tolerou no prato", 
-      degrauSlug: "tolerou",
-      reacao: "desafiador", 
-      detalhe: "Pediu para afastar a fruta nos primeiros minutos." 
-    },
-  ]);
+  const [historico, setHistorico] = useState<RegistroRefeicao[]>([]);
 
   const etapasEscalada = [
     { label: "Tolerou no prato", icone: "👀", slug: "tolerou" as const },
@@ -176,7 +185,7 @@ export default function PaginaDiarioAlimentar() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.success && data.refeicoes && data.refeicoes.length > 0) {
-          const formatados: RegistroRefeicao[] = data.refeicoes.map((r: { id: number; data_registro: string; refeicao: "Café" | "Almoço" | "Lanche" | "Jantar"; alimento: string; degrau: "tolerou" | "cheirou" | "tocou" | "provou" | "comeu"; observacoes: string }) => ({
+          const formatados: RegistroRefeicao[] = data.refeicoes.map((r: any) => ({
             id: r.id || Date.now(),
             data: r.data_registro ? r.data_registro.split("T")[0] : hoje,
             refeicao: r.refeicao,
@@ -185,6 +194,7 @@ export default function PaginaDiarioAlimentar() {
             degrauSlug: r.degrau,
             reacao: "positivo" as const,
             detalhe: r.observacoes || "Registro no diário.",
+            foto: r.foto || undefined,
           }));
           setHistorico((prev) => desduplicarRefeicoes([...formatados, ...prev]));
         }
@@ -213,12 +223,14 @@ export default function PaginaDiarioAlimentar() {
       etapa: novaEtapa,
       degrauSlug: novaEtapaSlug,
       reacao: novaReacao,
-      detalhe: novoDetalhe.trim() || "Registro realizado no diário alimentar."
+      detalhe: novoDetalhe.trim() || "Registro realizado no diário alimentar.",
+      foto: novaFoto || undefined,
     };
 
     setHistorico((prev) => desduplicarRefeicoes([novo, ...prev]));
     setNovoAlimento("");
     setNovoDetalhe("");
+    setNovaFoto(null);
     setNovaData(hoje);
     setModalAberto(false);
 
@@ -236,6 +248,7 @@ export default function PaginaDiarioAlimentar() {
           refeicao: novo.refeicao,
           degrau: novo.degrauSlug,
           observacoes: novo.detalhe,
+          foto: novo.foto || null,
         }),
       }).catch((err) => console.warn("Aviso ao salvar no banco:", err));
     } catch (err) {
@@ -284,12 +297,6 @@ export default function PaginaDiarioAlimentar() {
       {/* CABEÇALHO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-0.5">
-          <Link 
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#4C6C54] transition-colors mb-1"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao Início
-          </Link>
           <h1 className="text-2xl font-extrabold text-slate-800">Histórico do Diário Alimentar</h1>
           <p className="text-slate-500 text-xs">Evolução sensorial e marcos da Escalada do Comer.</p>
         </div>
@@ -418,7 +425,7 @@ export default function PaginaDiarioAlimentar() {
                       key={`${item.id}-${index}`}
                       className="bg-white p-4 rounded-xl border border-slate-100 shadow-2xs hover:border-slate-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-extrabold text-[#EB6D57] bg-[#EB6D57]/10 px-2 py-0.5 rounded">
                             {item.refeicao}
@@ -426,6 +433,27 @@ export default function PaginaDiarioAlimentar() {
                         </div>
                         <h3 className="text-sm font-bold text-slate-800">{item.alimento}</h3>
                         <p className="text-xs text-slate-500">{item.detalhe}</p>
+
+                        {/* MINIATURA DA FOTO DO PRATO */}
+                        {item.foto && (
+                          <div className="pt-2 flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => setFotoModalZoom({ foto: item.foto!, alimento: item.alimento })}
+                              className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-xl overflow-hidden border border-slate-200/90 shadow-2xs hover:opacity-90 group transition-all shrink-0 cursor-pointer bg-slate-100"
+                              title="Clique para ampliar a foto do prato"
+                            >
+                              <img src={item.foto} alt={`Foto do prato - ${item.alimento}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                <span className="bg-black/60 text-white text-[9px] px-1 py-0.5 rounded font-bold">🔍</span>
+                              </span>
+                            </button>
+                            <div className="text-[11px] text-slate-500">
+                              <span className="font-bold text-slate-700 block">📷 Foto do Momento</span>
+                              <span className="text-[10px] text-slate-400">Clique na imagem para ampliar</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex sm:flex-col sm:items-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
@@ -634,6 +662,52 @@ export default function PaginaDiarioAlimentar() {
                 />
               </div>
 
+              {/* LINHA 6: FOTO DO PRATO (OPCIONAL) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                  Foto do Prato (Opcional)
+                </label>
+                <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
+                  Está registrando depois da refeição? Sem problemas! Você pode salvar apenas o relato sem foto.
+                </p>
+                {novaFoto ? (
+                  <div className="relative inline-block rounded-xl overflow-hidden border border-emerald-300 shadow-2xs group">
+                    <img src={novaFoto} alt="Prévia do prato" className="h-18 w-24 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setNovaFoto(null)}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 cursor-pointer transition-colors"
+                      title="Remover foto"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <span className="absolute bottom-1 left-1 bg-emerald-700/90 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
+                      Prato Anexado ✓
+                    </span>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl cursor-pointer transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFotoChange}
+                      className="hidden"
+                    />
+                    <div className="h-8 w-8 rounded-lg bg-emerald-100 text-[#4C6C54] flex items-center justify-center shrink-0 text-sm">
+                      📷
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xs font-bold text-slate-700">
+                        {comprimindoFoto ? "Comprimindo imagem..." : "Anexar foto do pratinho"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Selecione do celular ou computador (opcional)
+                      </p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
               {/* RODAPÉ DO FORMULÁRIO COM AÇÕES IMEDIATAS */}
               <div className="pt-2 border-t border-slate-100 flex gap-2">
                 <button
@@ -652,6 +726,36 @@ export default function PaginaDiarioAlimentar() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX ZOOM MODAL PARA FOTO DO PRATO */}
+      {fotoModalZoom && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setFotoModalZoom(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl p-4 sm:p-5 max-w-lg w-full space-y-3 shadow-2xl border border-slate-100 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-800">📷 Foto do Prato • {fotoModalZoom.alimento}</h3>
+                <p className="text-[11px] text-slate-500">Registro visual compartilhado com a Dra. Laís Leles</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFotoModalZoom(null)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 max-h-[70vh] flex items-center justify-center p-1">
+              <img src={fotoModalZoom.foto} alt={fotoModalZoom.alimento} className="max-h-[65vh] w-auto object-contain rounded-xl" />
+            </div>
           </div>
         </div>
       )}

@@ -65,32 +65,28 @@ function ConteudoConfiguracoes() {
     principaisRecusas: "Vegetais verdes (brócolis, espinafre), texturas pastosas misturadas e molhos quentes"
   });
 
-  const [listaFaturas, setListaFaturas] = useState<FaturaMock[]>([
-    {
-      id: "fat_3",
-      data: "18/10/2026",
-      descricao: "Renovação Trimestral Prevista - Método Dra. Laís Leles",
-      valor: "R$ 239,70",
-      status: "pendente",
-      codigoAsaas: "pay_99382104"
-    },
-    {
-      id: "fat_2",
-      data: "18/07/2026",
-      descricao: "Assinatura Trimestral (Ciclo 2) - Método Dra. Laís Leles",
-      valor: "R$ 239,70",
-      status: "pago",
-      codigoAsaas: "pay_77218492"
-    },
-    {
-      id: "fat_1",
-      data: "18/04/2026",
-      descricao: "Assinatura Trimestral (Ciclo 1) - Método Dra. Laís Leles",
-      valor: "R$ 239,70",
-      status: "pago",
-      codigoAsaas: "pay_55192834"
-    }
-  ]);
+  const [planoUsuario, setPlanoUsuario] = useState({
+    tipo: "trimestral",
+    nome: "Plano Trimestral",
+    valor: "R$ 239,70",
+    periodicidade: "Cobrado a cada 3 meses",
+    asaasId: "sub_88294",
+    status: "ATIVO"
+  });
+
+  // Cálculo de data de renovação dinâmica com base no plano atual
+  const obterDataRenovacao = (tipoPlano: string) => {
+    const hoje = new Date();
+    const dias = tipoPlano === "mensal" ? 30 : tipoPlano === "anual" ? 365 : 90;
+    const dataRenovacao = new Date(hoje.getTime() + dias * 24 * 60 * 60 * 1000);
+    return dataRenovacao.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
+  const [listaFaturas, setListaFaturas] = useState<FaturaMock[]>([]);
 
   // Carrega dados reais do Supabase ao montar
   useEffect(() => {
@@ -117,6 +113,30 @@ function ConteudoConfiguracoes() {
               alimentosConforto: data.profile.alimentos_conforto || prev.alimentosConforto,
               principaisRecusas: data.profile.principais_recusas || prev.principaisRecusas,
             }));
+
+            const planoTipo = (data.profile.plano || "trimestral").toLowerCase();
+            let nomePlano = "Plano Trimestral";
+            let valorPlano = "R$ 239,70";
+            let periodicidadePlano = "Cobrado a cada 3 meses";
+
+            if (planoTipo === "mensal") {
+              nomePlano = "Plano Mensal";
+              valorPlano = "R$ 97,00";
+              periodicidadePlano = "Cobrado mensalmente";
+            } else if (planoTipo === "anual") {
+              nomePlano = "Plano Anual";
+              valorPlano = "R$ 718,80";
+              periodicidadePlano = "Cobrado anualmente";
+            }
+
+            setPlanoUsuario({
+              tipo: planoTipo,
+              nome: nomePlano,
+              valor: valorPlano,
+              periodicidade: periodicidadePlano,
+              asaasId: data.profile.asaas_subscription_id || "sub_88294",
+              status: data.profile.status_assinatura || "ATIVO"
+            });
           }
           if (data.faturas && data.faturas.length > 0) {
             const faturasFormatadas: FaturaMock[] = data.faturas.map((f: { id: string; asaas_payment_id: string; data_emissao: string; descricao: string; valor: number; status: string }) => ({
@@ -137,26 +157,6 @@ function ConteudoConfiguracoes() {
 
     carregarPerfil();
   }, []);
-
-  const handleSimularPlano = (tipo: "ativo" | "aviso" | "expirado") => {
-    if (typeof window === "undefined") return;
-
-    if (tipo === "ativo") {
-      localStorage.setItem("nutrindo_dias_restantes", "24");
-      localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
-      dispararToast("Modo Teste: Assinatura simulada como ATIVA (24 dias restantes).");
-    } else if (tipo === "aviso") {
-      localStorage.setItem("nutrindo_dias_restantes", "3");
-      localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
-      dispararToast("Modo Teste: Aviso de vencimento ativado (faltam 3 dias). Veja o banner no Dashboard.");
-    } else {
-      localStorage.setItem("nutrindo_dias_restantes", "0");
-      localStorage.setItem("nutrindo_status_assinatura", "EXPIRADO");
-      dispararToast("Modo Teste: Assinatura EXPIRADA. Acesse o Dashboard ou Cursos para testar a tela de bloqueio.");
-    }
-
-    window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
-  };
 
   const handleSalvarDados = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +208,7 @@ function ConteudoConfiguracoes() {
     setTimeout(() => {
       setCancelando(false);
       setModalCancelamento(false);
-      dispararToast("Solicitação registrada. Sua assinatura permanecerá ativa até 18/10/2026.");
+      dispararToast(`Solicitação registrada. Sua assinatura permanecerá ativa até o fim da vigência (${obterDataRenovacao(planoUsuario.tipo)}).`);
     }, 1200);
   };
 
@@ -326,7 +326,7 @@ function ConteudoConfiguracoes() {
             <div className="flex items-center gap-2.5 self-start sm:self-auto">
               <div className="flex items-center gap-2 p-1.5 pl-3 rounded-full bg-white/90 border border-slate-200/90 shadow-2xs">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold text-slate-700">Plano Trimestral</span>
+                <span className="text-xs font-bold text-slate-700">{planoUsuario.nome}</span>
                 <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-extrabold text-xs shadow-xs ring-2 ring-white">
                   LL
                 </div>
@@ -578,47 +578,6 @@ function ConteudoConfiguracoes() {
           {abaAtiva === "assinatura" && (
             <div className="space-y-6 animate-in fade-in duration-200">
               
-              {/* CARD DISCRETO: SIMULADOR DE VIGÊNCIA (MODO TESTE) */}
-              <div className="bg-gradient-to-r from-amber-50/80 via-emerald-50/40 to-slate-50/80 rounded-3xl p-5 border border-amber-200/80 shadow-2xs space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-amber-200/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🛠️</span>
-                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-800">
-                      Simulador de Vigência (Modo Teste)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-full self-start sm:self-auto border border-amber-200">
-                    Teste ao Vivo
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Alterne instantaneamente o status da assinatura neste navegador para validar os alertas e a tela de bloqueio:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleSimularPlano("ativo")}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <span>Simular Plano Ativo (24 dias)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSimularPlano("aviso")}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <span>Simular Aviso (Faltam 3 dias)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSimularPlano("expirado")}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <span>Simular Plano Expirado</span>
-                  </button>
-                </div>
-              </div>
-
               {/* CARD PRINCIPAL DA ASSINATURA */}
               <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-[#4C6C54]/30 shadow-sm space-y-5">
                 
@@ -631,11 +590,11 @@ function ConteudoConfiguracoes() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-lg font-extrabold text-slate-900">
-                          Plano Trimestral
+                          {planoUsuario.nome}
                         </h2>
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          ATIVO
+                          {planoUsuario.status}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
@@ -646,9 +605,9 @@ function ConteudoConfiguracoes() {
 
                   <div className="text-left sm:text-right">
                     <span className="text-xl sm:text-2xl font-extrabold text-[#4C6C54]">
-                      R$ 239,70
+                      {planoUsuario.valor}
                     </span>
-                    <span className="text-xs text-slate-500 block">Cobrado a cada 3 meses</span>
+                    <span className="text-xs text-slate-500 block">{planoUsuario.periodicidade}</span>
                   </div>
                 </div>
 
@@ -660,8 +619,8 @@ function ConteudoConfiguracoes() {
                       <Calendar className="h-3.5 w-3.5 text-slate-400" />
                       <span>Próxima Renovação</span>
                     </div>
-                    <p className="text-sm font-extrabold text-slate-800">
-                      18 de Outubro de 2026
+                    <p className="text-sm font-extrabold text-slate-800 capitalize">
+                      {obterDataRenovacao(planoUsuario.tipo)}
                     </p>
                   </div>
 
@@ -682,7 +641,7 @@ function ConteudoConfiguracoes() {
                       <span>ID Asaas</span>
                     </div>
                     <p className="text-sm font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded-lg border border-slate-200 inline-block">
-                      sub_88294
+                      {planoUsuario.asaasId}
                     </p>
                   </div>
 
@@ -738,49 +697,57 @@ function ConteudoConfiguracoes() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {faturas.map((fat) => (
-                        <tr key={fat.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3.5 px-3 font-semibold text-slate-700 whitespace-nowrap">
-                            {fat.data}
-                          </td>
-                          <td className="py-3.5 px-3 font-medium text-slate-800">
-                            {fat.descricao}
-                          </td>
-                          <td className="py-3.5 px-3 font-extrabold text-slate-900 whitespace-nowrap">
-                            {fat.valor}
-                          </td>
-                          <td className="py-3.5 px-3 whitespace-nowrap">
-                            {fat.status === "pago" ? (
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-max">
-                                <Check className="h-3 w-3 stroke-[3]" />
-                                Pago
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1 w-max">
-                                <Clock className="h-3 w-3" />
-                                Pendente
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-3 text-right whitespace-nowrap">
-                            {fat.status === "pago" ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDownloadFatura(fat.codigoAsaas)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#4C6C54] text-slate-700 hover:text-white font-bold text-xs transition-colors cursor-pointer"
-                                title="Baixar PDF da fatura"
-                              >
-                                <Download className="h-3.5 w-3.5" />
-                                <span>PDF</span>
-                              </button>
-                            ) : (
-                              <span className="text-slate-400 font-medium text-xs px-2 py-1">
-                                Em aberto
-                              </span>
-                            )}
+                      {faturas.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-slate-500 font-medium">
+                            Nenhuma fatura registrada até o momento.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        faturas.map((fat) => (
+                          <tr key={fat.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3.5 px-3 font-semibold text-slate-700 whitespace-nowrap">
+                              {fat.data}
+                            </td>
+                            <td className="py-3.5 px-3 font-medium text-slate-800">
+                              {fat.descricao}
+                            </td>
+                            <td className="py-3.5 px-3 font-extrabold text-slate-900 whitespace-nowrap">
+                              {fat.valor}
+                            </td>
+                            <td className="py-3.5 px-3 whitespace-nowrap">
+                              {fat.status === "pago" ? (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-max">
+                                  <Check className="h-3 w-3 stroke-[3]" />
+                                  Pago
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1 w-max">
+                                  <Clock className="h-3 w-3" />
+                                  Pendente
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                              {fat.status === "pago" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadFatura(fat.codigoAsaas)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#4C6C54] text-slate-700 hover:text-white font-bold text-xs transition-colors cursor-pointer"
+                                  title="Baixar PDF da fatura"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  <span>PDF</span>
+                                </button>
+                              ) : (
+                                <span className="text-slate-400 font-medium text-xs px-2 py-1">
+                                  Em aberto
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -993,7 +960,7 @@ function ConteudoConfiguracoes() {
                 Deseja pausar ou cancelar sua assinatura?
               </h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Você possui o <strong>Plano Trimestral ativo até 18/10/2026</strong>. Caso cancele, você manterá acesso até o fim do ciclo pago, mas perderá o histórico contínuo da anamnese e suporte prioritário.
+                Você possui o <strong>{planoUsuario.nome} ativo até {obterDataRenovacao(planoUsuario.tipo)}</strong>. Caso cancele, você manterá acesso até o fim do ciclo pago, mas perderá o histórico contínuo da anamnese e suporte prioritário.
               </p>
             </div>
 
@@ -1002,7 +969,7 @@ function ConteudoConfiguracoes() {
                 <span>💡</span> Alternativa recomendada:
               </p>
               <p className="text-[11px] text-amber-800 leading-relaxed">
-                Você pode solicitar uma pausa de 30 dias sem custos para manter o prontuário do Pedro salvo com segurança.
+                Você pode solicitar uma pausa de 30 dias sem custos para manter o prontuário de {dadosForm.nomeCrianca || "sua criança"} salvo com segurança.
               </p>
             </div>
 

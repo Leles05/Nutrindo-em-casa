@@ -7,7 +7,7 @@ import {
   Stethoscope, Video, Sparkles, ShieldCheck, CheckCircle2,
   ChevronRight, ChevronDown, Award, Star, ArrowRight, Play,
   BookOpen, Clock, Heart, Users, FileText, Check, Lock,
-  HelpCircle, MessageCircle, Quote
+  HelpCircle, MessageCircle, Quote, User
 } from "lucide-react";
 
 export default function PaginaInicialLanding() {
@@ -37,7 +37,7 @@ export default function PaginaInicialLanding() {
     {
       pergunta: "Como funciona a garantia de 7 dias e o cancelamento?",
       resposta:
-        "Você tem 7 dias de garantia incondicional. Se não notar valor real na evolução do seu filho, basta solicitar a devolução com 1 clique direto no painel do Asaas, sem burocracia. Os planos podem ser cancelados a qualquer momento na sua aba de configurações."
+        "Garantia de 7 Dias de Atendimento e Direcionamento: Como o material e o plano prático são personalizados após a avaliação clínica, nossa garantia de 7 dias assegura o agendamento do seu atendimento individualizado, a realização da primeira consulta com a especialista e a análise/devolutiva do caso da criança com as estratégias iniciais dentro desse prazo. Os planos podem ser cancelados a qualquer momento na sua aba de configurações."
     }
   ];
 
@@ -89,7 +89,7 @@ export default function PaginaInicialLanding() {
               />
             </div>
             <span className="hidden md:inline-block text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-[#4C6C54]/10 text-[#4C6C54] tracking-wider">
-              Método Dra. Laís Leles
+              Método Dra. Laís Leles • CRN-8 18878
             </span>
           </Link>
 
@@ -116,10 +116,10 @@ export default function PaginaInicialLanding() {
           <div className="flex items-center gap-2.5 sm:gap-3">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center py-2 px-3 sm:px-4 bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-400 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+              className="whitespace-nowrap inline-flex items-center justify-center gap-2 py-2 px-3.5 sm:px-4 bg-white hover:bg-[#3D5A45]/5 border border-[#3D5A45]/20 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
             >
-              <span>Já sou Aluno</span>
-              <span className="hidden sm:inline">&nbsp;(Entrar)</span>
+              <User className="h-3.5 w-3.5 text-[#3D5A45]" />
+              <span>Área do Aluno</span>
             </Link>
 
             <Link
@@ -159,7 +159,7 @@ export default function PaginaInicialLanding() {
             {/* TÍTULO PRINCIPAL */}
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-[1.18]">
               Transforme a relação do seu filho com a comida de forma{" "}
-              <span className="text-[#4C6C54] underline decoration-[#EB6D57]/40 decoration-wavy decoration-2">
+              <span className="text-[#3D5A45] italic bg-[#E8F5E9] py-0.5 px-2.5 rounded-lg inline-block leading-tight">
                 leve
               </span>{" "}
               e baseada em evidências.
@@ -197,7 +197,7 @@ export default function PaginaInicialLanding() {
               </div>
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span>Garantia incondicional de 7 dias</span>
+                <span>Garantia de 7 dias de atendimento</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-[#EB6D57]" />
@@ -229,7 +229,7 @@ export default function PaginaInicialLanding() {
               {/* Régua das 5 Fases Sensoriais */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
                 <div className="flex items-center justify-between text-[11px] font-extrabold text-slate-700">
-                  <span>Jornada Sensorial do Alimento</span>
+                  <span>Escada do Comer • Jornada Sensorial</span>
                   <span className="text-[#4C6C54]">Fase 4: Provou!</span>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5 text-center">
@@ -387,7 +387,7 @@ export default function PaginaInicialLanding() {
                 Aulas Práticas & Estratégias
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Acesso imediato às videoaulas gravadas pela Dra. Laís Leles. Você aprende a preparar o prato, como apresentar novos alimentos de forma não-invasiva e como desarmar a ansiedade na hora da refeição.
+                Após avaliação realizada com especialista, você terá acesso às videoaulas gravadas pela Dra. Laís Leles, pensadas para o seu filho. Você aprenderá a preparar o prato, como apresentar novos alimentos de forma não-invasiva e como desarmar a ansiedade na hora da refeição.
               </p>
             </div>
 
@@ -415,19 +415,24 @@ export default function PaginaInicialLanding() {
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-3xl sm:rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-lg grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             
-            {/* AVATAR / APRESENTAÇÃO VISUAL */}
+            {/* AVATAR / APRESENTAÇÃO VISUAL COM FOTO REAL */}
             <div className="lg:col-span-4 text-center space-y-3">
-              <div className="relative h-44 w-44 sm:h-52 sm:w-52 rounded-3xl mx-auto overflow-hidden bg-gradient-to-tr from-[#4C6C54] to-[#7fa488] shadow-xl border-4 border-white flex items-center justify-center">
-                <span className="text-5xl font-black text-white/90">
-                  Dra.
-                </span>
+              <div className="relative w-44 h-44 sm:w-52 sm:h-52 mx-auto rounded-3xl overflow-hidden shadow-md border-4 border-white bg-[#4C6C54]/10">
+                <Image
+                  src="/dra-lais.jpg"
+                  alt="Dra. Laís Leles - Nutricionista Clínica Pediátrica"
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 640px) 176px, 208px"
+                  priority
+                />
               </div>
               <div>
                 <strong className="text-base sm:text-lg font-extrabold text-slate-900 block">
                   Dra. Laís Leles
                 </strong>
                 <span className="text-xs text-emerald-700 font-bold">
-                  Nutricionista Clínica Pediátrica
+                  Nutricionista Clínica Pediátrica • CRN-8 18878
                 </span>
               </div>
             </div>
@@ -624,22 +629,20 @@ export default function PaginaInicialLanding() {
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Acesso total à plataforma</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Anamnese completa com 56 parâmetros</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Diário alimentar pediátrico</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Cancele a qualquer momento</span>
-                  </li>
+                  {[
+                    "Acesso total à plataforma",
+                    "Anamnese completa com 56 parâmetros",
+                    "Consulta individual por videochamada",
+                    "Devolutivas semanais via plataforma",
+                    "Central de dúvidas com especialista de segunda a sexta (horário comercial)",
+                    "Plano alimentar e receitas individualizadas, com foco nos interesses da criança e realidade familiar",
+                    "Cancele a qualquer momento"
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 
@@ -682,23 +685,21 @@ export default function PaginaInicialLanding() {
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Todos os benefícios do Mensal</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Acompanhamento estruturado das metas</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Encontro de alinhamento com especialista</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Economia de 18% no ciclo</span>
-                  </li>
+                  {[
+                    "Todos os benefícios do Mensal",
+                    "Consulta por videochamada (encontro de alinhamento com especialista) a cada 45 dias (ou 6 semanas)",
+                    "Economia de 18% no ciclo"
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
+
+                <div className="mt-3.5 p-3 rounded-2xl bg-[#F4F9F5] border border-[#3D5A45]/15 text-xs text-slate-700 font-medium leading-snug">
+                  ✨ <strong>Diferencial do Ciclo:</strong> Inclui acompanhamentos ao vivo por vídeo a cada 45 dias para ajuste fino da rotina.
+                </div>
               </div>
 
               <div className="pt-6">
@@ -720,7 +721,7 @@ export default function PaginaInicialLanding() {
                     Melhor Custo-Benefício
                   </span>
                   <h3 className="text-base font-extrabold text-slate-900">Plano Anual</h3>
-                  <p className="text-xs text-slate-500">Transformação completa de 12 meses</p>
+                  <p className="text-xs text-slate-500">Consolidação dos ganhos e continuação do progresso</p>
                 </div>
 
                 <div className="pt-2 border-t border-slate-100">
@@ -737,23 +738,21 @@ export default function PaginaInicialLanding() {
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Todos os benefícios do Trimestral</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Prioridade máxima nas devolutivas</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Acesso ilimitado a novos cursos</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Menor valor mensal garantido</span>
-                  </li>
+                  {[
+                    "Todos os benefícios do Mensal",
+                    "Consulta mensal por videochamada com especialista (a cada 30 dias / 4 semanas)",
+                    "Menor valor mensal garantido"
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
+
+                <div className="mt-3.5 p-3 rounded-2xl bg-[#F4F9F5] border border-[#3D5A45]/15 text-xs text-slate-700 font-medium leading-snug">
+                  👑 <strong>Diferencial VIP:</strong> Acompanhamento VIP com consultas mensais por vídeo e suporte contínuo por 12 meses.
+                </div>
               </div>
 
               <div className="pt-6">
@@ -814,8 +813,11 @@ export default function PaginaInicialLanding() {
                 <MessageCircle className="h-3.5 w-3.5" />
                 <span>WhatsApp: (41) 98492-6020</span>
               </a>
-              <Link href="/configuracoes?aba=seguranca" className="hover:text-[#4C6C54] transition-colors">
-                Privacidade & LGPD
+              <Link href="/privacidade" className="hover:text-[#4C6C54] transition-colors">
+                Política de Privacidade (LGPD)
+              </Link>
+              <Link href="/termos" className="hover:text-[#4C6C54] transition-colors">
+                Termos de Uso & Garantia
               </Link>
             </div>
           </div>

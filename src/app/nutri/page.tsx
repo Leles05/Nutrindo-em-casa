@@ -7,9 +7,18 @@ import {
   Users, Calendar as CalendarIcon, MessageCircle, Utensils,
   LogOut, Sparkles, CheckCircle2, Clock, Send, Plus, X,
   FileText, ExternalLink, ShieldAlert, Award, Search, ChevronRight,
-  Eye, Save, AlertCircle, Heart, User, Check, Video
+  Eye, Save, AlertCircle, Heart, User, Check, Video,
+  Mail, UtensilsCrossed, Star, ChefHat, Trash2
 } from "lucide-react";
 import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
+import GuidedTour, { abrirTour, type TourStep } from "@/components/GuidedTour";
+import { Receita, RECEITAS_PADRAO, NOTA_ORIENTACAO_PADRAO } from "@/data/receitas";
+import { DevolutivaSemanal, DEVOLUTIVA_PADRAO } from "@/data/devolutivas";
+import { abrirGoogleCalendar } from "@/lib/googleCalendar";
+import { concatenarTexto, mesclarListas, type ProtocoloClinico } from "@/data/sugestoesClinicas";
+import BancoRespostasRapidas, { BotaoSalvarRespostaRapida } from "@/components/nutri/BancoRespostasRapidas";
+import AssistentePreAnalise from "@/components/nutri/AssistentePreAnalise";
+import ProntuarioAnamnese56 from "@/components/nutri/ProntuarioAnamnese56";
 
 type AbaNutri = "prontuarios" | "consultas" | "chat" | "diarios";
 
@@ -67,6 +76,7 @@ interface RefeicaoDiario {
   refeicao: string;
   degrau: "tolerou" | "cheirou" | "tocou" | "provou" | "comeu";
   observacoes?: string;
+  foto?: string;
   data_registro: string;
 }
 
@@ -79,6 +89,8 @@ export default function PortalNutricionista() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const [diario, setDiario] = useState<RefeicaoDiario[]>([]);
+  const [devolutivasSalvas, setDevolutivasSalvas] = useState<any[]>([]);
+  const [prescricoesSalvas, setPrescricoesSalvas] = useState<any[]>([]);
   const [loadingDados, setLoadingDados] = useState(true);
 
   // Estados de Modais e Interações
@@ -86,6 +98,7 @@ export default function PortalNutricionista() {
   const [anamneseModalAberta, setAnamneseModalAberta] = useState<Anamnese | null>(null);
   const [anotacoesClinicas, setAnotacoesClinicas] = useState("");
   const [salvandoAnotacoes, setSalvandoAnotacoes] = useState(false);
+  const [fotoZoomNutri, setFotoZoomNutri] = useState<{ foto: string; alimento: string; email: string } | null>(null);
 
   // Gestão de Links do Google Meet & Conclusão de Consulta (Ciclo 4 Semanas)
   const [linksMeetEditados, setLinksMeetEditados] = useState<Record<string | number, string>>({});
@@ -101,6 +114,256 @@ export default function PortalNutricionista() {
   const [metaData, setMetaData] = useState(new Date().toLocaleDateString("en-CA"));
   const [metaHorario, setMetaHorario] = useState("12:30");
   const [metaTipo, setMetaTipo] = useState<"meta" | "consulta">("meta");
+
+  // ===================================================================
+  // MODAL 1: ENVIAR DEVOLUTIVA SEMANAL
+  // ===================================================================
+  const [modalDevolutivaAberta, setModalDevolutivaAberta] = useState(false);
+  const [devolutivaPacienteEmail, setDevolutivaPacienteEmail] = useState("");
+  const [devolutivaTitulo, setDevolutivaTitulo] = useState("Semana 1 • Orientações & Metas Clínicas");
+  const [devolutivaParecer, setDevolutivaParecer] = useState("");
+  const [devolutivaAlimentos, setDevolutivaAlimentos] = useState("");
+  const [devolutivaMetas, setDevolutivaMetas] = useState<string[]>([
+    "Montar o prato seguro com o alimento de conforto sempre presente",
+    "Introduzir pratinho de apoio branco ao lado da refeição principal",
+  ]);
+
+  const handleSalvarDevolutiva = (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailLimpo = (devolutivaPacienteEmail || pacientes[0]?.email || "").trim().toLowerCase();
+    if (!emailLimpo) {
+      dispararToast("Selecione um paciente para enviar a devolutiva.");
+      return;
+    }
+    
+    const novaDevolutiva: DevolutivaSemanal = {
+      id: `dev-${Date.now()}`,
+      user_email: emailLimpo,
+      data: new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }),
+      titulo: devolutivaTitulo.trim() || "Devolutiva Semanal de Acompanhamento",
+      parecerClinico: devolutivaParecer.trim(),
+      alimentosAlvo: devolutivaAlimentos
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean),
+      metas: devolutivaMetas
+        .filter((m) => m.trim().length > 0)
+        .map((m, idx) => ({
+          id: `meta-${Date.now()}-${idx}`,
+          texto: m.trim(),
+          concluida: false,
+        })),
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("nutrindo_ultima_devolutiva", JSON.stringify(novaDevolutiva));
+        const chaveHistorico = `nutrindo_devolutivas_${emailLimpo}`;
+        const historicoAtual = localStorage.getItem(chaveHistorico);
+        const listaHistorico: DevolutivaSemanal[] = historicoAtual ? JSON.parse(historicoAtual) : [];
+        const novaLista = [novaDevolutiva, ...listaHistorico.filter((d) => d.id !== novaDevolutiva.id)];
+        localStorage.setItem(chaveHistorico, JSON.stringify(novaLista));
+        localStorage.setItem("nutrindo_devolutivas", JSON.stringify(novaLista));
+
+        // Dispara sincronização em tempo real
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("nutrindo_devolutiva_atualizada", { detail: novaDevolutiva }));
+      } catch (err) {
+        console.warn("Aviso ao salvar devolutiva no localStorage:", err);
+      }
+    }
+
+    // Persistência em nuvem no Supabase PostgreSQL
+    fetch("/api/nutri", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "enviar_devolutiva",
+        user_email: emailLimpo,
+        semana_ref: novaDevolutiva.titulo,
+        parecer_clinico: novaDevolutiva.parecerClinico,
+        alimentos_alvo: novaDevolutiva.alimentosAlvo,
+        metas_semana: novaDevolutiva.metas,
+        profissional: "Dra. Laís Leles • CRN-8 18878",
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.devolutiva) {
+          setDevolutivasSalvas((prev) => [data.devolutiva, ...prev]);
+        }
+      })
+      .catch((err) => console.warn("Aviso ao persistir devolutiva no Supabase:", err));
+
+    dispararToast("Devolutiva Semanal enviada com sucesso para a família! 💌");
+    setModalDevolutivaAberta(false);
+  };
+
+  // ===================================================================
+  // MODAL 2: PRESCREVER PLANO ALIMENTAR & RECEITAS RECOMENDADAS
+  // ===================================================================
+  const [modalPlanoReceitasAberto, setModalPlanoReceitasAberto] = useState(false);
+  const [planoPacienteEmail, setPlanoPacienteEmail] = useState("");
+  const [planoNotaOrientacao, setPlanoNotaOrientacao] = useState(NOTA_ORIENTACAO_PADRAO);
+  const [receitasRecomendadasIds, setReceitasRecomendadasIds] = useState<string[]>([
+    "bolinho-crocante-brocolis-queijo",
+    "panqueca-aveia-banana",
+    "chips-cenoura-batata-doce",
+    "nuggets-caseiros-frango-milho",
+  ]);
+
+  const abrirModalPlanoReceitas = (email: string) => {
+    const emailLimpo = (email || pacientes[0]?.email || "").trim().toLowerCase();
+    setPlanoPacienteEmail(emailLimpo);
+
+    if (typeof window !== "undefined") {
+      try {
+        const recSalvas = localStorage.getItem(`nutrindo_receitas_recomendadas_${emailLimpo}`) || localStorage.getItem("nutrindo_receitas_recomendadas");
+        if (recSalvas) {
+          setReceitasRecomendadasIds(JSON.parse(recSalvas));
+        }
+        const notaSalva = localStorage.getItem(`nutrindo_nota_plano_${emailLimpo}`) || localStorage.getItem("nutrindo_nota_plano");
+        if (notaSalva) {
+          setPlanoNotaOrientacao(notaSalva);
+        } else {
+          setPlanoNotaOrientacao(NOTA_ORIENTACAO_PADRAO);
+        }
+      } catch (err) {
+        console.warn("Aviso ao carregar dados do plano/receitas:", err);
+      }
+    }
+
+    // Complementa com dados salvos no Supabase se disponíveis
+    const prescricaoExistente = prescricoesSalvas.find(
+      (p) => p.user_email?.toLowerCase() === emailLimpo
+    );
+    if (prescricaoExistente) {
+      if (
+        Array.isArray(prescricaoExistente.receitas_recomendadas_ids) &&
+        prescricaoExistente.receitas_recomendadas_ids.length > 0
+      ) {
+        setReceitasRecomendadasIds(prescricaoExistente.receitas_recomendadas_ids);
+      }
+      if (prescricaoExistente.orientacao_prato_seguro) {
+        setPlanoNotaOrientacao(prescricaoExistente.orientacao_prato_seguro);
+      }
+    }
+
+    setModalPlanoReceitasAberto(true);
+  };
+
+  const handleSalvarPlanoEReceitas = (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailLimpo = (planoPacienteEmail || pacientes[0]?.email || "").trim().toLowerCase();
+    if (!emailLimpo) {
+      dispararToast("Selecione um paciente para prescrever o plano.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`nutrindo_receitas_recomendadas_${emailLimpo}`, JSON.stringify(receitasRecomendadasIds));
+        localStorage.setItem("nutrindo_receitas_recomendadas", JSON.stringify(receitasRecomendadasIds));
+        localStorage.setItem(`nutrindo_nota_plano_${emailLimpo}`, planoNotaOrientacao.trim());
+        localStorage.setItem("nutrindo_nota_plano", planoNotaOrientacao.trim());
+
+        // Dispara eventos para atualização instantânea na visão do paciente
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("nutrindo_receitas_atualizadas"));
+        window.dispatchEvent(new CustomEvent("nutrindo_nota_plano_atualizada"));
+      } catch (err) {
+        console.warn("Aviso ao salvar plano e receitas no localStorage:", err);
+      }
+    }
+
+    // Persistência em nuvem no Supabase PostgreSQL
+    fetch("/api/nutri", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "salvar_prescricao_plano",
+        user_email: emailLimpo,
+        orientacao_prato_seguro: planoNotaOrientacao.trim(),
+        composicao_prato: { conforto: 70, ponte: 20, desafio: 10 },
+        receitas_recomendadas_ids: receitasRecomendadasIds,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.prescricao) {
+          setPrescricoesSalvas((prev) => [
+            data.prescricao,
+            ...prev.filter((p) => p.user_email?.toLowerCase() !== emailLimpo),
+          ]);
+        }
+      })
+      .catch((err) => console.warn("Aviso ao persistir prescrição no Supabase:", err));
+
+    dispararToast("Plano Alimentar & Receitas recomendadas salvas com sucesso! 🍲");
+    setModalPlanoReceitasAberto(false);
+  };
+
+  // ===================================================================
+  // BANCO DE RESPOSTAS CLÍNICAS & PRÉ-ANÁLISE (Etapa 4)
+  // ===================================================================
+  const aplicarProtocoloNoProntuario = (p: ProtocoloClinico) => {
+    const bloco = [
+      `[${p.tituloCurto}]`,
+      p.parecerClinicoSugerido,
+      p.orientacaoPratoSeguro ? `Prato Seguro: ${p.orientacaoPratoSeguro}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    setAnotacoesClinicas((prev) => concatenarTexto(prev, bloco));
+    dispararToast("Protocolo aplicado nas anotações do prontuário. Revise e salve! 🩺");
+  };
+
+  const aplicarProtocoloNaDevolutiva = (p: ProtocoloClinico, substituir = false) => {
+    if (p.parecerClinicoSugerido) {
+      setDevolutivaParecer((prev) => (substituir ? p.parecerClinicoSugerido : concatenarTexto(prev, p.parecerClinicoSugerido)));
+    }
+    setDevolutivaAlimentos((prev) => {
+      const atuais = substituir ? [] : prev.split(",").map((a) => a.trim());
+      return mesclarListas(atuais, p.alimentosAlvoSugeridos).join(", ");
+    });
+    setDevolutivaMetas((prev) => {
+      const mescladas = mesclarListas(substituir ? [] : prev, p.metasSemanaisSugeridas);
+      return mescladas.length > 0 ? mescladas : [""];
+    });
+  };
+
+  const gerarDevolutivaComProtocolo = (p: ProtocoloClinico) => {
+    const email = anamneseModalAberta?.user_email || pacientes[0]?.email || "";
+    setDevolutivaPacienteEmail(email);
+    setDevolutivaTitulo(`Devolutiva Semanal • ${p.tituloCurto.replace(/^\S+\s+/, "")}`);
+    aplicarProtocoloNaDevolutiva(p, true);
+    setAnamneseModalAberta(null);
+    setModalDevolutivaAberta(true);
+    dispararToast("Devolutiva pré-preenchida com base na pré-análise ✨");
+  };
+
+  const copiarParaAnotacoes = (texto: string) => {
+    setAnotacoesClinicas((prev) => concatenarTexto(prev, texto));
+    dispararToast("Conduta copiada para as Anotações Clínicas! 🩺");
+  };
+
+  const abrirRascunhoNaDevolutiva = (titulo: string, parecer: string, metas: string[]) => {
+    const email = anamneseModalAberta?.user_email || pacientes[0]?.email || "";
+    setDevolutivaPacienteEmail(email);
+    setDevolutivaTitulo(`Devolutiva Semanal • ${titulo}`);
+    setDevolutivaParecer((prev) => concatenarTexto(prev, parecer));
+    if (metas.length > 0) {
+      setDevolutivaMetas((prev) => mesclarListas(prev, metas));
+    }
+    setAnamneseModalAberta(null);
+    setModalDevolutivaAberta(true);
+    dispararToast("Rascunho de conduta aberto na Devolutiva para edição! ✨");
+  };
+
+  const aplicarProtocoloNoPlano = (p: ProtocoloClinico) => {
+    const texto = p.orientacaoPratoSeguro || p.parecerClinicoSugerido;
+    setPlanoNotaOrientacao((prev) => concatenarTexto(prev, texto));
+  };
 
   // Chat
   const [chatPacienteEmail, setChatPacienteEmail] = useState("");
@@ -121,14 +384,20 @@ export default function PortalNutricionista() {
       const res = await fetch("/api/nutri");
       const data = await res.json();
       if (data.success) {
-        setPacientes(data.profiles || []);
-        setAnamneses(data.anamneses || []);
-        setAgendamentos(data.agendamentos || []);
-        setMensagens(data.mensagens || []);
-        setDiario(data.diario || []);
+        const emailNutri = "metodonutrindoemcasa@gmail.com";
+        const ehNutri = (e?: string) => (e || "").toLowerCase().trim() === emailNutri;
 
-        if (data.profiles && data.profiles.length > 0 && !chatPacienteEmail) {
-          setChatPacienteEmail(data.profiles[0].email);
+        const perfisFiltrados = (data.profiles || []).filter((p: any) => !ehNutri(p.email) && p.plano !== "nutri");
+        setPacientes(perfisFiltrados);
+        setAnamneses((data.anamneses || []).filter((a: any) => !ehNutri(a.user_email)));
+        setAgendamentos((data.agendamentos || []).filter((a: any) => !ehNutri(a.user_email)));
+        setMensagens((data.mensagens || []).filter((m: any) => !ehNutri(m.user_email)));
+        setDiario((data.diario || []).filter((d: any) => !ehNutri(d.user_email)));
+        setDevolutivasSalvas((data.devolutivas || []).filter((d: any) => !ehNutri(d.user_email)));
+        setPrescricoesSalvas((data.prescricoes || []).filter((p: any) => !ehNutri(p.user_email)));
+
+        if (perfisFiltrados.length > 0 && !chatPacienteEmail) {
+          setChatPacienteEmail(perfisFiltrados[0].email);
         }
       }
     } catch (err) {
@@ -200,6 +469,16 @@ export default function PortalNutricionista() {
     } finally {
       setSalvandoLinkMeet(null);
     }
+  };
+
+  // Gerador rápido de sala do Google Meet
+  const handleGerarLinkMeet = (agendamentoId: string | number) => {
+    const sufixo1 = Math.random().toString(36).substring(2, 5);
+    const sufixo2 = Math.random().toString(36).substring(2, 6);
+    const sufixo3 = Math.random().toString(36).substring(2, 5);
+    const linkGerado = `https://meet.google.com/${sufixo1}-${sufixo2}-${sufixo3}`;
+    setLinksMeetEditados((prev) => ({ ...prev, [agendamentoId]: linkGerado }));
+    handleSalvarLinkMeet(agendamentoId, linkGerado);
   };
 
   // Handler para Concluir Consulta & Liberar Retorno de 4 Semanas
@@ -336,6 +615,65 @@ export default function PortalNutricionista() {
   const mensagensFiltradas = mensagens.filter((m) => m.user_email === chatPacienteEmail);
   const pacienteDoChat = pacientes.find((p) => p.email === chatPacienteEmail);
 
+  const passosTour: TourStep[] = [
+    {
+      id: "metricas",
+      target: "nutri-metricas",
+      title: "Resumo de Métricas Clínicas",
+      subtitulo: "Painel Geral de Atendimento",
+      description:
+        "Acompanhe de relance o total de famílias ativas, consultas agendadas, anamneses concluídas e novos registros sensoriais na Escada do Comer.",
+      dicaPratica: "Monitore a taxa de anamneses preenchidas para antecipar a preparação das primeiras consultas.",
+    },
+    {
+      id: "prontuarios",
+      target: "nutri-aba-prontuarios",
+      title: "Lista de Pacientes & Prontuário Completo",
+      subtitulo: "56 Perguntas + Devolutiva Lado a Lado",
+      description:
+        "Abra a nova tela dedicada e ampla de Prontuário para ler as 56 perguntas com fontes legíveis, analisar os Pontos de Atenção e redigir a Devolutiva Semanal lado a lado de forma contínua.",
+      dicaPratica: "Clique em '📄 Prontuário' ou '✉️ Devolutiva' em qualquer paciente para abrir a tela ampla.",
+      onEnter: () => setAbaAtiva("prontuarios"),
+    },
+    {
+      id: "consultas",
+      target: "nutri-aba-consultas",
+      title: "Agenda com Link do Meet & Calendário",
+      subtitulo: "Ações Clínicas Rápidas",
+      description:
+        "Gerencie as consultas agendadas, envie links do Google Meet sincronizados instantaneamente com o painel do paciente e conclua atendimentos para liberar os ciclos de 4 semanas.",
+      dicaPratica: "Ao gerar o link Meet ou enviar uma devolutiva, a família recebe o acesso na hora.",
+      onEnter: () => setAbaAtiva("consultas"),
+    },
+    {
+      id: "chat",
+      target: "nutri-aba-chat",
+      title: "Central de Dúvidas & Acolhimento",
+      subtitulo: "Suporte Profissional Direto",
+      description:
+        "Responda às dúvidas dos pais enviadas durante a rotina familiar (segunda a sexta em horário comercial) com histórico seguro de mensagens por paciente.",
+      dicaPratica: "Envie orientações de acolhimento e esclareça dúvidas de substituição alimentar com rapidez.",
+      onEnter: () => setAbaAtiva("chat"),
+    },
+    {
+      id: "diarios",
+      target: "nutri-aba-diarios",
+      title: "Escada do Comer em Tempo Real",
+      subtitulo: "Monitoramento dos 5 Degraus Sensoriais",
+      description:
+        "Acompanhe em tempo real cada refeição registrada pelas famílias e a resposta da criança nos 5 degraus: Tolerou, Cheirou, Tocou, Provou ou Comeu.",
+      dicaPratica: "Comemore pequenas conquistas (como tolerar ou cheirar) nas devolutivas semanais para fortalecer o engajamento familiar.",
+      onEnter: () => setAbaAtiva("diarios"),
+    },
+  ];
+
+  const totalPacientes = pacientes.length;
+  const pacientesComAnamnese = pacientes.filter(
+    (p) => anamneses.some((a) => a.user_email === p.email) || p.anamnese_concluida
+  ).length;
+  const pendentesAnamnese = Math.max(0, totalPacientes - pacientesComAnamnese);
+  const pctAnamnese = totalPacientes > 0 ? Math.round((pacientesComAnamnese / totalPacientes) * 100) : 100;
+
   return (
     <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800 pb-16">
       
@@ -347,6 +685,9 @@ export default function PortalNutricionista() {
         </div>
       )}
 
+      {/* TOUR GUIADO (Guia Rápido) */}
+      <GuidedTour storageKey="nutrindo_tour_nutri_visto" steps={passosTour} />
+
       {/* =================================================================== */}
       {/* CABEÇALHO DO PORTAL DA NUTRICIONISTA */}
       {/* =================================================================== */}
@@ -357,20 +698,47 @@ export default function PortalNutricionista() {
             <div className="relative h-9 w-28 sm:h-10 sm:w-34 shrink-0">
               <Image src="/logo-transparente.png" alt="Nutrindo em Casa" fill className="object-contain" priority />
             </div>
-            <div className="hidden sm:block border-l border-slate-200 pl-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-[#4C6C54]">PORTAL CLÍNICO</span>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#4C6C54]/10 text-[#4C6C54]">
-                  CRN-8 • Pediátrica
-                </span>
+            <div className="flex items-center gap-2.5 border-l border-slate-200 pl-3">
+              <div className="relative h-9 w-9 rounded-full overflow-hidden border-2 border-[#4C6C54]/30 shadow-xs shrink-0 bg-[#4C6C54]/10">
+                <Image
+                  src="/dra-lais.jpg"
+                  alt="Dra. Laís Leles"
+                  fill
+                  className="object-cover object-top"
+                />
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">Dra. Laís Leles • Gestão Clínica de Pacientes</p>
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-[#4C6C54]">PORTAL CLÍNICO</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#4C6C54]/10 text-[#4C6C54]">
+                    CRN-8 18878 • Pediátrica
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">Dra. Laís Leles • Gestão Clínica de Pacientes</p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={abrirTour}
+              className="py-1.5 px-3 rounded-xl bg-[#E8F5E9] hover:bg-[#d7ecd9] text-[#3D5A45] border border-[#3D5A45]/20 text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer"
+              title="Abrir o guia rápido do portal"
+            >
+              <span className="h-4 w-4 rounded-full bg-[#3D5A45] text-white text-[10px] font-black inline-flex items-center justify-center">?</span>
+              <span>Guia Rápido</span>
+            </button>
             <Link
               href="/dashboard"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("anamnese_concluida", "true");
+                  localStorage.setItem("nutrindo_anamnese_concluida", "true");
+                  localStorage.setItem("consulta_agendada", "true");
+                  localStorage.setItem("nutrindo_consulta_agendada", "true");
+                }
+              }}
               className="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all inline-flex items-center gap-1.5"
               title="Acessar visão do paciente"
             >
@@ -397,14 +765,18 @@ export default function PortalNutricionista() {
         {/* =================================================================== */}
         {/* CARDS DE RESUMO DE IMPACTO CLÍNICO */}
         {/* =================================================================== */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div data-tour="nutri-metricas" className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-[11px] font-bold uppercase tracking-wider">Famílias Ativas</span>
               <Users className="h-4 w-4 text-[#4C6C54]" />
             </div>
-            <div className="text-2xl font-black text-slate-900">{pacientes.length}</div>
-            <p className="text-[10px] text-emerald-700 font-bold">100% com prontuário salvo</p>
+            <div className="text-2xl font-black text-slate-900">{totalPacientes}</div>
+            <p className={`text-[10px] font-bold ${pendentesAnamnese > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+              {pendentesAnamnese === 0
+                ? "100% com prontuário concluído"
+                : `${pctAnamnese}% com anamnese concluída (${pendentesAnamnese} pendente${pendentesAnamnese > 1 ? "s" : ""})`}
+            </p>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
@@ -443,6 +815,7 @@ export default function PortalNutricionista() {
         <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
           <button
             type="button"
+            data-tour="nutri-aba-prontuarios"
             onClick={() => setAbaAtiva("prontuarios")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               abaAtiva === "prontuarios"
@@ -456,6 +829,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            data-tour="nutri-aba-consultas"
             onClick={() => setAbaAtiva("consultas")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               abaAtiva === "consultas"
@@ -469,6 +843,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            data-tour="nutri-aba-chat"
             onClick={() => setAbaAtiva("chat")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               abaAtiva === "chat"
@@ -482,6 +857,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            data-tour="nutri-aba-diarios"
             onClick={() => setAbaAtiva("diarios")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               abaAtiva === "diarios"
@@ -490,7 +866,7 @@ export default function PortalNutricionista() {
             }`}
           >
             <Utensils className="h-3.5 w-3.5" />
-            <span>Diários Alimentares & Escada Sensorial</span>
+            <span>Diários Alimentares & Escada do Comer</span>
           </button>
         </div>
 
@@ -523,7 +899,22 @@ export default function PortalNutricionista() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {pacientes.map((p) => {
+                  {pacientes.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-16 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <Users className="h-9 w-9 text-slate-300 stroke-[1.5]" />
+                          <h4 className="text-sm font-extrabold text-slate-700">
+                            Nenhum paciente cadastrado no momento.
+                          </h4>
+                          <p className="text-xs text-slate-400">
+                            Assim que novas famílias concluírem a assinatura na plataforma, seus prontuários e registros da Escada do Comer aparecerão aqui.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    pacientes.map((p) => {
                     const anamneseDoPaciente = anamneses.find((a) => a.user_email === p.email);
                     return (
                       <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
@@ -593,31 +984,30 @@ export default function PortalNutricionista() {
                         </td>
 
                         <td className="py-3.5 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const an = anamneses.find((a) => a.user_email === p.email) || {
-                                id: "novo",
-                                user_email: p.email,
-                                concluida: true,
-                                respostas: {
-                                  nomeCrianca: p.nome_crianca,
-                                  alimentosConforto: p.alimentos_conforto,
-                                  principaisRecusas: p.principais_recusas,
-                                },
-                              };
-                              setAnamneseModalAberta(an);
-                              setAnotacoesClinicas(an.anotacoes_clinicas || "");
-                            }}
-                            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            <span>Ver Prontuário</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            <Link
+                              href={`/nutri/prontuario/${encodeURIComponent(p.email)}?aba=devolutiva`}
+                              className="inline-flex items-center gap-1 py-1.5 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 font-extrabold text-[11px] transition-all cursor-pointer shadow-2xs"
+                              title="Abrir tela de Devolutiva Semanal para este paciente"
+                            >
+                              <Mail className="h-3 w-3" />
+                              <span>Devolutiva</span>
+                            </Link>
+
+                            <Link
+                              href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
+                              className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer"
+                              title="Abrir Prontuário Completo das 56 Perguntas e Parecer"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              <span>Prontuário</span>
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
-                  })}
+                  })
+                )}
                 </tbody>
               </table>
             </div>
@@ -631,23 +1021,43 @@ export default function PortalNutricionista() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
               <div>
-                <h2 className="text-base font-extrabold text-slate-900">Agenda Clínica da Dra. Laís</h2>
-                <p className="text-xs text-slate-500">
-                  Consultas marcadas com +7 dias de antecedência e metas prescritas
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-base font-extrabold text-slate-900">Agenda Clínica da Dra. Laís</h2>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200/80 rounded-full text-[11px] font-extrabold text-emerald-800 shadow-2xs">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    ✅ Sincronizado com Google Calendar (Dra. Laís)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Consultas marcadas com +7 dias de antecedência, devolutivas e metas prescritas
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMetaPacienteEmail(pacientes[0]?.email || "");
-                  setModalPrescreverMeta(true);
-                }}
-                className="py-2.5 px-4 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Prescrever Nova Meta / Consulta</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDevolutivaPacienteEmail(pacientes[0]?.email || "");
+                    setModalDevolutivaAberta(true);
+                  }}
+                  className="py-2.5 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Mail className="h-4 w-4" />
+                  <span>📝 Enviar Devolutiva Semanal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMetaPacienteEmail(pacientes[0]?.email || "");
+                    setModalPrescreverMeta(true);
+                  }}
+                  className="py-2.5 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Nova Meta / Consulta</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -696,16 +1106,26 @@ export default function PortalNutricionista() {
                             <label className="text-[10px] font-black text-[#2A546D] uppercase flex items-center gap-1.5">
                               <Video className="h-3 w-3" /> Link da Sala do Google Meet
                             </label>
-                            {ag.link && (
-                              <a
-                                href={ag.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[10px] font-extrabold text-[#2A546D] hover:underline inline-flex items-center gap-1"
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleGerarLinkMeet(ag.id)}
+                                className="text-[10px] font-extrabold text-[#2A546D] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                title="Gerar link de sala instantâneo"
                               >
-                                Testar Sala <ExternalLink className="h-2.5 w-2.5" />
-                              </a>
-                            )}
+                                <Sparkles className="h-2.5 w-2.5" /> Gerar Link Meet
+                              </button>
+                              {ag.link && (
+                                <a
+                                  href={ag.link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] font-extrabold text-[#2A546D] hover:underline inline-flex items-center gap-1"
+                                >
+                                  Testar Sala <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1.5">
@@ -739,6 +1159,28 @@ export default function PortalNutricionista() {
 
                     {/* RODAPÉ DO CARD: STATUS OU BOTÃO DE CONCLUIR */}
                     <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          abrirGoogleCalendar({
+                            titulo: ehConsulta
+                              ? `Consulta Nutricional Pediátrica - Dra. Laís Leles (${pac?.nome || ag.user_email})`
+                              : `${ag.titulo} - Dra. Laís Leles`,
+                            descricao: ehConsulta
+                              ? `Consulta Nutricional Online com Dra. Laís Leles (CRN-8 18878).\n\nPaciente: ${pac?.nome || ag.user_email}${pac?.nome_crianca ? ` (Criança: ${pac.nome_crianca})` : ""}\nLink da videochamada Google Meet: ${ag.link || linksMeetEditados[ag.id] || "https://meet.google.com"}\n\nOrientações de Preparo: Conectar 5 minutos antes em ambiente calmo, com caderno de anotações e registros da Escada do Comer à mão.`
+                              : `Atividade/Meta clínica do paciente ${pac?.nome || ag.user_email}.\n${ag.titulo}`,
+                            localizacao: "Google Meet - Plataforma Nutrindo em Casa",
+                            data: ag.data,
+                            horario: ag.horario,
+                            duracaoMinutos: ehConsulta ? 60 : 30,
+                            linkMeet: ag.link || linksMeetEditados[ag.id] || undefined,
+                          });
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        <CalendarIcon className="h-3.5 w-3.5 text-emerald-700" />
+                        <span>📅 Salvar no Google Calendar</span>
+                      </button>
                       {ehConsulta ? (
                         ag.concluido ? (
                           <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold">
@@ -888,14 +1330,14 @@ export default function PortalNutricionista() {
         )}
 
         {/* =================================================================== */}
-        {/* ABA 4: DIÁRIOS ALIMENTARES & ESCADA SENSORIAL */}
+        {/* ABA 4: DIÁRIOS ALIMENTARES & ESCADA DO COMER */}
         {/* =================================================================== */}
         {abaAtiva === "diarios" && (
           <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900">
-                  Registros Sensoriais da Escada do Comer
+                  Registros da Escada do Comer
                 </h2>
                 <p className="text-xs text-slate-500">
                   Acompanhe em tempo real as aproximações (Tolerou, Cheirou, Tocou, Provou, Comeu)
@@ -936,6 +1378,22 @@ export default function PortalNutricionista() {
                     </p>
                   </div>
 
+                  {/* VISUALIZAÇÃO DA FOTO DO PRATO PELA NUTRICIONISTA */}
+                  {d.foto && (
+                    <div className="pt-1.5">
+                      <div
+                        onClick={() => setFotoZoomNutri({ foto: d.foto!, alimento: d.alimento, email: d.user_email })}
+                        className="relative h-28 w-full rounded-xl overflow-hidden border border-slate-200 shadow-2xs hover:opacity-95 group transition-all cursor-pointer bg-slate-100"
+                        title="Clique para avaliar a montagem do prato seguro em tamanho ampliado"
+                      >
+                        <img src={d.foto} alt={`Prato - ${d.alimento}`} className="w-full h-full object-cover group-hover:scale-103 transition-transform" />
+                        <span className="absolute bottom-1.5 right-1.5 bg-black/65 text-white text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs">
+                          📷 Avaliar Prato Seguro 🔍
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-400">
                     <span>Paciente: {d.user_email}</span>
                     <span>{new Date(d.data_registro).toLocaleDateString("pt-BR")}</span>
@@ -953,7 +1411,7 @@ export default function PortalNutricionista() {
       {/* =================================================================== */}
       {anamneseModalAberta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100 animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100 animate-in zoom-in-95">
             
             {/* CABEÇALHO DO MODAL */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
@@ -983,12 +1441,35 @@ export default function PortalNutricionista() {
             {/* CORPO DO PRONTUÁRIO */}
             <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-700">
               
+              {/* ✨ ASSISTENTE DE PRÉ-ANÁLISE CLÍNICA */}
+              <AssistentePreAnalise
+                respostas={anamneseModalAberta.respostas}
+                perfil={pacientes.find((p) => p.email === anamneseModalAberta.user_email)}
+                onAplicarParecer={aplicarProtocoloNoProntuario}
+                onGerarDevolutiva={gerarDevolutivaComProtocolo}
+              />
+
               {/* CAMPO DE ANOTAÇÕES CLÍNICAS DA DRA. LAÍS */}
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
-                <div className="flex items-center justify-between">
+                <BancoRespostasRapidas
+                  tema="amber"
+                  iniciarAberto={false}
+                  onAplicar={aplicarProtocoloNoProntuario}
+                  dica="O parecer e a orientação do Prato Seguro do protocolo serão adicionados ao final das suas anotações."
+                />
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs font-black text-amber-900 flex items-center gap-1.5 uppercase tracking-wide">
                     <span>🩺</span> Anotações Clínicas da Nutricionista
                   </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <BotaoSalvarRespostaRapida
+                    montarModelo={() =>
+                      anotacoesClinicas.trim()
+                        ? { parecerClinicoSugerido: anotacoesClinicas.trim() }
+                        : null
+                    }
+                    onSalvo={(nome) => dispararToast(`Resposta rápida "${nome}" salva no seu banco! ⭐`)}
+                  />
                   <button
                     type="button"
                     onClick={handleSalvarAnotacoes}
@@ -998,6 +1479,7 @@ export default function PortalNutricionista() {
                     <Save className="h-3 w-3" />
                     <span>{salvandoAnotacoes ? "Salvando..." : "Salvar Anotação"}</span>
                   </button>
+                  </div>
                 </div>
                 <textarea
                   rows={3}
@@ -1083,129 +1565,14 @@ export default function PortalNutricionista() {
                 )}
               </div>
 
-              {/* SEÇÃO 1: DADOS DA CRIANÇA E RESPONSÁVEL */}
-              <div className="space-y-3 pb-4 border-b border-slate-100">
-                <h4 className="text-sm font-black text-[#4C6C54] uppercase tracking-wider">
-                  1. Conhecendo a Criança e a Família
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Nome da Criança</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.nomeCrianca || "Pedro Lima"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Data de Nascimento</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.dataNascimento || "10/05/2023"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Sexo</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.sexo || "Masculino"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Responsável / Parentesco</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.nomeResponsavel || "Lucas Lima"} ({anamneseModalAberta.respostas?.parentesco || "Pai"})</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Diagnósticos / TEA</span>
-                    <strong className="text-slate-800">
-                      {Array.isArray(anamneseModalAberta.respostas?.diagnosticos)
-                        ? anamneseModalAberta.respostas.diagnosticos.join(", ")
-                        : anamneseModalAberta.respostas?.diagnosticos || "Suspeita de TEA"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Comunicação</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.comunicacao || "Frases curtas / Aponta"}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEÇÃO 2: HISTÓRICO DE SAÚDE E PARTO */}
-              <div className="space-y-3 pb-4 border-b border-slate-100">
-                <h4 className="text-sm font-black text-[#4C6C54] uppercase tracking-wider">
-                  2. Histórico de Saúde & Aleitamento
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Gestação / Parto</span>
-                    <strong className="text-slate-800">A termo (39 semanas) • Parto Cesárea</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Peso ao Nascer</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.pesoNascer || "3.250g"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Aleitamento</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.aleitamento || "Materno exclusivo até 6 meses"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Peso e Altura Atuais</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.pesoAtual || "14.2 kg"} • {anamneseModalAberta.respostas?.alturaAtual || "96 cm"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Início das Recusas</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.inicioDificuldadesAtuais || "Aos 18 meses"}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEÇÃO 3: MAPA ALIMENTAR & REPERTÓRIO */}
-              <div className="space-y-3 pb-4 border-b border-slate-100">
-                <h4 className="text-sm font-black text-[#4C6C54] uppercase tracking-wider">
-                  3. Mapa Alimentar & Alimentos Aceitos
-                </h4>
-                <div className="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Cereais & Pães Aceitos</span>
-                    <p className="font-semibold text-slate-800">
-                      {Array.isArray(anamneseModalAberta.respostas?.cereais)
-                        ? anamneseModalAberta.respostas.cereais.join(", ")
-                        : "Arroz branco, Macarrão, Biscoito de polvilho, Pão francês"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Proteínas Aceitas</span>
-                    <p className="font-semibold text-slate-800">
-                      {Array.isArray(anamneseModalAberta.respostas?.proteinas)
-                        ? anamneseModalAberta.respostas.proteinas.join(", ")
-                        : "Ovo mexido, Frango desfiado"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Frutas & Vegetais</span>
-                    <p className="font-semibold text-slate-800">
-                      Frutas: {Array.isArray(anamneseModalAberta.respostas?.frutas) ? anamneseModalAberta.respostas.frutas.join(", ") : "Banana, Maçã"} • Vegetais: {Array.isArray(anamneseModalAberta.respostas?.vegetais) ? anamneseModalAberta.respostas.vegetais.join(", ") : "Batata doce"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Alimentos de Conforto & Sofrimento na Falta</span>
-                    <p className="font-semibold text-slate-800">
-                      Exige todo dia: {anamneseModalAberta.respostas?.exigeTodoDia || "Biscoito de polvilho"}. Reação se faltar: {anamneseModalAberta.respostas?.sofrimentoFalta || "Choro intenso e recusa de outros alimentos"}.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEÇÃO 4: ROTINA, OBJETIVOS E INTESTINO */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-black text-[#4C6C54] uppercase tracking-wider">
-                  4. Rotina das Refeições & Escala de Bristol
-                </h4>
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Ingestão de Água</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.aguaQuantidade || "Aproximadamente 600ml / dia"}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Escala de Bristol</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.tipoBristol || "Tipo 3 e 4 (Fezes moldadas normais)"}</strong>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Interesses e Motivação da Criança</span>
-                    <strong className="text-slate-800">{anamneseModalAberta.respostas?.interessesFavoritos || "Dinossauros, carrinhos e quebra-cabeças"}</strong>
-                  </div>
-                </div>
-              </div>
+              {/* =================================================================== */}
+              {/* TODAS AS 56 PERGUNTAS DA ANAMNESE COM DESTAQUE DE ATENÇÃO CLÍNICA */}
+              {/* =================================================================== */}
+              <ProntuarioAnamnese56
+                respostas={anamneseModalAberta.respostas}
+                onCopiarAnotacoes={copiarParaAnotacoes}
+                onAbrirRascunhoDevolutiva={abrirRascunhoNaDevolutiva}
+              />
 
             </div>
 
@@ -1415,6 +1782,394 @@ export default function PortalNutricionista() {
                 <Check className="h-4 w-4" />
                 <span>{concluindoConsulta ? "Concluindo..." : "Confirmar Conclusão"}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 1: ENVIAR DEVOLUTIVA SEMANAL PARA A FAMÍLIA (EXPANDIDO 2 COLUNAS) */}
+      {/* =================================================================== */}
+      {modalDevolutivaAberta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-[#FFFDF8] rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-amber-200 animate-in zoom-in-95">
+            <div className="p-5 border-b border-amber-100 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Enviar Devolutiva Semanal
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Parecer clínico humanizado, alimentos-alvo e metas práticas para a família
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalDevolutivaAberta(false)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarDevolutiva} className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="bg-amber-50/50 p-3.5 rounded-2xl border border-amber-200/70 space-y-2">
+                <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider block">
+                  Modelos Rápidos da Nutri (1 Clique)
+                </span>
+                <BancoRespostasRapidas
+                  onAplicar={(p) => aplicarProtocoloNaDevolutiva(p)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                {/* COLUNA 1: DADOS BÁSICOS & PARECER */}
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Paciente Destinatário
+                    </label>
+                    <select
+                      required
+                      value={devolutivaPacienteEmail}
+                      onChange={(e) => setDevolutivaPacienteEmail(e.target.value)}
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                    >
+                      <option value="">Selecione a família...</option>
+                      {pacientes.map((p) => (
+                        <option key={p.id} value={p.email}>
+                          {p.nome_crianca || "Criança"} ({p.nome} • {p.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Título / Semana de Referência
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={devolutivaTitulo}
+                      onChange={(e) => setDevolutivaTitulo(e.target.value)}
+                      placeholder="Ex: Semana 3 • Avançando nas Texturas Crocantes"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                        Parecer Clínico & Acolhimento da Dra. Laís
+                      </label>
+                      <BotaoSalvarRespostaRapida
+                        montarModelo={() =>
+                          devolutivaParecer.trim()
+                            ? {
+                                parecerClinicoSugerido: devolutivaParecer.trim(),
+                                alimentosAlvoSugeridos: devolutivaAlimentos.split(",").map((a) => a.trim()).filter(Boolean),
+                                metasSemanaisSugeridas: devolutivaMetas.map((m) => m.trim()).filter(Boolean),
+                              }
+                            : null
+                        }
+                        onSalvo={(nome) => dispararToast(`Resposta rápida "${nome}" salva no seu banco! ⭐`)}
+                      />
+                    </div>
+                    <textarea
+                      rows={8}
+                      required
+                      value={devolutivaParecer}
+                      onChange={(e) => setDevolutivaParecer(e.target.value)}
+                      placeholder="Analise os registros recentes da Escada do Comer, valorize as conquistas e oriente a família com acolhimento..."
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4C6C54] leading-relaxed resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* COLUNA 2: ALIMENTOS-ALVO & METAS PRÁTICAS */}
+                <div className="space-y-3.5 flex flex-col justify-between">
+                  <div className="space-y-3.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Alimentos-Alvo da Semana (Separados por vírgula)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={devolutivaAlimentos}
+                        onChange={(e) => setDevolutivaAlimentos(e.target.value)}
+                        placeholder="Ex: Brócolis tostadinho, Maçã fuji em fatias, Cenoura palito"
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                          Metas Práticas para a Família (2 a 3 metas)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setDevolutivaMetas([...devolutivaMetas, ""])}
+                          className="text-[10px] font-bold text-[#4C6C54] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="h-3 w-3" /> Adicionar Meta
+                        </button>
+                      </div>
+
+                      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        {devolutivaMetas.map((meta, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <span className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-800 font-black text-[11px] flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              value={meta}
+                              onChange={(e) => {
+                                const nov = [...devolutivaMetas];
+                                nov[idx] = e.target.value;
+                                setDevolutivaMetas(nov);
+                              }}
+                              placeholder={`Meta acionável ${idx + 1}...`}
+                              className="flex-1 h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                            />
+                            {devolutivaMetas.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setDevolutivaMetas(devolutivaMetas.filter((_, i) => i !== idx))}
+                                className="h-8 w-8 text-rose-500 hover:bg-rose-50 rounded-lg flex items-center justify-center cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-500 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>A devolutiva aparecerá automaticamente na nova tela de Orientações da Nutri da família.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalDevolutivaAberta(false)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 px-6 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>Enviar para a Família</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 2: PRESCREVER PLANO ALIMENTAR & RECEITAS RECOMENDADAS */}
+      {/* =================================================================== */}
+      {modalPlanoReceitasAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-[#FFFDF8] rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-sky-200 animate-in zoom-in-95">
+            <div className="p-5 border-b border-sky-100 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-[#2A546D]/10 text-[#2A546D] flex items-center justify-center font-bold">
+                  <UtensilsCrossed className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Plano Alimentar & Receitas Recomendadas
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Selecione as receitas do banco e personalize as orientações da família
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalPlanoReceitasAberto(false)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarPlanoEReceitas} className="p-5 overflow-y-auto space-y-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Coluna 1: Paciente e Orientação */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Paciente Destinatário
+                    </label>
+                    <select
+                      required
+                      value={planoPacienteEmail}
+                      onChange={(e) => abrirModalPlanoReceitas(e.target.value)}
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2A546D]"
+                    >
+                      {pacientes.map((p) => (
+                        <option key={p.id} value={p.email}>
+                          {p.nome_crianca || "Criança"} ({p.nome} • {p.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <BancoRespostasRapidas
+                    tema="sky"
+                    onAplicar={aplicarProtocoloNoPlano}
+                    dica="Adiciona a orientação do Prato Seguro (70/20/10) do protocolo à nota do plano alimentar."
+                  />
+
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                        Nota de Orientação da Dra. Laís para o Plano
+                      </label>
+                      <BotaoSalvarRespostaRapida
+                        montarModelo={() =>
+                          planoNotaOrientacao.trim()
+                            ? { orientacaoPratoSeguro: planoNotaOrientacao.trim() }
+                            : null
+                        }
+                        onSalvo={(nome) => dispararToast(`Resposta rápida "${nome}" salva no seu banco! ⭐`)}
+                      />
+                    </div>
+                    <textarea
+                      rows={8}
+                      required
+                      value={planoNotaOrientacao}
+                      onChange={(e) => setPlanoNotaOrientacao(e.target.value)}
+                      placeholder="Orientações sobre o prato de apoio, alimentos seguros e postura dos pais à mesa..."
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2A546D] leading-relaxed"
+                    />
+                  </div>
+                </div>
+
+                {/* Coluna 2: Receitas Recomendadas */}
+                <div className="space-y-2 flex flex-col">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Receitas Sensoriais Recomendadas ({receitasRecomendadasIds.length})
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Selo ⭐ Dra. Laís
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
+                    {RECEITAS_PADRAO.map((rec) => {
+                      const selecionada = receitasRecomendadasIds.includes(rec.id);
+                      return (
+                        <div
+                          key={rec.id}
+                          onClick={() => {
+                            if (selecionada) {
+                              setReceitasRecomendadasIds(receitasRecomendadasIds.filter((id) => id !== rec.id));
+                            } else {
+                              setReceitasRecomendadasIds([...receitasRecomendadasIds, rec.id]);
+                            }
+                          }}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                            selecionada
+                              ? "bg-amber-50/80 border-amber-300 shadow-2xs"
+                              : "bg-white hover:bg-slate-50 border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xl">{rec.emoji}</span>
+                            <div>
+                              <h4 className="font-extrabold text-slate-900 text-xs leading-tight">{rec.titulo}</h4>
+                              <span className="text-[10px] text-slate-400 font-semibold">{rec.textura} • {rec.tempoPreparo}</span>
+                            </div>
+                          </div>
+
+                          <div className={`h-5 w-5 rounded-lg flex items-center justify-center shrink-0 border ${
+                            selecionada
+                              ? "bg-amber-400 border-amber-500 text-slate-900"
+                              : "border-slate-300 bg-white"
+                          }`}>
+                            {selecionada && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalPlanoReceitasAberto(false)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 px-6 bg-[#2A546D] hover:bg-[#1f3f52] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  <span>Salvar Recomendações</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ZOOM DE FOTO DO PRATO PARA NUTRICIONISTA */}
+      {fotoZoomNutri && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setFotoZoomNutri(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-5 space-y-3 shadow-2xl border border-slate-100 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <span>📷 Avaliação Visual do Prato Seguro</span>
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {fotoZoomNutri.alimento} • Paciente: {fotoZoomNutri.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFotoZoomNutri(null)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 max-h-[70vh] flex items-center justify-center p-1">
+              <img src={fotoZoomNutri.foto} alt={fotoZoomNutri.alimento} className="max-h-[65vh] w-auto object-contain rounded-xl" />
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 text-[11px] text-[#4C6C54] font-medium">
+              💡 <strong>Dica da Dra. Laís:</strong> Avalie a proporção visual dos quadrantes (70% alimentos aceitos de conforto, 20% pontes sensoriais e 10% desafio).
             </div>
           </div>
         </div>

@@ -61,8 +61,7 @@ export function useAuthGuard(): AuthState {
 
     const isNutri =
       roleSalva === "nutri" ||
-      email === "lais@nutrindoemcasa.com.br" ||
-      email === "nutri@nutrindoemcasa.com.br";
+      email === "metodonutrindoemcasa@gmail.com";
 
     // Se for Nutricionista (Dra. Laís):
     if (isNutri) {
@@ -73,6 +72,10 @@ export function useAuthGuard(): AuthState {
       setAvisoVencimento(false);
       setAutenticado(true);
       setCarregando(false);
+      localStorage.setItem("anamnese_concluida", "true");
+      localStorage.setItem("nutrindo_anamnese_concluida", "true");
+      localStorage.setItem("consulta_agendada", "true");
+      localStorage.setItem("nutrindo_consulta_agendada", "true");
       return;
     }
 
@@ -95,6 +98,13 @@ export function useAuthGuard(): AuthState {
 
     setPlanoExpirado(expirado);
     setAvisoVencimento(aviso);
+
+    // Se o plano estiver expirado, permite autenticação para visualizar TelaBloqueioAssinatura e /configuracoes
+    if (expirado) {
+      setAutenticado(true);
+      setCarregando(false);
+      return;
+    }
 
     // 3. Verificação de Regras Obrigatórias de Onboarding para usuários autenticados
     const anamneseConcluida =

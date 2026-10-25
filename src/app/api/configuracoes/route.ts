@@ -37,9 +37,48 @@ export async function GET(request: Request) {
       console.warn("Aviso ao buscar faturas:", faturasErr);
     }
 
+    // 3. Resolve status de onboarding (anamnese_concluida e consulta_agendada) diretamente da fonte da verdade
+    let anamneseConcluida = email === "metodonutrindoemcasa@gmail.com";
+    let consultaAgendada = email === "metodonutrindoemcasa@gmail.com";
+
+    if (profile && !anamneseConcluida) {
+      try {
+        const { data: anamneseRow } = await supabaseAdmin
+          .from("anamneses")
+          .select("concluida")
+          .eq("user_email", email)
+          .maybeSingle();
+
+        if (anamneseRow && anamneseRow.concluida) {
+          anamneseConcluida = true;
+        }
+
+        const { data: agendamentoRows } = await supabaseAdmin
+          .from("agendamentos")
+          .select("id")
+          .eq("user_email", email)
+          .eq("tipo", "consulta")
+          .limit(1);
+
+        if (agendamentoRows && agendamentoRows.length > 0) {
+          consultaAgendada = true;
+        }
+      } catch (flagErr) {
+        console.warn("Aviso ao resolver flags no perfil:", flagErr);
+      }
+    }
+
+    const profileComFlags = profile
+      ? {
+          ...profile,
+          anamnese_concluida: anamneseConcluida,
+          consulta_agendada: consultaAgendada,
+        }
+      : null;
+
     return NextResponse.json({
       success: true,
-      profile: profile || null,
+      profile: profileComFlags,
       faturas: faturas || [],
     });
   } catch (error: unknown) {

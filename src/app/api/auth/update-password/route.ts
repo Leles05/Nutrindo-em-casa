@@ -5,7 +5,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, password } = body;
-    const emailLimpo = String(email || "").trim().toLowerCase();
+    const emailLimpo = String(email || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "")
+      .trim()
+      .toLowerCase();
 
     if (!emailLimpo || !password) {
       return NextResponse.json(
@@ -41,6 +46,7 @@ export async function POST(request: Request) {
             email: emailLimpo,
             password: String(password),
             email_confirm: true,
+            user_metadata: { role: "cliente" },
           });
           if (createErr) {
             console.warn("Aviso ao criar usuário com senha no Supabase Admin:", createErr);

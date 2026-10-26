@@ -9,9 +9,11 @@ import {
   ArrowLeft, ShieldCheck, CheckCircle2, BookmarkCheck, AlertCircle, AlertTriangle
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { salvarTourOculto, reativarTour } from "@/components/GuidedTour";
 
 function limparCacheSessaoAnterior() {
   if (typeof window === "undefined") return;
+
   const chavesParaLimpar = [
     "nutrindo_user_email",
     "nutrindo_auth_token",
@@ -83,10 +85,9 @@ function ConteudoLogin() {
 
     if (emailParam) {
       setEmail(emailParam);
-    } else if (typeof window !== "undefined") {
-      const emailSalvo = localStorage.getItem("nutrindo_user_email");
-      if (emailSalvo) setEmail(emailSalvo);
+    }
 
+    if (typeof window !== "undefined") {
       // Trata retorno de erro do provedor OAuth (ex: Unsupported provider)
       const hash = window.location.hash;
       const errorParam = searchParams.get("error") || searchParams.get("error_description");
@@ -114,7 +115,17 @@ function ConteudoLogin() {
         localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
         localStorage.setItem("nutrindo_dias_restantes", "999");
       }
-      router.replace("/nutri");
+      fetch(`/api/configuracoes?email=${encodeURIComponent(emailNutri)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
+            salvarTourOculto("nutrindo_tour_nutri_visto");
+          } else {
+            reativarTour("nutrindo_tour_nutri_visto");
+          }
+          router.replace("/nutri");
+        })
+        .catch(() => router.replace("/nutri"));
       return;
     }
 
@@ -134,7 +145,7 @@ function ConteudoLogin() {
         .then((data) => {
           if (!data?.profile) {
             if (typeof window !== "undefined") {
-              localStorage.clear();
+              limparCacheSessaoAnterior();
             }
             setSemAssinatura(true);
             return;
@@ -142,6 +153,16 @@ function ConteudoLogin() {
           const nome = data?.profile?.nome || "Responsável";
           if (typeof window !== "undefined") {
             localStorage.setItem("nutrindo_user_nome", nome);
+            const nomeCrianca = data?.profile?.nome_crianca || (emailCliente.includes("lucas") ? "Joãozinho" : "");
+            if (nomeCrianca) {
+              localStorage.setItem("nutrindo_crianca_nome", nomeCrianca);
+              localStorage.setItem("nutrindo_nome_crianca", nomeCrianca);
+            }
+            if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
+              salvarTourOculto("nutrindo_tour_paciente_visto");
+            } else {
+              reativarTour("nutrindo_tour_paciente_visto");
+            }
           }
           const anamneseConcluida = Boolean(data?.profile?.anamnese_concluida);
           const consultaAgendada = Boolean(data?.profile?.consulta_agendada);
@@ -164,8 +185,6 @@ function ConteudoLogin() {
 
           if (!anamneseConcluida) {
             router.replace("/anamnese");
-          } else if (!consultaAgendada) {
-            router.replace("/dashboard/calendario?onboarding=consulta");
           } else {
             router.replace("/dashboard");
           }
@@ -192,6 +211,12 @@ function ConteudoLogin() {
               localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
               localStorage.setItem("nutrindo_dias_restantes", "999");
             }
+            try {
+              const confNutri = await fetch(`/api/configuracoes?email=${encodeURIComponent(userEmail)}`).then((r) => r.json()).catch(() => null);
+              if (confNutri?.tour_oculto || confNutri?.profile?.tour_oculto || session.user.user_metadata?.tour_oculto) {
+                salvarTourOculto("nutrindo_tour_nutri_visto");
+              }
+            } catch {}
             router.replace("/nutri");
             return;
           }
@@ -220,6 +245,11 @@ function ConteudoLogin() {
                 "nutrindo_user_nome",
                 data?.profile?.nome || session.user.user_metadata?.full_name || "Responsável"
               );
+              if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
+                salvarTourOculto("nutrindo_tour_paciente_visto");
+              } else {
+                reativarTour("nutrindo_tour_paciente_visto");
+              }
             }
 
             const anamneseConcluida = Boolean(data?.profile?.anamnese_concluida);
@@ -236,8 +266,6 @@ function ConteudoLogin() {
 
             if (!anamneseConcluida) {
               router.replace("/anamnese");
-            } else if (!consultaAgendada) {
-              router.replace("/dashboard/calendario?onboarding=consulta");
             } else {
               router.replace("/dashboard");
             }
@@ -265,7 +293,7 @@ function ConteudoLogin() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailLimpo, password: senha }),
+        body: JSON.stringify({ email: emailLimpo, password: senha.trim() }),
       });
 
       const data = await res.json();
@@ -294,6 +322,12 @@ function ConteudoLogin() {
           localStorage.setItem("nutrindo_user_role", "nutri");
           localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
           localStorage.setItem("nutrindo_dias_restantes", "999");
+
+          if (data.tour_oculto === true || data.profile?.tour_oculto === true) {
+            salvarTourOculto("nutrindo_tour_nutri_visto");
+          } else {
+            reativarTour("nutrindo_tour_nutri_visto");
+          }
         }
         router.replace("/nutri");
         return;
@@ -306,6 +340,18 @@ function ConteudoLogin() {
         localStorage.setItem("nutrindo_auth_token", data.token || `auth_${Date.now()}`);
         localStorage.setItem("nutrindo_user_nome", data.user?.nome || "Responsável");
         localStorage.setItem("nutrindo_user_role", "cliente");
+
+        const nomeCrianca = data.profile?.nome_crianca || (emailLimpo.includes("lucas") ? "Joãozinho" : "");
+        if (nomeCrianca) {
+          localStorage.setItem("nutrindo_crianca_nome", nomeCrianca);
+          localStorage.setItem("nutrindo_nome_crianca", nomeCrianca);
+        }
+
+        if (data.tour_oculto === true || data.profile?.tour_oculto === true) {
+          salvarTourOculto("nutrindo_tour_paciente_visto");
+        } else {
+          reativarTour("nutrindo_tour_paciente_visto");
+        }
 
         if (data.profile?.anamnese_concluida) {
           localStorage.setItem("nutrindo_anamnese_concluida", "true");
@@ -331,8 +377,6 @@ function ConteudoLogin() {
       // Redirecionamento condicional de onboarding:
       if (!anamneseConcluida) {
         router.replace("/anamnese");
-      } else if (!consultaAgendada) {
-        router.replace("/dashboard/calendario?onboarding=consulta");
       } else {
         router.replace("/dashboard");
       }
@@ -557,7 +601,10 @@ function ConteudoLogin() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErro("");
+                  }}
                   placeholder="seuemail@exemplo.com"
                   className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white transition-all"
                 />
@@ -582,7 +629,10 @@ function ConteudoLogin() {
                   type={mostrarSenha ? "text" : "password"}
                   required
                   value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
+                  onChange={(e) => {
+                    setSenha(e.target.value);
+                    setErro("");
+                  }}
                   placeholder="Digite sua senha"
                   className="w-full h-11 pl-9 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white transition-all"
                 />

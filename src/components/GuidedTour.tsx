@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 export interface TourStep {
   id: string;
@@ -31,9 +32,83 @@ export function abrirTour() {
   }
 }
 
+/** Verificação unificada se o tour deve ser ocultado automaticamente */
+export function isTourOculto(storageKey?: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const ocultoPermanente = localStorage.getItem("nutrindo_tour_oculto_permanente") === "true";
+    const cookieOculto = typeof document !== "undefined" && document.cookie.includes("nutrindo_tour_oculto=true");
+    const desativadoGeral = localStorage.getItem("nutrindo_tour_desativado") === "true";
+
+    if (ocultoPermanente || cookieOculto || desativadoGeral) return true;
+  } catch {}
+  return false;
+}
+
+/** Grava no localStorage, no cookie e no Banco de Dados que o tour está permanentemente oculto */
+export function salvarTourOculto(storageKey?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+    localStorage.setItem("nutrindo_tour_desativado", "true");
+    if (storageKey) {
+      localStorage.setItem(`nutrindo_tour_desativado_${storageKey}`, "true");
+    }
+    document.cookie = "nutrindo_tour_oculto=true; path=/; max-age=31536000; SameSite=Lax";
+
+    // Gravação persistente no Banco de Dados via PUT /api/configuracoes
+    const email =
+      localStorage.getItem("nutrindo_user_email") ||
+      localStorage.getItem("usuario_email") ||
+      (typeof window !== "undefined" && window.location.pathname.startsWith("/nutri")
+        ? "metodonutrindoemcasa@gmail.com"
+        : "");
+    if (email) {
+      fetch("/api/configuracoes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), tour_oculto: true }),
+      }).catch((err) => {
+        console.warn("Aviso ao salvar tour_oculto no backend:", err);
+      });
+    }
+  } catch {}
+}
+
+/** Remove a preferência de ocultação permanente caso o usuário desmarque */
+export function reativarTour(storageKey?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem("nutrindo_tour_oculto_permanente");
+    localStorage.removeItem("nutrindo_tour_desativado");
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(`nutrindo_tour_visto_${storageKey}`);
+      localStorage.removeItem(`nutrindo_tour_desativado_${storageKey}`);
+    }
+    document.cookie = "nutrindo_tour_oculto=; path=/; max-age=0; SameSite=Lax";
+
+    const email =
+      localStorage.getItem("nutrindo_user_email") ||
+      localStorage.getItem("usuario_email") ||
+      (typeof window !== "undefined" && window.location.pathname.startsWith("/nutri")
+        ? "metodonutrindoemcasa@gmail.com"
+        : "");
+    if (email) {
+      fetch("/api/configuracoes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), tour_oculto: false }),
+      }).catch(() => {});
+    }
+  } catch {}
+}
+
 interface Rect {
   top: number;
+  bottom: number;
   left: number;
+  right: number;
   width: number;
   height: number;
 }
@@ -42,13 +117,33 @@ const POPOVER_LARGURA = 380;
 const MARGEM = 12;
 const PADDING_SPOTLIGHT = 6;
 
+/** Localiza o elemento pelo target de forma infalível (#id, id puro, data-tour ou seletor CSS) */
+export function getElementByTarget(alvo?: string): HTMLElement | null {
+  if (!alvo || typeof document === "undefined") return null;
+  const cleanId = alvo.replace(/^[#.]/, "");
+  try {
+    if (alvo.startsWith("#") || alvo.startsWith(".")) {
+      const el = document.querySelector<HTMLElement>(alvo);
+      if (el) return el;
+    }
+    const byId = document.getElementById(cleanId);
+    if (byId) return byId;
+    const byDataTour = document.querySelector<HTMLElement>(`[data-tour="${cleanId}"], [data-tour="${alvo}"]`);
+    if (byDataTour) return byDataTour;
+  } catch {}
+  return null;
+}
+
 export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
   const [aberto, setAberto] = useState(false);
   const [indice, setIndice] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
-  const [alturaPopover, setAlturaPopover] = useState(220);
+  const [alturaPopover, setAlturaPopover] = useState(240);
   const [viewport, setViewport] = useState({ w: 1024, h: 768 });
-  const [naoMostrarNovamente, setNaoMostrarNovamente] = useState(false);
+  const [naoMostrarNovamente, setNaoMostrarNovamente] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isTourOculto(storageKey);
+  });
 
   const popoverRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef(steps);
@@ -64,67 +159,129 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
 
   const fechar = useCallback(() => {
     setAberto(false);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(storageKey, "true");
-      localStorage.setItem(`nutrindo_tour_visto_${storageKey}`, "true");
-      if (naoMostrarNovamente) {
-        localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
-        localStorage.setItem("nutrindo_tour_desativado", "true");
-        localStorage.setItem(`nutrindo_tour_desativado_${storageKey}`, "true");
-      }
-    }
-  }, [storageKey, naoMostrarNovamente]);
+  }, []);
 
-  // Auto-início no primeiro acesso + verificação de ocultação permanente
+  const pular = useCallback(() => {
+    setAberto(false);
+  }, []);
+
+  const concluir = useCallback(() => {
+    setAberto(false);
+  }, []);
+
+  // Auto-início no acesso: abre em 250ms a menos que explicitamente oculto permanente
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (localStorage.getItem("nutrindo_tour_oculto_permanente") === "true") {
-      setAberto(false);
-      // Se o usuário clicar manualmente em abrir tour, ainda permitimos
-      const handleAbrirManual = () => {
-        setIndice(0);
-        setAberto(true);
-      };
-      window.addEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
-      return () => {
-        window.removeEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
-      };
-    }
-
-    const visto =
-      localStorage.getItem(storageKey) === "true" ||
-      localStorage.getItem(`nutrindo_tour_visto_${storageKey}`) === "true" ||
-      localStorage.getItem("nutrindo_tour_desativado") === "true" ||
-      localStorage.getItem(`nutrindo_tour_desativado_${storageKey}`) === "true" ||
-      localStorage.getItem("nutrindo_tour_oculto_permanente") === "true";
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (!visto) {
-      timer = setTimeout(abrir, 900);
-    }
-    window.addEventListener(EVENTO_ABRIR_TOUR, abrir);
-    return () => {
-      if (timer) clearTimeout(timer);
-      window.removeEventListener(EVENTO_ABRIR_TOUR, abrir);
+    // Listener para reabertura manual a qualquer momento (ex.: botão "? Guia Rápido" / "Como usar a plataforma")
+    const handleAbrirManual = () => {
+      setIndice(0);
+      setAberto(true);
+      setNaoMostrarNovamente(isTourOculto(storageKey));
     };
-  }, [storageKey, abrir]);
+    window.addEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
+
+    let cancelado = false;
+    let timer: NodeJS.Timeout | null = null;
+
+    // Abertura rápida imediata (250ms) se localmente não estiver marcado para ocultar
+    if (!isTourOculto(storageKey)) {
+      timer = setTimeout(() => {
+        if (!cancelado) {
+          setIndice(0);
+          setAberto(true);
+        }
+      }, 250);
+    }
+
+    async function verificarEIniciarTour() {
+      const email =
+        localStorage.getItem("nutrindo_user_email") ||
+        localStorage.getItem("usuario_email") ||
+        (window.location.pathname.startsWith("/nutri") ? "metodonutrindoemcasa@gmail.com" : "");
+
+      let backendOculto: boolean | null = null;
+
+      if (email) {
+        try {
+          const res = await fetch(`/api/configuracoes?email=${encodeURIComponent(email.toLowerCase().trim())}`)
+            .then((r) => r.json())
+            .catch(() => null);
+
+          if (res?.tour_oculto === true || res?.profile?.tour_oculto === true) {
+            backendOculto = true;
+            salvarTourOculto(storageKey);
+            setNaoMostrarNovamente(true);
+            setAberto(false);
+            return;
+          } else if (res && (res.tour_oculto === false || res.profile?.tour_oculto === false)) {
+            // Se no banco tour_oculto é false, limpa resíduos de ocultação imediatamente
+            backendOculto = false;
+            localStorage.removeItem("nutrindo_tour_oculto_permanente");
+            localStorage.removeItem("nutrindo_tour_desativado");
+            if (storageKey) {
+              localStorage.removeItem(storageKey);
+              localStorage.removeItem(`nutrindo_tour_desativado_${storageKey}`);
+              localStorage.removeItem(`nutrindo_tour_visto_${storageKey}`);
+            }
+            document.cookie = "nutrindo_tour_oculto=; path=/; max-age=0; SameSite=Lax";
+            setNaoMostrarNovamente(false);
+
+            // Se ainda não estiver aberto, abre rapidamente em 250ms
+            if (!cancelado) {
+              if (timer) clearTimeout(timer);
+              timer = setTimeout(() => {
+                if (!cancelado) {
+                  setIndice(0);
+                  setAberto(true);
+                }
+              }, 250);
+            }
+            return;
+          }
+        } catch {}
+      }
+
+      if (cancelado) return;
+
+      // Se o usuário já marcou explicitamente para ocultar, não abre
+      if (backendOculto === true || (backendOculto === null && isTourOculto(storageKey))) {
+        setAberto(false);
+        return;
+      }
+    }
+
+    verificarEIniciarTour();
+
+    return () => {
+      cancelado = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
+    };
+  }, [storageKey]);
 
   // Medição do elemento destacado
   const medir = useCallback(() => {
     setViewport({ w: window.innerWidth, h: window.innerHeight });
     const alvo = stepsRef.current[indice]?.target;
-    if (!alvo) {
-      setRect(null);
-      return;
-    }
-    const el = document.querySelector<HTMLElement>(`[data-tour="${alvo}"], #${alvo}`);
+    const el = getElementByTarget(alvo);
     if (!el) {
       setRect(null);
       return;
     }
     const r = el.getBoundingClientRect();
-    setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    if (r.width === 0 || r.height === 0) {
+      setRect(null);
+      return;
+    }
+    setRect({
+      top: r.top,
+      bottom: r.bottom,
+      left: r.left,
+      right: r.right,
+      width: r.width,
+      height: r.height,
+    });
   }, [indice]);
 
   // Ao entrar em um passo: troca de aba (se houver), rola até o alvo e mede
@@ -133,14 +290,18 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
     stepsRef.current[indice]?.onEnter?.();
 
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const rolar = () => {
-      const alvo = stepsRef.current[indice]?.target;
-      const el = alvo ? document.querySelector<HTMLElement>(`[data-tour="${alvo}"], #${alvo}`) : null;
-      el?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-      medir();
-    };
-    timers.push(setTimeout(rolar, 60));
-    timers.push(setTimeout(medir, 350));
+    const alvo = stepsRef.current[indice]?.target;
+    const el = getElementByTarget(alvo);
+
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    medir();
+
+    timers.push(setTimeout(medir, 100));
+    timers.push(setTimeout(medir, 300));
+    timers.push(setTimeout(medir, 600));
+
     return () => timers.forEach(clearTimeout);
   }, [aberto, indice, medir]);
 
@@ -148,7 +309,7 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
   useEffect(() => {
     if (!aberto) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") fechar();
+      if (e.key === "Escape") pular();
       if (e.key === "ArrowRight") setIndice((i) => Math.min(i + 1, stepsRef.current.length - 1));
       if (e.key === "ArrowLeft") setIndice((i) => Math.max(i - 1, 0));
     };
@@ -174,81 +335,54 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
   const isMobile = viewport.w < 640;
   const larguraPopover = Math.min(POPOVER_LARGURA, viewport.w - MARGEM * 2);
 
-  // Cálculo inteligente da posição do balão para que NUNCA fique em cima do spotlight
+  // Cálculo inteligente da posição do balão para que NUNCA cubra o destaque e nunca corte a tela
   let topPop: number;
   let leftPop: number = MARGEM;
 
-  if (isMobile) {
-    const gap = MARGEM + PADDING_SPOTLIGHT;
-    if (rect) {
-      const centroAlvoY = rect.top + rect.height / 2;
-      const centroTelaY = viewport.h / 2;
-
-      if (centroAlvoY < centroTelaY) {
-        // Alvo na metade superior: posiciona o card abaixo do recorte iluminado
-        topPop = Math.min(rect.top + rect.height + gap, viewport.h - alturaPopover - MARGEM);
-        // Garante que não invada o topo do spotlight
-        if (topPop < rect.top + rect.height + 4) {
-          topPop = rect.top + rect.height + 4;
-        }
-      } else {
-        // Alvo na metade inferior: posiciona o card acima do recorte iluminado
-        topPop = Math.max(MARGEM, rect.top - alturaPopover - gap);
-        // Garante que não invada a base do spotlight
-        if (topPop + alturaPopover > rect.top - 4) {
-          topPop = Math.max(8, rect.top - alturaPopover - 4);
-        }
-      }
+  if (rect) {
+    const alturaBalao = alturaPopover || 240;
+    // Se houver espaço abaixo do elemento destacado (rect.bottom + 280 < window.innerHeight):
+    if (rect.bottom + 280 < viewport.h) {
+      topPop = rect.bottom + 16;
+    } else if (rect.top - alturaBalao - 16 >= MARGEM) {
+      // Se houver espaço acima do elemento destacado:
+      topPop = rect.top - alturaBalao - 16;
     } else {
-      topPop = Math.max(MARGEM, (viewport.h - alturaPopover) / 2);
-    }
-  } else {
-    // DESKTOP: Abaixo > Direita > Acima > Esquerda
-    if (rect) {
-      const espacoAbaixo = viewport.h - (rect.top + rect.height);
+      // Caso contrário, posiciona na metade com maior espaço visível sem invadir o elemento
+      const espacoAbaixo = viewport.h - rect.bottom;
       const espacoAcima = rect.top;
-      const espacoDireita = viewport.w - (rect.left + rect.width);
-      const espacoEsquerda = rect.left;
-      const gap = MARGEM + PADDING_SPOTLIGHT;
-
-      if (espacoAbaixo >= alturaPopover + gap) {
-        topPop = rect.top + rect.height + gap;
-        leftPop = rect.left;
-      } else if (espacoDireita >= larguraPopover + gap) {
-        leftPop = rect.left + rect.width + gap;
-        topPop = Math.max(MARGEM, Math.min(rect.top, viewport.h - alturaPopover - MARGEM));
-      } else if (espacoAcima >= alturaPopover + gap) {
-        topPop = rect.top - alturaPopover - gap;
-        leftPop = rect.left;
-      } else if (espacoEsquerda >= larguraPopover + gap) {
-        leftPop = rect.left - larguraPopover - gap;
-        topPop = Math.max(MARGEM, Math.min(rect.top, viewport.h - alturaPopover - MARGEM));
+      if (espacoAbaixo >= espacoAcima) {
+        topPop = Math.min(rect.bottom + 16, viewport.h - alturaBalao - MARGEM);
       } else {
-        if (espacoAbaixo >= espacoAcima) {
-          topPop = rect.top + rect.height + gap;
-          leftPop = rect.left;
-        } else {
-          topPop = Math.max(MARGEM, rect.top - alturaPopover - gap);
-          leftPop = rect.left;
-        }
+        topPop = Math.max(MARGEM, rect.top - alturaBalao - 16);
       }
-      leftPop = Math.max(MARGEM, Math.min(leftPop, viewport.w - larguraPopover - MARGEM));
-      topPop = Math.max(MARGEM, Math.min(topPop, viewport.h - alturaPopover - MARGEM));
-    } else {
-      topPop = Math.max(MARGEM, (viewport.h - alturaPopover) / 2);
-      leftPop = Math.max(MARGEM, (viewport.w - larguraPopover) / 2);
     }
+
+    if (isMobile) {
+      leftPop = MARGEM;
+    } else {
+      // Alinha horizontalmente com o elemento
+      leftPop = rect.left;
+      leftPop = Math.max(MARGEM, Math.min(leftPop, viewport.w - larguraPopover - MARGEM));
+    }
+
+    // Clamping final para NUNCA cortar na borda da tela
+    topPop = Math.max(MARGEM, Math.min(topPop, Math.max(MARGEM, viewport.h - alturaBalao - MARGEM)));
+  } else {
+    // Balão perfeitamente centralizado caso o elemento não exista ou esteja oculto
+    topPop = Math.max(MARGEM, (viewport.h - alturaPopover) / 2);
+    leftPop = Math.max(MARGEM, (viewport.w - larguraPopover) / 2);
   }
 
   return (
     <div className="fixed inset-0 z-[9999]" role="dialog" aria-modal="true" aria-label="Guia rápido">
       {/* Bloqueia cliques no restante da página durante o tour */}
-      <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
+      <div className="fixed inset-0" onClick={(e) => e.stopPropagation()} />
 
       {/* Spotlight: recorte iluminado com backdrop escurecido via box-shadow */}
       {rect ? (
         <div
-          className="absolute rounded-2xl pointer-events-none transition-all duration-300 ease-out"
+          className="fixed rounded-2xl pointer-events-none transition-all duration-300 ease-out z-[9999]"
           style={{
             top: rect.top - PADDING_SPOTLIGHT,
             left: rect.left - PADDING_SPOTLIGHT,
@@ -259,17 +393,17 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
           }}
         />
       ) : (
-        <div className="absolute inset-0 bg-[rgba(15,23,20,0.55)] pointer-events-none" />
+        <div className="fixed inset-0 bg-[rgba(15,23,20,0.55)] pointer-events-none z-[9999]" />
       )}
 
       {/* Balão (popover) */}
       <div
         ref={popoverRef}
-        className="fixed sm:absolute bg-[#FFFDF8] rounded-2xl border border-[#3D5A45]/20 shadow-2xl p-4 sm:p-5 space-y-3 transition-all duration-300 ease-out left-3 right-3 sm:left-auto sm:right-auto max-w-[calc(100vw-24px)] sm:max-w-md mx-auto sm:mx-0"
+        className="fixed bg-[#FFFDF8] rounded-2xl border border-[#3D5A45]/20 shadow-2xl p-4 sm:p-5 space-y-3 transition-all duration-300 ease-out left-3 right-3 sm:left-auto sm:right-auto max-w-[calc(100vw-24px)] sm:max-w-md mx-auto sm:mx-0 z-[10000]"
         style={
           isMobile
-            ? { top: topPop, zIndex: 10000 }
-            : { top: topPop, left: leftPop, width: larguraPopover, zIndex: 10000 }
+            ? { top: topPop }
+            : { top: topPop, left: leftPop, width: larguraPopover }
         }
       >
         <div className="flex items-center justify-between gap-2">
@@ -283,15 +417,26 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
               </span>
             )}
           </div>
-          <div className="flex gap-1 shrink-0" aria-hidden="true">
-            {steps.map((s, i) => (
-              <span
-                key={s.id}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === indice ? "w-5 bg-[#3D5A45]" : "w-1.5 bg-[#3D5A45]/25"
-                }`}
-              />
-            ))}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex gap-1 shrink-0" aria-hidden="true">
+              {steps.map((s, i) => (
+                <span
+                  key={s.id}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === indice ? "w-5 bg-[#3D5A45]" : "w-1.5 bg-[#3D5A45]/25"
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={fechar}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Fechar guia"
+              title="Fechar guia"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -319,10 +464,12 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
               onChange={(e) => {
                 const checked = e.target.checked;
                 setNaoMostrarNovamente(checked);
-                if (checked && typeof window !== "undefined") {
-                  localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
-                } else if (!checked && typeof window !== "undefined") {
-                  localStorage.removeItem("nutrindo_tour_oculto_permanente");
+                if (typeof window !== "undefined") {
+                  if (checked) {
+                    salvarTourOculto(storageKey);
+                  } else {
+                    reativarTour(storageKey);
+                  }
                 }
               }}
               className="rounded border-slate-300 text-[#3D5A45] focus:ring-[#3D5A45] h-3.5 w-3.5 cursor-pointer"
@@ -334,7 +481,7 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
         <div className="flex items-center justify-between gap-2 pt-1">
           <button
             type="button"
-            onClick={fechar}
+            onClick={pular}
             className="text-[11px] font-bold text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
           >
             Pular guia
@@ -350,7 +497,7 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
             </button>
             <button
               type="button"
-              onClick={() => (ultimo ? fechar() : setIndice((i) => i + 1))}
+              onClick={() => (ultimo ? concluir() : setIndice((i) => i + 1))}
               className="py-1.5 px-3.5 rounded-xl text-xs font-extrabold bg-[#3D5A45] hover:bg-[#2f4636] text-white shadow-xs transition-all cursor-pointer"
             >
               {ultimo ? "Concluir" : "Próximo"}

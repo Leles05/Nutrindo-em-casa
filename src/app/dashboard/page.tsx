@@ -23,7 +23,9 @@ import {
   GraduationCap,
 } from "lucide-react";
 import ModalCheckin4Semanas from "@/components/ModalCheckin4Semanas";
-import GuidedTour, { abrirTour, type TourStep } from "@/components/GuidedTour";
+import GuidedTour, { abrirTour, isTourOculto, salvarTourOculto, type TourStep } from "@/components/GuidedTour";
+import { encerrarSessao } from "@/hooks/useAuthGuard";
+export { encerrarSessao } from "@/hooks/useAuthGuard";
 import { abrirGoogleCalendar } from "@/lib/googleCalendar";
 import NotificationBell from "@/components/dashboard/NotificationBell";
 
@@ -50,6 +52,17 @@ interface RefeicaoHoje {
 }
 
 export default function PaginaDashboard() {
+  if (typeof window !== "undefined") {
+    try {
+      const emailStorage = localStorage.getItem("nutrindo_user_email")?.trim();
+      const tokenStorage = localStorage.getItem("nutrindo_auth_token")?.trim();
+      if (!emailStorage || !tokenStorage) {
+        window.location.replace("/");
+        return null;
+      }
+    } catch {}
+  }
+
   const hoje = typeof window !== "undefined"
     ? new Date().toLocaleDateString("en-CA")
     : "2026-10-24";
@@ -65,7 +78,7 @@ export default function PaginaDashboard() {
     diasRestantes: 30,
     responsavel: "Responsável",
     email: "",
-    crianca: "",
+    crianca: "Joãozinho",
   });
 
   // Estado de Onboarding
@@ -107,6 +120,7 @@ export default function PaginaDashboard() {
     comeu: 0,
   });
   const [refeicoesHoje, setRefeicoesHoje] = useState<RefeicaoHoje[]>([]);
+  const [prontoParaTour, setProntoParaTour] = useState(false);
 
   // Menu de perfil
   const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
@@ -174,6 +188,18 @@ export default function PaginaDashboard() {
     };
   }, []);
 
+  // Verificação unificada de ocultação do Tour (localStorage / Cookie)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isTourOculto("nutrindo_tour_paciente_visto")) {
+      if (document.cookie.includes("nutrindo_tour_oculto=true")) {
+        try {
+          localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+        } catch {}
+      }
+    }
+  }, []);
+
   // Carregar dados reais do usuário
   useEffect(() => {
     async function carregarDashboard() {
@@ -184,9 +210,11 @@ export default function PaginaDashboard() {
         localStorage.getItem("usuario_email") ||
         ""
       ).toLowerCase().trim();
+      const token = localStorage.getItem("nutrindo_auth_token")?.trim();
 
-      if (!email) {
-        email = "lucaslimaleles@gmail.com";
+      if (!email || !token) {
+        window.location.replace("/");
+        return;
       }
 
       const role = localStorage.getItem("nutrindo_user_role");
@@ -213,6 +241,15 @@ export default function PaginaDashboard() {
       try {
         // 1. Carrega Perfil & Assinatura
         const confRes = await fetch(`/api/configuracoes?email=${encodeURIComponent(email)}`).then((r) => r.json()).catch(() => null);
+        if (confRes?.tour_oculto === true || confRes?.profile?.tour_oculto === true) {
+          localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+          localStorage.setItem("nutrindo_tour_desativado", "true");
+          document.cookie = "nutrindo_tour_oculto=true; path=/; max-age=31536000; SameSite=Lax";
+        } else {
+          localStorage.removeItem("nutrindo_tour_oculto_permanente");
+          localStorage.removeItem("nutrindo_tour_desativado");
+          document.cookie = "nutrindo_tour_oculto=; path=/; max-age=0; SameSite=Lax";
+        }
         if (confRes?.profile) {
           const prof = confRes.profile;
           setDadosPlano({
@@ -221,7 +258,7 @@ export default function PaginaDashboard() {
             diasRestantes: confRes.diasRestantes ?? 30,
             responsavel: prof.nome || nomeSalvo || "Responsável",
             email: prof.email || email,
-            crianca: prof.nome_crianca || criancaSalva || "",
+            crianca: prof.nome_crianca || criancaSalva || "Joãozinho",
           });
           setAnamneseConcluida(ehNutri ? true : Boolean(prof.anamnese_concluida));
         }
@@ -308,6 +345,8 @@ export default function PaginaDashboard() {
         }
       } catch (err) {
         console.warn("Aviso ao carregar dados do dashboard:", err);
+      } finally {
+        setProntoParaTour(true);
       }
     }
 
@@ -411,7 +450,7 @@ export default function PaginaDashboard() {
   const passosTourPaciente: TourStep[] = [
     {
       id: "inicio",
-      target: "paciente-header",
+      target: "#tour-boas-vindas",
       title: "Boas-vindas & Alertas de Consulta",
       subtitulo: "Seu portal de acolhimento alimentar",
       description: "Construímos este espaço para que a jornada alimentar do seu filho seja leve, segura e sem brigas à mesa. Acompanhe alertas importantes e notificações no sininho.",
@@ -419,7 +458,7 @@ export default function PaginaDashboard() {
     },
     {
       id: "curso-descomplicado",
-      target: "card-curso-descomplicado",
+      target: "#tour-curso",
       title: "Curso Terapia Alimentar Descomplicada",
       subtitulo: "Aulas Práticas e Sequenciais",
       description: "Assista às aulas exclusivas gravadas pela Dra. Laís Leles sobre manejo da recusa, sinais de alerta e construção do prato seguro.",
@@ -427,7 +466,7 @@ export default function PaginaDashboard() {
     },
     {
       id: "card-devolutiva",
-      target: "card-foco-semana",
+      target: "#tour-foco-semana",
       title: "Foco da Semana & Orientações da Nutri",
       subtitulo: "Parecer Clínico e Metas Práticas",
       description: "Aqui você acompanha o parecer clínico semanal da Dra. Laís e suas metas calmas. Marque suas vitórias conforme avança.",
@@ -435,7 +474,7 @@ export default function PaginaDashboard() {
     },
     {
       id: "card-diario",
-      target: "card-diario-alimentar",
+      target: "#tour-diario",
       title: "Diário Alimentar & Escada do Comer",
       subtitulo: "5 Degraus Sensoriais",
       description: "Acompanhe as pequenas conquistas sensoriais da criança: tolerou, cheirou, tocou, provou e comeu. Clique no botão verde para registrar novas refeições.",
@@ -443,7 +482,7 @@ export default function PaginaDashboard() {
     },
     {
       id: "card-consulta",
-      target: "card-proxima-consulta",
+      target: "#tour-consulta",
       title: "Próxima Consulta & Calendário",
       subtitulo: "Integrado com o Google Calendar",
       description: "Visualize a data e horário da sua videochamada individual com a Dra. Laís Leles, entre direto na sala do Meet e visualize seus compromissos no Google Calendar.",
@@ -520,7 +559,8 @@ export default function PaginaDashboard() {
       {/* 1. CABEÇALHO LIMPO E ACOLHEDOR (FOCO EM PAIS CANSADOS) */}
       {/* =================================================================== */}
       <div
-        id="paciente-header"
+        id="tour-boas-vindas"
+        data-tour="tour-boas-vindas"
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80"
       >
         <div>
@@ -528,9 +568,12 @@ export default function PaginaDashboard() {
             Olá, {dadosPlano.responsavel.split(" ")[0]}! 👋
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
-            {dadosPlano.crianca && dadosPlano.crianca.trim() && dadosPlano.crianca !== "Criança"
+            {dadosPlano.crianca &&
+            dadosPlano.crianca.trim() &&
+            dadosPlano.crianca !== "Criança" &&
+            dadosPlano.crianca.toLowerCase() !== dadosPlano.responsavel.toLowerCase()
               ? `Acompanhamento diário de ${dadosPlano.crianca}.`
-              : "Acompanhamento diário da sua família."}
+              : "Acompanhamento diário de Joãozinho."}
           </p>
         </div>
 
@@ -585,10 +628,42 @@ export default function PaginaDashboard() {
         </div>
       )}
 
+      {/* BANNER SE A ANAMNESE ESTIVER CONCLUÍDA MAS 1ª CONSULTA NÃO AGENDADA */}
+      {anamneseConcluida && !consultaAgendada && (
+        <div className="bg-gradient-to-r from-emerald-50 via-white to-sky-50 border-2 border-emerald-300 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-lg shadow-2xs">
+              📅
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                  Anamnese Concluída ✅
+                </span>
+                <span className="text-[11px] font-bold text-slate-500">Passo 2 de 2</span>
+              </div>
+              <h2 className="font-extrabold text-slate-900 text-sm mt-1">
+                Agende sua 1ª Consulta Nutricional com a Dra. Laís Leles
+              </h2>
+              <p className="text-slate-600 text-xs mt-0.5">
+                Escolha o melhor dia e horário para a sua videochamada individual de acolhimento.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/dashboard/calendario?onboarding=consulta"
+            className="px-4 py-2.5 bg-[#2A546D] hover:bg-[#1f3f52] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <CalendarCheck className="h-4 w-4" />
+            <span>Agendar 1ª Consulta →</span>
+          </Link>
+        </div>
+      )}
+
       {/* =================================================================== */}
       {/* CARD DE DESTAQUE DO CURSO TERAPIA ALIMENTAR DESCOMPLICADA */}
       {/* =================================================================== */}
-      <div id="card-curso-descomplicado" className="bg-gradient-to-r from-emerald-50/90 via-white to-amber-50/40 rounded-3xl border border-emerald-200/80 p-5 sm:p-6 shadow-xs space-y-3.5">
+      <div id="tour-curso" data-tour="tour-curso" className="bg-gradient-to-r from-emerald-50/90 via-white to-amber-50/40 rounded-3xl border border-emerald-200/80 p-5 sm:p-6 shadow-xs space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="h-11 w-11 sm:h-12 sm:w-12 rounded-2xl bg-[#3D5A45] text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -659,7 +734,8 @@ export default function PaginaDashboard() {
         {/* CARD 1: FOCO DA SEMANA (CHECKLIST RÁPIDO) */}
         {/* ----------------------------------------------------------------- */}
         <div
-          id="card-foco-semana"
+          id="tour-foco-semana"
+          data-tour="tour-foco-semana"
           className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-7 space-y-4"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -759,7 +835,8 @@ export default function PaginaDashboard() {
         {/* CARD 2: DIÁRIO ALIMENTAR & ESCADA DO COMER */}
         {/* ----------------------------------------------------------------- */}
         <div
-          id="card-diario-alimentar"
+          id="tour-diario"
+          data-tour="tour-diario"
           className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-7 space-y-4"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -832,7 +909,8 @@ export default function PaginaDashboard() {
         {/* CARD 3: PRÓXIMA CONSULTA */}
         {/* ----------------------------------------------------------------- */}
         <div
-          id="card-proxima-consulta"
+          id="tour-consulta"
+          data-tour="tour-consulta"
           className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-7 space-y-4"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">

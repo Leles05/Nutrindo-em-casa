@@ -17,7 +17,38 @@ export interface AuthState {
 
 export function encerrarSessao() {
   if (typeof window !== "undefined") {
+    // 1. Salvar antes todas as chaves que começam com nutrindo_tour_
+    const tourBackup: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("nutrindo_tour_")) {
+        const val = localStorage.getItem(key);
+        if (val !== null) {
+          tourBackup[key] = val;
+        }
+      }
+    }
+
+    // Salvar também em um cookie persistente caso tenha sido marcado permanentemente
+    const tourOculto =
+      localStorage.getItem("nutrindo_tour_oculto_permanente") === "true" ||
+      document.cookie.includes("nutrindo_tour_oculto=true");
+
+    if (tourOculto) {
+      document.cookie = "nutrindo_tour_oculto=true; path=/; max-age=31536000; SameSite=Lax";
+    }
+
+    // Limpar localStorage
     localStorage.clear();
+
+    // 2. Restaurar imediatamente as chaves do tour após o clear
+    Object.entries(tourBackup).forEach(([k, val]) => {
+      localStorage.setItem(k, val);
+    });
+
+    if (document.cookie.includes("nutrindo_tour_oculto=true")) {
+      localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+    }
   }
   if (isSupabaseConfigured()) {
     try {
@@ -32,8 +63,20 @@ export function encerrarSessao() {
 export function useAuthGuard(): AuthState {
   const router = useRouter();
   const pathname = usePathname();
+
+  const temSessao = typeof window !== "undefined"
+    ? Boolean(localStorage.getItem("nutrindo_user_email")?.trim() && localStorage.getItem("nutrindo_auth_token")?.trim())
+    : true;
+
+  // Redirecionamento instantâneo se não houver credenciais ativas
+  if (typeof window !== "undefined" && !temSessao) {
+    try {
+      window.location.replace("/");
+    } catch {}
+  }
+
   const [autenticado, setAutenticado] = useState(false);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(temSessao);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<"nutri" | "cliente">("cliente");
   const [statusAssinatura, setStatusAssinatura] = useState("ATIVO");
@@ -52,7 +95,10 @@ export function useAuthGuard(): AuthState {
     if (!email || !token) {
       setAutenticado(false);
       setCarregando(false);
-      router.replace("/login");
+      if (typeof window !== "undefined") {
+        router.replace("/");
+        window.location.replace("/");
+      }
       return;
     }
 
@@ -121,12 +167,14 @@ export function useAuthGuard(): AuthState {
       return;
     }
 
-    // Se concluiu a anamnese mas não agendou a 1ª consulta, redireciona para o calendário de onboarding
+    // Se concluiu a anamnese mas não agendou a 1ª consulta, permite /dashboard, /dashboard/calendario e /configuracoes
     if (
       anamneseConcluida &&
       !consultaAgendada &&
+      pathname !== "/dashboard" &&
       pathname !== "/dashboard/calendario" &&
-      pathname !== "/anamnese"
+      pathname !== "/anamnese" &&
+      pathname !== "/configuracoes"
     ) {
       router.replace("/dashboard/calendario?onboarding=consulta");
       return;
@@ -139,12 +187,25 @@ export function useAuthGuard(): AuthState {
   useEffect(() => {
     checarSessao();
 
+    // Timeout máximo de segurança de 200ms para NUNCA ficar travado na tela de carregamento
+    const timerSeguranca = setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const email = localStorage.getItem("nutrindo_user_email")?.trim();
+        const token = localStorage.getItem("nutrindo_auth_token")?.trim();
+        if (!email || !token) {
+          router.replace("/");
+          window.location.replace("/");
+        }
+      }
+    }, 200);
+
     // Permite que o Simulador de Vigência e outras abas atualizem o estado ao vivo
     const handleAtualizacao = () => checarSessao();
     window.addEventListener("nutrindo_assinatura_alterada", handleAtualizacao);
     window.addEventListener("storage", handleAtualizacao);
 
     return () => {
+      clearTimeout(timerSeguranca);
       window.removeEventListener("nutrindo_assinatura_alterada", handleAtualizacao);
       window.removeEventListener("storage", handleAtualizacao);
     };

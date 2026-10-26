@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AlertTriangle, ArrowRight, Video } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import TelaBloqueioAssinatura from "@/components/dashboard/TelaBloqueioAssinatura";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const { autenticado, carregando, planoExpirado, avisoVencimento, diasRestantes } = useAuthGuard();
   const [consultaHoje, setConsultaHoje] = useState<{
@@ -16,16 +17,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     link?: string;
   } | null>(null);
 
+  // Verificação imediata no cliente: se não houver credenciais válidas, redireciona para a tela inicial /
+  if (typeof window !== "undefined") {
+    try {
+      const emailStorage = localStorage.getItem("nutrindo_user_email")?.trim();
+      const tokenStorage = localStorage.getItem("nutrindo_auth_token")?.trim();
+      if (!emailStorage || !tokenStorage) {
+        router.replace("/");
+        window.location.replace("/");
+        return null;
+      }
+    } catch {}
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
-    let email = (
-      localStorage.getItem("nutrindo_user_email") ||
-      localStorage.getItem("usuario_email") ||
-      ""
-    ).toLowerCase().trim();
+    const email = (localStorage.getItem("nutrindo_user_email") || "").toLowerCase().trim();
+    const token = localStorage.getItem("nutrindo_auth_token")?.trim();
 
-    if (!email) {
-      email = "lucaslimaleles@gmail.com";
+    if (!email || !token) {
+      router.replace("/");
+      window.location.replace("/");
+      return;
     }
 
     const hojeISO = new Date().toLocaleDateString("en-CA");
@@ -50,8 +63,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch(() => null);
   }, []);
 
-  // Enquanto valida ou se não estiver autenticado, bloqueia renderização e exibe feedback suave
-  if (carregando || !autenticado) {
+  // Se o hook de autenticação confirmar que não está autenticado, redireciona na hora para /
+  if (!carregando && !autenticado) {
+    if (typeof window !== "undefined") {
+      router.replace("/");
+      window.location.replace("/");
+    }
+    return null;
+  }
+
+  // Enquanto valida autenticação
+  if (carregando) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#F0EAE1]">
         <div className="flex items-center gap-3 bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 animate-in fade-in">

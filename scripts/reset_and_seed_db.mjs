@@ -120,18 +120,35 @@ async function main() {
     user_metadata: {
       name: "Dra. Laís Leles",
       role: "nutri",
+      tour_oculto: false,
     },
   });
 
+  let finalNutriId = nutriAuth?.user?.id;
   if (nutriAuthErr) {
-    console.error("❌ Erro ao criar Auth da Dra. Laís:", nutriAuthErr.message);
+    console.warn("⚠️ Aviso ao criar Auth da Dra. Laís, buscando para atualizar senha:", nutriAuthErr.message);
+    const { data: usersData } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const u = usersData?.users?.find((usr) => usr.email?.toLowerCase() === emailNutri);
+    if (u) {
+      finalNutriId = u.id;
+      await supabase.auth.admin.updateUserById(u.id, {
+        password: senhaNutri,
+        email_confirm: true,
+        user_metadata: {
+          name: "Dra. Laís Leles",
+          role: "nutri",
+          tour_oculto: false,
+        },
+      });
+      console.log(`✅ Senha da Dra. Laís sincronizada e atualizada com sucesso para: ${senhaNutri}`);
+    }
   } else {
     console.log(`✅ Usuário Auth oficial criado: ${emailNutri} (ID: ${nutriAuth.user.id})`);
   }
 
   const { error: nutriProfileErr } = await supabase.from("profiles").upsert(
     {
-      id: nutriAuth?.user?.id || undefined,
+      id: finalNutriId || undefined,
       email: emailNutri,
       nome: "Dra. Laís Leles",
       cpf: "24971563792",
@@ -165,18 +182,35 @@ async function main() {
     user_metadata: {
       name: "Lucas Lima Leles",
       role: "cliente",
+      tour_oculto: false,
     },
   });
 
+  let finalLucasId = lucasAuth?.user?.id;
   if (lucasAuthErr) {
-    console.error("❌ Erro ao criar Auth do Lucas:", lucasAuthErr.message);
+    console.warn("⚠️ Aviso ao criar Auth do Lucas, buscando para atualizar senha:", lucasAuthErr.message);
+    const { data: usersData } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const u = usersData?.users?.find((usr) => usr.email?.toLowerCase() === emailLucas);
+    if (u) {
+      finalLucasId = u.id;
+      await supabase.auth.admin.updateUserById(u.id, {
+        password: senhaLucas,
+        email_confirm: true,
+        user_metadata: {
+          name: "Lucas Lima Leles",
+          role: "cliente",
+          tour_oculto: false,
+        },
+      });
+      console.log(`✅ Senha do Lucas sincronizada e atualizada com sucesso para: ${senhaLucas}`);
+    }
   } else {
     console.log(`✅ Usuário Auth do Lucas criado: ${emailLucas} (ID: ${lucasAuth.user.id})`);
   }
 
   const { error: lucasProfileErr } = await supabase.from("profiles").upsert(
     {
-      id: lucasAuth?.user?.id || undefined,
+      id: finalLucasId || undefined,
       email: emailLucas,
       nome: "Lucas Lima Leles",
       cpf: "04981726591",
@@ -196,6 +230,26 @@ async function main() {
     console.error("❌ Erro ao criar perfil do Lucas:", lucasProfileErr.message);
   } else {
     console.log("✅ Perfil do paciente Lucas salvo na tabela 'profiles' (Plano Trimestral Ativo).");
+  }
+
+  // 1 Fatura Paga de R$ 239,70 para a conta do Lucas (Plano Trimestral)
+  const { error: faturaErr } = await supabase.from("faturas").upsert(
+    {
+      user_email: emailLucas,
+      asaas_payment_id: "pay_lucas_trimestral_01",
+      descricao: "Assinatura Nutrindo em Casa - Plano Trimestral",
+      valor: 239.70,
+      forma_pagamento: "CREDIT_CARD",
+      status: "CONFIRMED",
+      data_emissao: new Date().toISOString(),
+    },
+    { onConflict: "asaas_payment_id" }
+  );
+
+  if (faturaErr) {
+    console.warn("⚠️ Aviso ao salvar fatura do Lucas:", faturaErr.message);
+  } else {
+    console.log("✅ 1 Fatura paga de R$ 239,70 salva na tabela 'faturas' para lucaslimaleles@gmail.com.");
   }
 
   // Anamnese Completa das 56 Perguntas
@@ -313,6 +367,8 @@ async function main() {
       concluida: true,
       respostas: {
         ...respostas56Lucas,
+        _tour_oculto: false,
+        aulas_concluidas: [],
         anotacoes_clinicas: "Paciente com seletividade sensorial acentuada para texturas úmidas/pastosas e dependência de telas no almoço. Iniciar aproximação gradual de cenoura assada crocante e tiras de frango sem pressão.",
       },
       updated_at: new Date().toISOString(),
@@ -326,61 +382,26 @@ async function main() {
     console.log("✅ Anamnese das 56 perguntas salva com sucesso para lucaslimaleles@gmail.com.");
   }
 
-  // Agendamento para a data de HOJE às 14:00 (para ativar alerta de dia de consulta)
-  const hojeISO = new Date().toLocaleDateString("en-CA");
-  const { error: agErr } = await supabase.from("agendamentos").upsert({
-    user_email: emailLucas,
-    tipo: "consulta",
-    data: hojeISO,
-    horario: "14:00",
-    titulo: "1ª Consulta de Acolhimento Nutricional",
-    link: "https://meet.google.com/nutri-lais-acolhimento",
-    concluido: false,
-  });
-
-  if (agErr) {
-    console.error("❌ Erro ao criar consulta para hoje:", agErr.message);
-  } else {
-    console.log(`✅ Consulta de teste agendada para HOJE (${hojeISO} às 14:00) com link do Google Meet.`);
-  }
-
-  // 1 Devolutiva inicial para Lucas (ambos os emails de teste)
-  const devolutivaSeed = {
-    semana_ref: "Semana 1 • Acolhimento e Base Sensorial",
-    parecer_clinico: "Identificamos uma seletividade alimentar moderada a severa com predomínio sensorial de texturas secas e crocantes. A dependência de telas e o histórico de engasgo criaram uma barreira de medo em relação a novas consistências. Nosso foco inicial será trazer segurança à mesa, sem pressão e respeitando os alimentos de conforto de Joãozinho.",
-    alimentos_alvo: ["Biscoito de polvilho (conforto)", "Banana em rodelas finas", "Cenoura palito assada crocante"],
-    metas_semana: [
-      { id: "meta-1", texto: "Montar o pratinho de apoio neutro ao lado do prato principal", concluida: false },
-      { id: "meta-2", texto: "Afastar o tablet a pelo menos um braço de distância durante o almoço", concluida: false },
-      { id: "meta-3", texto: "Não insistir mais de 2 vezes para Joãozinho dar outra garfada", concluida: true },
-    ],
-  };
-
-  await supabase.from("devolutivas_semanais").upsert({
-    user_email: emailLucas,
-    ...devolutivaSeed,
-  });
-  await supabase.from("devolutivas_semanais").upsert({
-    user_email: "lucas@email.com",
-    ...devolutivaSeed,
-  });
-  console.log("✅ Devolutiva Semanal inicial registrada para o paciente Lucas (lucaslimaleles@gmail.com e lucas@email.com).");
+  console.log("ℹ️ Zero consultas em 'agendamentos' (conta no estado exato pós-anamnese para agendar 1ª consulta).");
+  console.log("ℹ️ Zero devolutivas em 'devolutivas_semanais' (pronto para primeira devolutiva após consulta).");
+  console.log("ℹ️ Zero refeições em 'diario_refeicoes' e zero mensagens em 'mensagens_chat'.");
 
   // 5. Banco de Respostas Rápidas inicia 100% vazio para a nutricionista cadastrar seus próprios modelos
   console.log("\n💬 Banco de Respostas Rápidas mantido 100% limpo (autonomia total da Dra. Laís).");
 
   console.log("\n==================================================================");
-  console.log("✨ BANCO RESETADO E PRONTO PARA TESTES & PRODUÇÃO REAL!");
+  console.log("✨ BANCO RESETADO: APENAS NUTRI + CONTA DO LUCAS PÓS-ANAMNESE!");
   console.log("==================================================================");
   console.log("👩‍⚕️ NUTRICIONISTA OFICIAL:");
   console.log("   E-mail: metodonutrindoemcasa@gmail.com");
   console.log("   Senha:  25012507La*");
-  console.log("   Role:   nutri");
-  console.log("\n👶 PACIENTE PRONTO (56 PERGUNTAS + CONSULTA HOJE):");
+  console.log("   Role:   nutri (tour_oculto: false)");
+  console.log("\n👶 PACIENTE PÓS-ANAMNESE (PRONTO PARA AGENDAR 1ª CONSULTA):");
   console.log("   E-mail: lucaslimaleles@gmail.com");
   console.log("   Senha:  12345678a");
-  console.log("   Filho:  Joãozinho (3 anos) • Plano Trimestral Ativo");
-  console.log(`   Consulta: HOJE (${hojeISO}) às 14:00 (Google Meet)`);
+  console.log("   Filho:  Joãozinho (3 anos) • Plano Trimestral Ativo (1 fatura paga de R$ 239,70)");
+  console.log("   Anamnese: CONCLUÍDA (56 perguntas respondidas, _tour_oculto: false)");
+  console.log("   Consulta: NÃO AGENDADA (zero agendamentos, zero devolutivas)");
   console.log("==================================================================\n");
 }
 

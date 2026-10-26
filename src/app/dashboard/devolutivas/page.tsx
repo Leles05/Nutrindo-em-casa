@@ -40,6 +40,17 @@ interface Devolutiva {
 }
 
 export default function DevolutivasPage() {
+  if (typeof window !== "undefined") {
+    try {
+      const emailStorage = localStorage.getItem("nutrindo_user_email")?.trim();
+      const tokenStorage = localStorage.getItem("nutrindo_auth_token")?.trim();
+      if (!emailStorage || !tokenStorage) {
+        window.location.replace("/");
+        return null;
+      }
+    } catch {}
+  }
+
   const [carregando, setCarregando] = useState(true);
   const [devolutivas, setDevolutivas] = useState<Devolutiva[]>([]);
   const [perfil, setPerfil] = useState<{ nome?: string; nome_crianca?: string; idade_crianca?: string } | null>(null);
@@ -62,9 +73,13 @@ export default function DevolutivasPage() {
           email = sessionData?.session?.user?.email || "";
         }
 
-        email = email.toLowerCase().trim();
-        if (!email) {
-          email = "lucaslimaleles@gmail.com";
+        const token = typeof window !== "undefined" ? localStorage.getItem("nutrindo_auth_token")?.trim() : "";
+        if (!email || !token) {
+          setCarregando(false);
+          if (typeof window !== "undefined") {
+            window.location.replace("/");
+          }
+          return;
         }
         setUserEmail(email);
 

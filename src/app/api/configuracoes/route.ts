@@ -37,37 +37,55 @@ export async function GET(request: Request) {
       console.warn("Aviso ao buscar faturas:", faturasErr);
     }
 
-    // 3. Resolve status de onboarding (anamnese_concluida e consulta_agendada) diretamente da fonte da verdade
+    // 3. Resolve status de onboarding e preferência de tour diretamente da fonte da verdade
     let anamneseConcluida = email === "metodonutrindoemcasa@gmail.com";
     let consultaAgendada = email === "metodonutrindoemcasa@gmail.com";
+    let tourOculto = false;
 
-    if (profile && !anamneseConcluida) {
-      try {
-        const { data: anamneseRow } = await supabaseAdmin
-          .from("anamneses")
-          .select("concluida, respostas")
-          .eq("user_email", email)
-          .maybeSingle();
+    try {
+      const { data: anamneseRow } = await supabaseAdmin
+        .from("anamneses")
+        .select("concluida, respostas")
+        .eq("user_email", email)
+        .maybeSingle();
 
-        if (anamneseRow && anamneseRow.concluida) {
+      if (anamneseRow) {
+        if (anamneseRow.concluida) {
           anamneseConcluida = true;
         }
-
-        const { data: agendamentoRows } = await supabaseAdmin
-          .from("agendamentos")
-          .select("id")
-          .eq("user_email", email)
-          .eq("tipo", "consulta")
-          .limit(1);
-
-        if (agendamentoRows && agendamentoRows.length > 0) {
-          consultaAgendada = true;
+        if (anamneseRow.respostas?._tour_oculto === true) {
+          tourOculto = true;
         }
+        const aulasConcluidas = anamneseRow.respostas?.aulas_concluidas || [];
+        if (profile) {
+          (profile as any).aulas_concluidas = aulasConcluidas;
+        }
+      }
 
-        const aulasConcluidas = anamneseRow?.respostas?.aulas_concluidas || [];
-        (profile as any).aulas_concluidas = aulasConcluidas;
-      } catch (flagErr) {
-        console.warn("Aviso ao resolver flags no perfil:", flagErr);
+      const { data: agendamentoRows } = await supabaseAdmin
+        .from("agendamentos")
+        .select("id")
+        .eq("user_email", email)
+        .eq("tipo", "consulta")
+        .limit(1);
+
+      if (agendamentoRows && agendamentoRows.length > 0) {
+        consultaAgendada = true;
+      }
+    } catch (flagErr) {
+      console.warn("Aviso ao resolver flags no perfil:", flagErr);
+    }
+
+    // Se ainda não encontrou tour_oculto em anamneses, verifica no user_metadata do Supabase Auth
+    if (!tourOculto && isSupabaseConfigured()) {
+      try {
+        const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === email);
+        if (authUser?.user_metadata?.tour_oculto === true) {
+          tourOculto = true;
+        }
+      } catch (authErr) {
+        console.warn("Aviso ao buscar metadata do auth:", authErr);
       }
     }
 
@@ -76,11 +94,13 @@ export async function GET(request: Request) {
           ...profile,
           anamnese_concluida: anamneseConcluida,
           consulta_agendada: consultaAgendada,
+          tour_oculto: tourOculto,
         }
       : null;
 
     return NextResponse.json({
       success: true,
+      tour_oculto: tourOculto,
       profile: profileComFlags,
       faturas: faturas || [],
       aulas_concluidas: (profile as any)?.aulas_concluidas || [],
@@ -110,6 +130,7 @@ export async function PUT(request: Request) {
       notificacoes_email,
       novaSenha,
       aulas_concluidas,
+      tour_oculto,
     } = body;
 
     const emailLimpo = String(email || "").toLowerCase().trim();
@@ -124,15 +145,19 @@ export async function PUT(request: Request) {
     const supabaseAdmin = getSupabaseAdmin();
     const finalNomeCrianca = nome_crianca !== undefined ? nome_crianca : crianca_nome;
 
-    // 1. Atualiza dados no perfil (whitelist de campos seguros)
+    // 1. Atualiza dados no perfil (whitelist de campos seguros - nunca sobrescreve com vazio)
     const updatePayload: Record<string, unknown> = {};
-    if (nome !== undefined) updatePayload.nome = nome;
-    if (telefone !== undefined) updatePayload.telefone = telefone;
-    if (cpf !== undefined) updatePayload.cpf = cpf;
-    if (finalNomeCrianca !== undefined) updatePayload.nome_crianca = finalNomeCrianca;
-    if (idade_crianca !== undefined) updatePayload.idade_crianca = idade_crianca;
-    if (alimentos_conforto !== undefined) updatePayload.alimentos_conforto = alimentos_conforto;
-    if (principais_recusas !== undefined) updatePayload.principais_recusas = principais_recusas;
+    if (nome !== undefined && nome !== null && String(nome).trim() !== "") updatePayload.nome = String(nome).trim();
+    if (telefone !== undefined && telefone !== null && String(telefone).trim() !== "") updatePayload.telefone = String(telefone).trim();
+    if (cpf !== undefined && cpf !== null && String(cpf).trim() !== "") updatePayload.cpf = String(cpf).trim();
+    if (finalNomeCrianca !== undefined && finalNomeCrianca !== null && String(finalNomeCrianca).trim() !== "") {
+      updatePayload.nome_crianca = String(finalNomeCrianca).trim();
+    }
+    if (idade_crianca !== undefined && idade_crianca !== null && String(idade_crianca).trim() !== "") {
+      updatePayload.idade_crianca = String(idade_crianca).trim();
+    }
+    if (alimentos_conforto !== undefined && alimentos_conforto !== null) updatePayload.alimentos_conforto = alimentos_conforto;
+    if (principais_recusas !== undefined && principais_recusas !== null) updatePayload.principais_recusas = principais_recusas;
     if (notificacoes_email !== undefined) updatePayload.notificacoes_email = Boolean(notificacoes_email);
 
     // Persistência das aulas concluídas no JSONB de anamneses
@@ -161,20 +186,65 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Persistência da preferência do tour_oculto no Banco (anamneses + Supabase Auth user_metadata)
+    if (tour_oculto !== undefined) {
+      try {
+        const { data: anamneseAtual } = await supabaseAdmin
+          .from("anamneses")
+          .select("concluida, respostas")
+          .eq("user_email", emailLimpo)
+          .maybeSingle();
+
+        const respostasAtualizadas = {
+          ...(anamneseAtual?.respostas || {}),
+          _tour_oculto: Boolean(tour_oculto),
+        };
+
+        if (anamneseAtual) {
+          await supabaseAdmin
+            .from("anamneses")
+            .update({
+              respostas: respostasAtualizadas,
+            })
+            .eq("user_email", emailLimpo);
+        } else {
+          await supabaseAdmin.from("anamneses").insert({
+            user_email: emailLimpo,
+            concluida: false,
+            respostas: respostasAtualizadas,
+          });
+        }
+      } catch (errTour) {
+        console.warn("Aviso ao salvar tour_oculto em anamneses:", errTour);
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
+          if (authUser) {
+            await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+              user_metadata: {
+                ...(authUser.user_metadata || {}),
+                tour_oculto: Boolean(tour_oculto),
+              },
+            });
+          }
+        } catch (authMetaErr) {
+          console.warn("Aviso ao atualizar tour_oculto no user_metadata do Auth:", authMetaErr);
+        }
+      }
+    }
+
     let profileAtualizado = null;
 
     if (Object.keys(updatePayload).length > 0) {
       const { data, error } = await supabaseAdmin
         .from("profiles")
-        .upsert(
-          {
-            email: emailLimpo,
-            ...updatePayload,
-          },
-          { onConflict: "email" }
-        )
+        .update(updatePayload)
+        .eq("email", emailLimpo)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.warn("Aviso ao atualizar profile no Supabase:", error);
@@ -208,6 +278,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Configurações atualizadas com sucesso.",
+      tour_oculto: tour_oculto !== undefined ? Boolean(tour_oculto) : undefined,
       profile: profileAtualizado,
       senhaAtualizada,
     });
@@ -219,3 +290,5 @@ export async function PUT(request: Request) {
     );
   }
 }
+
+export const PATCH = PUT;

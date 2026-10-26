@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Home, Utensils, PlayCircle, Calendar, MessageCircle, Settings, LogOut, Lock, Eye, X, ArrowRight, CheckCircle2, UtensilsCrossed, FileText, Menu } from "lucide-react";
 import { encerrarSessao } from "@/hooks/useAuthGuard";
+export { encerrarSessao } from "@/hooks/useAuthGuard";
 import NotificationBell from "@/components/dashboard/NotificationBell";
 
 export default function Sidebar() {

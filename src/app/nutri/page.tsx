@@ -11,7 +11,7 @@ import {
   Mail, UtensilsCrossed, Star, ChefHat, Trash2
 } from "lucide-react";
 import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
-import GuidedTour, { abrirTour, type TourStep } from "@/components/GuidedTour";
+import GuidedTour, { abrirTour, isTourOculto, type TourStep } from "@/components/GuidedTour";
 import { Receita, RECEITAS_PADRAO, NOTA_ORIENTACAO_PADRAO } from "@/data/receitas";
 import { DevolutivaSemanal, DEVOLUTIVA_PADRAO } from "@/data/devolutivas";
 import { abrirGoogleCalendar } from "@/lib/googleCalendar";
@@ -81,6 +81,22 @@ interface RefeicaoDiario {
 }
 
 export default function PortalNutricionista() {
+  if (typeof window !== "undefined") {
+    try {
+      const emailStorage = localStorage.getItem("nutrindo_user_email")?.trim();
+      const tokenStorage = localStorage.getItem("nutrindo_auth_token")?.trim();
+      const roleStorage = localStorage.getItem("nutrindo_user_role");
+      if (!emailStorage || !tokenStorage) {
+        window.location.replace("/");
+        return null;
+      }
+      if (roleStorage !== "nutri" && emailStorage !== "metodonutrindoemcasa@gmail.com") {
+        window.location.replace("/dashboard");
+        return null;
+      }
+    } catch {}
+  }
+
   const { autenticado, carregando, userRole } = useAuthGuard();
 
   const [abaAtiva, setAbaAtiva] = useState<AbaNutri>("prontuarios");
@@ -92,6 +108,7 @@ export default function PortalNutricionista() {
   const [devolutivasSalvas, setDevolutivasSalvas] = useState<any[]>([]);
   const [prescricoesSalvas, setPrescricoesSalvas] = useState<any[]>([]);
   const [loadingDados, setLoadingDados] = useState(true);
+  const [prontoParaTour, setProntoParaTour] = useState(false);
 
   // Estados de Modais e Interações
   const [pacienteSelecionado, setPacienteSelecionado] = useState<Paciente | null>(null);
@@ -381,12 +398,26 @@ export default function PortalNutricionista() {
   const carregarDadosClinicos = async () => {
     try {
       setLoadingDados(true);
+      const emailNutri = "metodonutrindoemcasa@gmail.com";
+      const ehNutri = (e?: string) => (e || "").toLowerCase().trim() === emailNutri;
+
+      // Consulta preferências do tour no Banco de Dados
+      try {
+        const confRes = await fetch(`/api/configuracoes?email=${encodeURIComponent(emailNutri)}`).then((r) => r.json()).catch(() => null);
+        if (confRes?.tour_oculto === true || confRes?.profile?.tour_oculto === true) {
+          localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+          localStorage.setItem("nutrindo_tour_desativado", "true");
+          document.cookie = "nutrindo_tour_oculto=true; path=/; max-age=31536000; SameSite=Lax";
+        } else {
+          localStorage.removeItem("nutrindo_tour_oculto_permanente");
+          localStorage.removeItem("nutrindo_tour_desativado");
+          document.cookie = "nutrindo_tour_oculto=; path=/; max-age=0; SameSite=Lax";
+        }
+      } catch {}
+
       const res = await fetch("/api/nutri");
       const data = await res.json();
       if (data.success) {
-        const emailNutri = "metodonutrindoemcasa@gmail.com";
-        const ehNutri = (e?: string) => (e || "").toLowerCase().trim() === emailNutri;
-
         const perfisFiltrados = (data.profiles || []).filter((p: any) => !ehNutri(p.email) && p.plano !== "nutri");
         setPacientes(perfisFiltrados);
         setAnamneses((data.anamneses || []).filter((a: any) => !ehNutri(a.user_email)));
@@ -404,11 +435,24 @@ export default function PortalNutricionista() {
       console.warn("Aviso ao carregar dados do portal nutri:", err);
     } finally {
       setLoadingDados(false);
+      setProntoParaTour(true);
     }
   };
 
   useEffect(() => {
     carregarDadosClinicos();
+  }, []);
+
+  // Verificação unificada de ocultação do Tour (localStorage / Cookie)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isTourOculto("nutrindo_tour_nutri_visto")) {
+      if (document.cookie.includes("nutrindo_tour_oculto=true")) {
+        try {
+          localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+        } catch {}
+      }
+    }
   }, []);
 
   // Handler para Salvar Anotações Clínicas
@@ -618,7 +662,7 @@ export default function PortalNutricionista() {
   const passosTour: TourStep[] = [
     {
       id: "metricas",
-      target: "nutri-metricas",
+      target: "#nutri-metricas",
       title: "Resumo de Métricas Clínicas",
       subtitulo: "Painel Geral de Atendimento",
       description:
@@ -627,7 +671,7 @@ export default function PortalNutricionista() {
     },
     {
       id: "prontuarios",
-      target: "nutri-aba-prontuarios",
+      target: "#nutri-aba-prontuarios",
       title: "Lista de Pacientes & Prontuário Completo",
       subtitulo: "56 Perguntas + Devolutiva Lado a Lado",
       description:
@@ -637,7 +681,7 @@ export default function PortalNutricionista() {
     },
     {
       id: "consultas",
-      target: "nutri-aba-consultas",
+      target: "#nutri-aba-consultas",
       title: "Agenda com Link do Meet & Calendário",
       subtitulo: "Ações Clínicas Rápidas",
       description:
@@ -647,7 +691,7 @@ export default function PortalNutricionista() {
     },
     {
       id: "chat",
-      target: "nutri-aba-chat",
+      target: "#nutri-aba-chat",
       title: "Central de Dúvidas & Acolhimento",
       subtitulo: "Suporte Profissional Direto",
       description:
@@ -657,7 +701,7 @@ export default function PortalNutricionista() {
     },
     {
       id: "diarios",
-      target: "nutri-aba-diarios",
+      target: "#nutri-aba-diarios",
       title: "Escada do Comer em Tempo Real",
       subtitulo: "Monitoramento dos 5 Degraus Sensoriais",
       description:
@@ -765,7 +809,7 @@ export default function PortalNutricionista() {
         {/* =================================================================== */}
         {/* CARDS DE RESUMO DE IMPACTO CLÍNICO */}
         {/* =================================================================== */}
-        <div data-tour="nutri-metricas" className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div id="nutri-metricas" data-tour="nutri-metricas" className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-[11px] font-bold uppercase tracking-wider">Famílias Ativas</span>
@@ -815,6 +859,7 @@ export default function PortalNutricionista() {
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             type="button"
+            id="nutri-aba-prontuarios"
             data-tour="nutri-aba-prontuarios"
             onClick={() => setAbaAtiva("prontuarios")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -829,6 +874,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            id="nutri-aba-consultas"
             data-tour="nutri-aba-consultas"
             onClick={() => setAbaAtiva("consultas")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -843,6 +889,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            id="nutri-aba-chat"
             data-tour="nutri-aba-chat"
             onClick={() => setAbaAtiva("chat")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -857,6 +904,7 @@ export default function PortalNutricionista() {
 
           <button
             type="button"
+            id="nutri-aba-diarios"
             data-tour="nutri-aba-diarios"
             onClick={() => setAbaAtiva("diarios")}
             className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${

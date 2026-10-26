@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
+export { encerrarSessao } from "@/hooks/useAuthGuard";
 
 type AbaConfiguracao = "dados" | "assinatura" | "seguranca";
 

@@ -583,7 +583,7 @@ export default function ProntuarioDedicadoPage() {
             }`}
           >
             <ClipboardList className="h-4 w-4" />
-            <span>📋 Prontuário & Respostas (56)</span>
+            <span>Prontuário (56)</span>
           </button>
           <button
             type="button"
@@ -595,7 +595,7 @@ export default function ProntuarioDedicadoPage() {
             }`}
           >
             <PenSquare className="h-4 w-4" />
-            <span>✉️ Redigir Devolutiva / Notas</span>
+            <span>Redigir Devolutiva</span>
           </button>
         </div>
 
@@ -1198,7 +1198,7 @@ export default function ProntuarioDedicadoPage() {
                     <span>
                       {salvandoAnotacoes
                         ? "Salvando Anotações..."
-                        : "Salvar Anotações Internas do Prontuário 📝"}
+                        : "Salvar Anotações Internas do Prontuário"}
                     </span>
                   </button>
                 </div>

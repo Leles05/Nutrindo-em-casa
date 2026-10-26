@@ -1879,9 +1879,23 @@ export default function PortalNutricionista() {
 
             <form onSubmit={handleSalvarDevolutiva} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div className="bg-amber-50/50 p-3.5 rounded-2xl border border-amber-200/70 space-y-2">
-                <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider block">
-                  Modelos Rápidos da Nutri (1 Clique)
-                </span>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider block">
+                    Modelos Rápidos da Nutri (1 Clique)
+                  </span>
+                  <BotaoSalvarRespostaRapida
+                    montarModelo={() =>
+                      devolutivaParecer.trim()
+                        ? {
+                            parecerClinicoSugerido: devolutivaParecer.trim(),
+                            alimentosAlvoSugeridos: devolutivaAlimentos.split(",").map((a) => a.trim()).filter(Boolean),
+                            metasSemanaisSugeridas: devolutivaMetas.map((m) => m.trim()).filter(Boolean),
+                          }
+                        : null
+                    }
+                    onSalvo={(nome) => dispararToast(`Resposta rápida "${nome}" salva no seu banco! ⭐`)}
+                  />
+                </div>
                 <BancoRespostasRapidas
                   onAplicar={(p) => aplicarProtocoloNaDevolutiva(p)}
                 />
@@ -1928,18 +1942,6 @@ export default function PortalNutricionista() {
                       <label className="block text-[10px] font-bold text-slate-500 uppercase">
                         Parecer Clínico & Acolhimento da Dra. Laís
                       </label>
-                      <BotaoSalvarRespostaRapida
-                        montarModelo={() =>
-                          devolutivaParecer.trim()
-                            ? {
-                                parecerClinicoSugerido: devolutivaParecer.trim(),
-                                alimentosAlvoSugeridos: devolutivaAlimentos.split(",").map((a) => a.trim()).filter(Boolean),
-                                metasSemanaisSugeridas: devolutivaMetas.map((m) => m.trim()).filter(Boolean),
-                              }
-                            : null
-                        }
-                        onSalvo={(nome) => dispararToast(`Resposta rápida "${nome}" salva no seu banco! ⭐`)}
-                      />
                     </div>
                     <textarea
                       rows={8}

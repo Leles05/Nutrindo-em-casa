@@ -69,7 +69,7 @@ export default function NotificationBell() {
               itens.push({
                 id: `consulta-${prox.id || "hoje"}`,
                 tipo: "consulta",
-                titulo: "📅 Consulta com a Dra. Laís é HOJE!",
+                titulo: "Consulta com a Dra. Laís é HOJE!",
                 descricao: `Sua consulta individual é hoje às ${horaConsulta}. Clique para acessar a sala do Meet.`,
                 link: "/dashboard/calendario",
                 horario: "Hoje",
@@ -79,7 +79,7 @@ export default function NotificationBell() {
               itens.push({
                 id: `consulta-${prox.id || "amanha"}`,
                 tipo: "consulta",
-                titulo: "📅 Lembrete de Consulta Amanhã",
+                titulo: "Lembrete de Consulta Amanhã",
                 descricao: `Sua consulta com a Dra. Laís é amanhã às ${horaConsulta}.`,
                 link: "/dashboard/calendario",
                 horario: "Amanhã",
@@ -88,7 +88,7 @@ export default function NotificationBell() {
               itens.push({
                 id: `consulta-${prox.id || "futura"}`,
                 tipo: "consulta",
-                titulo: "📅 Próxima Consulta Agendada",
+                titulo: "Próxima Consulta Agendada",
                 descricao: `Agendada para ${dataConsulta.split("-").reverse().join("/")} às ${horaConsulta}.`,
                 link: "/dashboard/calendario",
               });
@@ -106,7 +106,7 @@ export default function NotificationBell() {
           itens.push({
             id: `devolutiva-${ultDev.id}`,
             tipo: "devolutiva",
-            titulo: "🎯 Nova Orientação da Dra. Laís",
+            titulo: "Nova Orientação da Dra. Laís",
             descricao: "Seu parecer clínico semanal e metas alimentares foram atualizados.",
             link: "/dashboard/devolutiva",
           });
@@ -123,7 +123,7 @@ export default function NotificationBell() {
             itens.push({
               id: `chat-${ultMsg.id || ultMsg.created_at || "msg"}`,
               tipo: "mensagem",
-              titulo: "💬 Mensagem da Dra. Laís no Chat",
+              titulo: "Mensagem da Dra. Laís no Chat",
               descricao: ultMsg.texto ? ultMsg.texto.slice(0, 75) + "..." : "Nova resposta no chat de acolhimento.",
               link: "/dashboard/chat",
             });
@@ -140,7 +140,7 @@ export default function NotificationBell() {
           itens.push({
             id: `renovacao-${diasRestantes}`,
             tipo: "renovacao",
-            titulo: "⚠️ Renovação de Acompanhamento",
+            titulo: "Renovação de Acompanhamento",
             descricao: `Faltam ${diasRestantes} ${diasRestantes === 1 ? "dia" : "dias"} para renovar seu plano. Garanta a continuidade do acompanhamento.`,
             link: "/configuracoes?aba=assinatura",
             destaque: true,
@@ -197,7 +197,7 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="flex items-center gap-2 relative" ref={dropdownRef}>
+    <div className="relative inline-flex items-center" ref={dropdownRef}>
       {/* BOTÃO DO SININHO */}
       <button
         type="button"
@@ -217,7 +217,7 @@ export default function NotificationBell() {
 
       {/* DROPDOWN DE NOTIFICAÇÕES */}
       {aberto && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl border border-slate-200 shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-full right-0 mt-3 w-80 sm:w-96 max-w-[calc(100vw-2rem)] z-50 rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* TOPO DO DROPDOWN */}
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
             <div className="flex items-center gap-2">

@@ -172,6 +172,7 @@ function ConteudoConfiguracoes() {
           cpf: dadosForm.cpf,
           telefone: dadosForm.telefone,
           nome_crianca: dadosForm.nomeCrianca,
+          crianca_nome: dadosForm.nomeCrianca,
           idade_crianca: dadosForm.idadeCrianca,
           alimentos_conforto: dadosForm.alimentosConforto,
           principais_recusas: dadosForm.principaisRecusas,
@@ -180,6 +181,9 @@ function ConteudoConfiguracoes() {
 
       if (typeof window !== "undefined") {
         localStorage.setItem("nutrindo_user_nome", dadosForm.nome);
+        localStorage.setItem("nutrindo_crianca_nome", dadosForm.nomeCrianca);
+        localStorage.setItem("nutrindo_nome_crianca", dadosForm.nomeCrianca);
+        window.dispatchEvent(new Event("storage"));
       }
 
       dispararToast("Dados do responsável e da criança atualizados com sucesso! 🎉");
@@ -233,29 +237,48 @@ function ConteudoConfiguracoes() {
       dispararToast("A nova senha e a confirmação não coincidem.");
       return;
     }
-    if (novaSenha.length < 6) {
-      dispararToast("A nova senha deve ter no mínimo 6 caracteres.");
+    if (novaSenha.length < 8) {
+      dispararToast("A nova senha deve ter no mínimo 8 caracteres.");
       return;
     }
 
     setSalvandoSenha(true);
     try {
-      await fetch("/api/configuracoes", {
-        method: "PUT",
+      const emailAlvo =
+        dadosForm.email ||
+        (typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || ""
+          : "");
+
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: dadosForm.email,
-          novaSenha,
+          email: emailAlvo,
+          senhaAtual: senhaAtual,
+          password: novaSenha,
+          novaSenha: novaSenha,
         }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (res.status === 401) {
+          dispararToast(data.message || "A senha atual está incorreta.");
+        } else {
+          dispararToast(data.message || "Erro ao atualizar senha no servidor.");
+        }
+        return;
+      }
 
       setSenhaAtual("");
       setNovaSenha("");
       setConfirmarSenha("");
-      dispararToast("Sua senha foi redefinida com sucesso no Supabase Auth!");
+      dispararToast("Sua senha foi atualizada com segurança! 🔒");
     } catch (err) {
       console.warn("Erro ao atualizar senha:", err);
-      dispararToast("Senha atualizada.");
+      dispararToast("Falha ao comunicar com o servidor de autenticação.");
     } finally {
       setSalvandoSenha(false);
     }

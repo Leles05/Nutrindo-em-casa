@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
   QrCode, ArrowLeft, Sparkles, AlertCircle, ChevronRight,
-  Clock, Award, Shield, Flame, RefreshCw, Loader2
+  Clock, Award, Shield, Flame, RefreshCw, Loader2, Tag, X
 } from "lucide-react";
 
 type TipoPlano = "mensal" | "trimestral" | "anual";
@@ -194,10 +194,49 @@ function ConteudoCheckout() {
 
   const planoAtivo = planos[planoSelecionado];
 
-  // Cálculo do total final com desconto de crédito proporcional
+  // Estado do Cupom de Desconto
+  const [cupomCodigo, setCupomCodigo] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; descontoPercent: number } | null>(null);
+  const [cupomErro, setCupomErro] = useState("");
+
+  const cuponsValidos: Record<string, number> = {
+    NUTRINDO10: 10,
+    PRIMEIRACONSULTA: 15,
+    LAIS20: 20,
+    BEMVINDO: 10,
+    FAMILIA10: 10,
+  };
+
+  const aplicarCupom = () => {
+    setCupomErro("");
+    const codigoLimpo = cupomCodigo.trim().toUpperCase();
+    if (!codigoLimpo) {
+      setCupomErro("Digite o código do cupom.");
+      return;
+    }
+    if (cuponsValidos[codigoLimpo]) {
+      setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
+      setCupomErro("");
+    } else {
+      setCupomErro("Cupom inválido ou expirado.");
+    }
+  };
+
+  const removerCupom = () => {
+    setCupomAplicado(null);
+    setCupomCodigo("");
+    setCupomErro("");
+  };
+
+  // Cálculo do desconto por cupom
+  const descontoCupomValor = cupomAplicado
+    ? (planoAtivo.precoCobradoTotal * cupomAplicado.descontoPercent) / 100
+    : 0;
+
+  // Cálculo do total final com desconto de crédito proporcional e cupom
   const valorTotalFinal = (ehUpgrade && planoSelecionado === "anual")
-    ? Math.max(0, planoAtivo.precoCobradoTotal - creditoProporcional)
-    : planoAtivo.precoCobradoTotal;
+    ? Math.max(0, planoAtivo.precoCobradoTotal - creditoProporcional - descontoCupomValor)
+    : Math.max(0, planoAtivo.precoCobradoTotal - descontoCupomValor);
 
   // =========================================================================
   // INTEGRAÇÃO REAL COM A API DO ASAAS (PIX)
@@ -234,7 +273,8 @@ function ConteudoCheckout() {
           celular: clienteCelular || "11988887777",
           billingType: "PIX",
           plano: planoSelecionado,
-          valor: valorTotalFinal
+          valor: valorTotalFinal,
+          cupom: cupomAplicado?.codigo,
         })
       });
 
@@ -266,7 +306,7 @@ function ConteudoCheckout() {
     } finally {
       setPixCarregando(false);
     }
-  }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal, ehUpgrade]);
+  }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal, cupomAplicado, ehUpgrade]);
 
   // Dispara a geração de Pix do Asaas ao trocar para aba Pix ou trocar de plano
   useEffect(() => {
@@ -545,6 +585,7 @@ function ConteudoCheckout() {
             billingType: "CREDIT_CARD",
             plano: planoSelecionado,
             valor: valorTotalFinal,
+            cupom: cupomAplicado?.codigo,
             cartao: {
               holderName: cartaoNome,
               number: numLimpo,
@@ -1559,6 +1600,77 @@ function ConteudoCheckout() {
                 </div>
               )}
 
+              {/* CAMPO DE CUPOM DE DESCONTO */}
+              <div className="pt-1">
+                {cupomAplicado ? (
+                  <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl animation-fade-in text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-extrabold text-emerald-900 block">
+                          Cupom {cupomAplicado.codigo} aplicado!
+                        </span>
+                        <span className="text-[11px] text-emerald-700">
+                          {cupomAplicado.descontoPercent}% de desconto imediato
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removerCupom}
+                      className="p-1 text-slate-400 hover:text-red-500 rounded-lg hover:bg-white transition-all cursor-pointer"
+                      title="Remover cupom"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase">
+                      Cupom de Desconto
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={cupomCodigo}
+                          onChange={(e) => {
+                            setCupomCodigo(e.target.value.toUpperCase());
+                            setCupomErro("");
+                          }}
+                          placeholder="Ex: NUTRINDO10"
+                          className="w-full h-9 pl-8 pr-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:bg-white"
+                        />
+                        <Tag className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={aplicarCupom}
+                        className="h-9 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shrink-0"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                    {cupomErro && (
+                      <p className="text-[11px] text-red-500 font-semibold animation-fade-in">
+                        {cupomErro}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* LINHA DE DESCONTO DO CUPOM */}
+              {cupomAplicado && (
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-700 bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Desconto do Cupom ({cupomAplicado.descontoPercent}%):</span>
+                  </span>
+                  <span className="font-extrabold">- R$ {descontoCupomValor.toFixed(2).replace(".", ",")}</span>
+                </div>
+              )}
+
               {/* TOTAL A PAGAR E PARCELAMENTO */}
               <div className="pt-2 border-t border-slate-100 space-y-1">
                 <div className="flex items-baseline justify-between">
@@ -1571,7 +1683,12 @@ function ConteudoCheckout() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    {cupomAplicado && (
+                      <span className="text-xs text-slate-400 line-through block font-bold">
+                        R$ {planoAtivo.precoCobradoTotal.toFixed(2).replace(".", ",")}
+                      </span>
+                    )}
+                    <span className="text-2xl sm:text-3xl font-extrabold text-[#4C6C54] tracking-tight">
                       R$ {valorTotalFinal.toFixed(2).replace(".", ",")}
                     </span>
                   </div>

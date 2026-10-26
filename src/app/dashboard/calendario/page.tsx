@@ -31,13 +31,17 @@ function ConteudoCalendario() {
   const searchParams = useSearchParams();
   const modoOnboarding = searchParams.get("onboarding") === "consulta";
 
-  // Data atual real no fuso do navegador do usuário
+  // Data atual real com fuso horário padrão oficial (Brasília - America/Sao_Paulo)
   const obterDataHojeLocal = () => {
-    const d = new Date();
-    const ano = d.getFullYear();
-    const mes = String(d.getMonth() + 1).padStart(2, "0");
-    const dia = String(d.getDate()).padStart(2, "0");
-    return `${ano}-${mes}-${dia}`;
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+    } catch {
+      const d = new Date();
+      const ano = d.getFullYear();
+      const mes = String(d.getMonth() + 1).padStart(2, "0");
+      const dia = String(d.getDate()).padStart(2, "0");
+      return `${ano}-${mes}-${dia}`;
+    }
   };
 
   const hoje = useMemo(() => obterDataHojeLocal(), []);
@@ -45,12 +49,16 @@ function ConteudoCalendario() {
   // Regra Clínica: Consultas com a Dra. Laís exigem antecedência mínima de 7 dias (+7 dias de hoje)
   const dataMinimaConsultaISO = useMemo(() => {
     const d = new Date();
-    d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() + 7);
-    const ano = d.getFullYear();
-    const mes = String(d.getMonth() + 1).padStart(2, "0");
-    const dia = String(d.getDate()).padStart(2, "0");
-    return `${ano}-${mes}-${dia}`;
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+    } catch {
+      d.setHours(0, 0, 0, 0);
+      const ano = d.getFullYear();
+      const mes = String(d.getMonth() + 1).padStart(2, "0");
+      const dia = String(d.getDate()).padStart(2, "0");
+      return `${ano}-${mes}-${dia}`;
+    }
   }, []);
 
   const dataMinimaConsultaBR = useMemo(() => {
@@ -62,9 +70,23 @@ function ConteudoCalendario() {
   const slotsDraLais = useMemo(() => ["09:00", "10:30", "14:00", "15:30", "17:00"], []);
   const [horariosOcupadosNutri, setHorariosOcupadosNutri] = useState<Array<{ data: string; horario: string }>>([]);
 
-  // Ano e Mês de visualização do calendário (0 = Janeiro ... 11 = Dezembro)
-  const [anoVisualizacao, setAnoVisualizacao] = useState(() => new Date().getFullYear());
-  const [mesVisualizacao, setMesVisualizacao] = useState(() => new Date().getMonth());
+  // Ano e Mês de visualização do calendário (0 = Janeiro ... 11 = Dezembro) no fuso de Brasília
+  const [anoVisualizacao, setAnoVisualizacao] = useState(() => {
+    try {
+      const partes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()).split("-");
+      return Number(partes[0]);
+    } catch {
+      return new Date().getFullYear();
+    }
+  });
+  const [mesVisualizacao, setMesVisualizacao] = useState(() => {
+    try {
+      const partes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()).split("-");
+      return Number(partes[1]) - 1;
+    } catch {
+      return new Date().getMonth();
+    }
+  });
   const [diaSelecionado, setDiaSelecionado] = useState(() => {
     const partes = hoje.split("-").map(Number);
     return partes[2] || 1;
@@ -235,18 +257,26 @@ function ConteudoCalendario() {
     carregarAgendamentos();
   }, [anoVisualizacao, mesVisualizacao, carregarEventosGoogle]);
 
-  // Normalização estrita para formato ISO YYYY-MM-DD
+  // Normalização estrita para formato ISO YYYY-MM-DD com fuso de Brasília
   const normalizarDataISO = (dataRaw?: string): string => {
     if (!dataRaw) return "";
-    let limpa = String(dataRaw).trim();
-    if (limpa.includes("T")) limpa = limpa.split("T")[0].trim();
-    if (limpa.includes(" ")) limpa = limpa.split(" ")[0].trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) return limpa;
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(limpa)) {
-      const [d, m, y] = limpa.split("/");
-      return `${y}-${m}-${d}`;
+    const str = String(dataRaw).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+      const [d, m, y] = str.split("/");
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
     }
-    return limpa;
+    if (str.includes("T") || str.includes(" ")) {
+      try {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+        }
+      } catch {}
+      const limpa = str.includes("T") ? str.split("T")[0].trim() : str.split(" ")[0].trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) return limpa;
+    }
+    return str;
   };
 
   const selecionarDataISO = (dataIso: string) => {

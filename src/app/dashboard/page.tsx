@@ -697,9 +697,11 @@ export default function PaginaDashboard() {
             <div className="space-y-3">
               {/* Preview do parecer */}
               {devolutivaAtual.parecer_clinico && (
-                <p className="text-xs sm:text-[13px] text-slate-700 font-medium italic bg-amber-50/50 p-3.5 rounded-2xl border border-amber-100/70 leading-relaxed line-clamp-2">
-                  &ldquo;{devolutivaAtual.parecer_clinico}&rdquo;
-                </p>
+                <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-4">
+                  <p className="text-sm text-slate-700 italic leading-relaxed line-clamp-3">
+                    &ldquo;{devolutivaAtual.parecer_clinico}&rdquo;
+                  </p>
+                </div>
               )}
 
               {/* 2 a 3 metas práticas da semana */}

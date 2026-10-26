@@ -179,7 +179,7 @@ export default function Sidebar() {
     },
     {
       name: "Calendário",
-      shortName: "Calendário",
+      shortName: "Agenda",
       href: "/dashboard/calendario",
       icon: Calendar,
       isActive: pathname?.startsWith("/dashboard/calendario"),
@@ -437,7 +437,7 @@ export default function Sidebar() {
       </aside>
 
       {/* 3. BARRA DE NAVEGAÇÃO INFERIOR FIXA (< md) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 px-1 py-1.5 flex justify-around items-center shadow-lg">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 flex justify-around items-center shadow-lg">
         {mobileNavItems.map((item) => {
           const estaBloqueado = !isNutri && !consultaAgendada && item.bloqueadoSemConsulta;
 

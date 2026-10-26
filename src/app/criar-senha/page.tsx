@@ -32,7 +32,7 @@ function ConteudoCriarSenha() {
     }
   }, [searchParams]);
 
-  // Captura automática de sessão do Supabase no hash da URL (#access_token=...)
+  // Captura automática de sessão do Supabase no hash (#access_token=...), query (?code=... / ?token_hash=...) ou getUser()
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -59,15 +59,71 @@ function ConteudoCriarSenha() {
               access_token: accessToken,
               refresh_token: refreshToken || "",
             })
-            .then(({ data }) => {
+            .then(async ({ data }) => {
               if (data?.session?.user?.email) {
                 setEmail(data.session.user.email);
                 localStorage.setItem("nutrindo_user_email", data.session.user.email);
+              } else {
+                const { data: uData } = await supabase.auth.getUser();
+                if (uData?.user?.email) {
+                  setEmail(uData.user.email);
+                  localStorage.setItem("nutrindo_user_email", uData.user.email);
+                }
               }
             })
             .catch((err) => console.warn("Aviso ao sincronizar token do hash:", err));
         }
       }
+
+      // 3. Suporte a PKCE code na query string (?code=...)
+      const search = new URLSearchParams(window.location.search);
+      const code = search.get("code");
+      if (code) {
+        supabase.auth
+          .exchangeCodeForSession(code)
+          .then(async ({ data }) => {
+            if (data?.session?.user?.email) {
+              setEmail(data.session.user.email);
+              localStorage.setItem("nutrindo_user_email", data.session.user.email);
+            } else {
+              const { data: uData } = await supabase.auth.getUser();
+              if (uData?.user?.email) {
+                setEmail(uData.user.email);
+                localStorage.setItem("nutrindo_user_email", uData.user.email);
+              }
+            }
+          })
+          .catch((err) => console.warn("Aviso ao trocar code por sessão:", err));
+      }
+
+      // 4. Suporte a token_hash (?token_hash=...&type=recovery)
+      const tokenHash = search.get("token_hash");
+      const typeParam = search.get("type") || "recovery";
+      if (tokenHash) {
+        supabase.auth
+          .verifyOtp({ token_hash: tokenHash, type: typeParam as any })
+          .then(async ({ data }) => {
+            if (data?.session?.user?.email) {
+              setEmail(data.session.user.email);
+              localStorage.setItem("nutrindo_user_email", data.session.user.email);
+            } else {
+              const { data: uData } = await supabase.auth.getUser();
+              if (uData?.user?.email) {
+                setEmail(uData.user.email);
+                localStorage.setItem("nutrindo_user_email", uData.user.email);
+              }
+            }
+          })
+          .catch((err) => console.warn("Aviso verifyOtp:", err));
+      }
+
+      // 5. Checa se o usuário já possui sessão ativa no Supabase
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user?.email) {
+          setEmail(data.user.email);
+          localStorage.setItem("nutrindo_user_email", data.user.email);
+        }
+      });
 
       return () => {
         authListener?.subscription?.unsubscribe();
@@ -96,12 +152,25 @@ function ConteudoCriarSenha() {
     setCarregando(true);
 
     try {
-      const emailAlvo = email
+      let emailAlvo = email
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/\s+/g, "")
         .trim()
-        .toLowerCase() || (typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "");
+        .toLowerCase();
+
+      if (!emailAlvo && isSupabaseConfigured()) {
+        try {
+          const { data: uData } = await supabase.auth.getUser();
+          if (uData?.user?.email) {
+            emailAlvo = uData.user.email.toLowerCase();
+          }
+        } catch {}
+      }
+
+      if (!emailAlvo && typeof window !== "undefined") {
+        emailAlvo = (localStorage.getItem("nutrindo_user_email") || "").toLowerCase();
+      }
 
       // 1. Atualização via cliente do Supabase Auth (se houver sessão ativa)
       if (isSupabaseConfigured()) {
@@ -117,7 +186,7 @@ function ConteudoCriarSenha() {
         }
       }
 
-      // 2. Atualização via API de retaguarda (para garantir que a senha seja persistida mesmo sem sessão no navegador)
+      // 2. Atualização via API de retaguarda (para garantir que a senha seja persistida no banco)
       if (emailAlvo) {
         try {
           await fetch("/api/auth/update-password", {

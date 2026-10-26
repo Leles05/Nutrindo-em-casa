@@ -155,29 +155,56 @@ export default function PaginaChat() {
     setArquivosPendentes((prev) => prev.filter((arq) => arq.id !== id));
   };
 
-  // Carrega histórico do Supabase ao montar
+  const enviandoRef = useRef(false);
+
+  // Carrega histórico do Supabase ao montar e atualiza a cada 8s
   useEffect(() => {
     const emailUsuario =
       typeof window !== "undefined"
         ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
         : "lucas@email.com";
 
+    let intervalId: any = null;
+
     async function carregarChat() {
+      // Não sobrescreve o chat se houver envio de mensagem em andamento
+      if (enviandoRef.current) return;
+
       try {
         const res = await fetch(`/api/chat?email=${encodeURIComponent(emailUsuario)}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.success && data.mensagens && data.mensagens.length > 0) {
-          const formatadas: Mensagem[] = data.mensagens.map((m: { id: string; remetente: "nutri" | "usuario"; texto: string; horario: string }) => ({
+        if (data.success && Array.isArray(data.mensagens)) {
+          const formatadas: Mensagem[] = data.mensagens.map((m: { id: string | number; remetente: "nutri" | "usuario"; texto?: string; horario: string }) => ({
             id: m.id,
-            remetente: m.remetente,
+            remetente: m.remetente === "nutri" ? "nutri" : "usuario",
             texto: m.texto,
             horario: m.horario,
             dataEnvio: `Hoje às ${m.horario}`,
           }));
+
           setConversas((prev) => {
-            // Mantém a de boas-vindas se não houver nenhuma
-            return formatadas.length > 0 ? formatadas : prev;
+            // Se o backend ainda não tem mensagens, mantém mensagem inicial de boas-vindas e pendentes
+            if (formatadas.length === 0) {
+              return prev;
+            }
+
+            const idsFormatadas = new Set(formatadas.map((f) => String(f.id)));
+            // Preserva mensagens locais temporárias que ainda não constam na resposta do backend
+            const pendentes = prev.filter(
+              (p) => String(p.id).startsWith("temp_") || (!idsFormatadas.has(String(p.id)) && p.id !== "boas-vindas")
+            );
+
+            const combinadas = [...formatadas, ...pendentes];
+
+            // Só altera se houve mudança real
+            if (
+              combinadas.length !== prev.length ||
+              combinadas.some((m, idx) => m.id !== prev[idx]?.id)
+            ) {
+              return combinadas;
+            }
+            return prev;
           });
         }
       } catch (err) {
@@ -186,6 +213,11 @@ export default function PaginaChat() {
     }
 
     carregarChat();
+    intervalId = setInterval(carregarChat, 8000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   const handleEnviar = async (e?: React.FormEvent) => {
@@ -195,16 +227,18 @@ export default function PaginaChat() {
     const agora = new Date();
     const horarioFormatado = agora.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const textoMensagem = mensagem.trim();
+    const tempId = `temp_${Date.now()}`;
 
     const novaMensagem: Mensagem = {
-      id: Date.now(),
+      id: tempId,
       remetente: "usuario",
       texto: textoMensagem || undefined,
       arquivos: arquivosPendentes.length > 0 ? [...arquivosPendentes] : undefined,
       horario: horarioFormatado,
-      dataEnvio: `Hoje às ${horarioFormatado}`
+      dataEnvio: `Hoje às ${horarioFormatado}`,
     };
 
+    // Adiciona ao estado local instantaneamente
     setConversas((prev) => [...prev, novaMensagem]);
     setMensagem("");
     setArquivosPendentes([]);
@@ -216,7 +250,7 @@ export default function PaginaChat() {
         : "lucas@email.com";
 
     if (textoMensagem) {
-      setDigitando(true);
+      enviandoRef.current = true;
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -227,28 +261,19 @@ export default function PaginaChat() {
             horario: horarioFormatado,
           }),
         });
-
         const data = await res.json();
-        if (data.success && data.mensagemNutri) {
-          setTimeout(() => {
-            setConversas((prev) => [
-              ...prev,
-              {
-                id: Date.now() + 1,
-                remetente: "nutri",
-                texto: data.mensagemNutri.texto,
-                horario: data.mensagemNutri.horario || horarioFormatado,
-                dataEnvio: `Hoje às ${data.mensagemNutri.horario || horarioFormatado}`,
-              },
-            ]);
-            setDigitando(false);
-          }, 1200);
-        } else {
-          setDigitando(false);
+        if (res.ok && data?.mensagemUsuario?.id) {
+          // Substitui o tempId pelo id real gravado no Supabase
+          setConversas((prev) =>
+            prev.map((m) =>
+              m.id === tempId ? { ...m, id: data.mensagemUsuario.id } : m
+            )
+          );
         }
       } catch (err) {
         console.warn("Aviso ao enviar mensagem para API:", err);
-        setDigitando(false);
+      } finally {
+        enviandoRef.current = false;
       }
     }
   };
@@ -286,6 +311,12 @@ export default function PaginaChat() {
         <button type="button" className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-colors">
           <MoreVertical className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* AVISO SUTIL DE HORÁRIO COMERCIAL E ENTREGA REAL */}
+      <div className="bg-[#4C6C54]/5 border-b border-[#4C6C54]/10 px-4 py-2 text-center text-[11px] text-[#4C6C54] font-medium flex items-center justify-center gap-1.5 shrink-0">
+        <Sparkles className="h-3 w-3 text-emerald-600 shrink-0" />
+        <span>Mensagem entregue no painel da Dra. Laís • Respondemos de segunda a sexta em horário comercial</span>
       </div>
 
       {/* ÁREA DE MENSAGENS */}

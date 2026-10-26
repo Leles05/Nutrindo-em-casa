@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // 1. Grava a mensagem enviada pelo responsável
+    // 1. Grava a mensagem enviada pelo responsável/paciente com Service Role (Bypass RLS)
     const { data: msgUser, error: errUser } = await supabaseAdmin
       .from("mensagens_chat")
       .insert([
@@ -74,47 +74,21 @@ export async function POST(request: Request) {
       .single();
 
     if (errUser) {
-      console.warn("Aviso ao inserir mensagem de usuário no Supabase:", errUser);
+      console.error("Erro ao inserir mensagem de usuário no Supabase:", errUser);
+      return NextResponse.json(
+        { success: false, message: "Erro ao salvar mensagem no banco de dados." },
+        { status: 500 }
+      );
     }
 
-    // 2. Grava a resposta automática oficial da equipe da Dra. Laís
-    const respostaTexto =
-      "Recebemos seu relato! A Dra. Laís e a equipe multidisciplinar analisarão a evolução antes do próximo retorno.";
-
-    const { data: msgNutri, error: errNutri } = await supabaseAdmin
-      .from("mensagens_chat")
-      .insert([
-        {
-          user_email: emailLimpo,
-          remetente: "nutri",
-          texto: respostaTexto,
-          horario: agoraHorario,
-        },
-      ])
-      .select()
-      .single();
-
-    if (errNutri) {
-      console.warn("Aviso ao inserir resposta de suporte no Supabase:", errNutri);
-    }
-
-    return NextResponse.json({
-      success: true,
-      mensagemUsuario: msgUser || {
-        id: "temp-user-msg",
-        user_email: emailLimpo,
-        remetente: "usuario",
-        texto: textoLimpo,
-        horario: agoraHorario,
+    return NextResponse.json(
+      {
+        success: true,
+        mensagem: msgUser,
+        mensagemUsuario: msgUser,
       },
-      mensagemNutri: msgNutri || {
-        id: "temp-nutri-msg",
-        user_email: emailLimpo,
-        remetente: "nutri",
-        texto: respostaTexto,
-        horario: agoraHorario,
-      },
-    });
+      { status: 201 }
+    );
   } catch (error: unknown) {
     console.error("Erro interno ao enviar mensagem:", error);
     return NextResponse.json(

@@ -6,6 +6,7 @@ import {
   Check, Trophy, Sparkles, ChevronLeft, ChevronRight, Circle, X, Lock
 } from "lucide-react";
 import Link from "next/link";
+import { imprimirMaterialAula } from "@/lib/pdfTimbrado";
 
 interface Aula {
   id: number;
@@ -66,7 +67,7 @@ export default function PaginaCursos() {
     }
   ]);
 
-  // Carrega progresso salvo no localStorage
+  // Carrega progresso salvo no localStorage e sincroniza com o banco de dados
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = obterStorageKey();
@@ -90,6 +91,31 @@ export default function PaginaCursos() {
         console.warn("Aviso ao carregar progresso de aulas:", err);
       }
     }
+
+    const email = localStorage.getItem("nutrindo_user_email") || "";
+    if (email) {
+      fetch(`/api/configuracoes?email=${encodeURIComponent(email)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.aulas_concluidas && Array.isArray(data.aulas_concluidas) && data.aulas_concluidas.length > 0) {
+            const concluidasIds: number[] = data.aulas_concluidas;
+            setAulas((prev) => {
+              let encontrouAtual = false;
+              return prev.map((a, idx) => {
+                const concl = concluidasIds.includes(a.id);
+                let atual = false;
+                if (!encontrouAtual && !concl) {
+                  atual = true;
+                  encontrouAtual = true;
+                }
+                return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
+              });
+            });
+            localStorage.setItem(key, JSON.stringify(concluidasIds));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const aulaAtualIndex = aulas.findIndex((a) => a.atual);
@@ -110,6 +136,15 @@ export default function PaginaCursos() {
       const ids = novasAulas.filter((a) => a.concluido).map((a) => a.id);
       localStorage.setItem(obterStorageKey(), JSON.stringify(ids));
       window.dispatchEvent(new Event("nutrindo_cursos_atualizado"));
+
+      const email = localStorage.getItem("nutrindo_user_email") || "";
+      if (email) {
+        fetch("/api/configuracoes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, aulas_concluidas: ids }),
+        }).catch((err) => console.warn("Aviso ao persistir aulas:", err));
+      }
     }
   };
 
@@ -304,15 +339,23 @@ export default function PaginaCursos() {
             </p>
 
             <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <a
-                href="#"
-                className="inline-flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-xs font-bold text-slate-700"
+              <button
+                type="button"
+                onClick={() => {
+                  imprimirMaterialAula({
+                    id: String(aulaAtual.id),
+                    titulo: aulaAtual.titulo,
+                    modulo: "Módulo 1 • Fundamentos da Seletividade Alimentar",
+                    resumo: aulaAtual.descricao,
+                  });
+                }}
+                className="inline-flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-xs font-bold text-slate-700 cursor-pointer"
               >
                 <div className="p-1 bg-white rounded-md text-[#EB6D57] shadow-2xs">
                   <FileText className="h-3.5 w-3.5" />
                 </div>
-                <span>Baixar Checklist de Sinais (PDF)</span>
-              </a>
+                <span>Baixar Material de Apoio da Aula (PDF)</span>
+              </button>
 
               <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                 <Sparkles className="h-3.5 w-3.5 text-amber-500" /> +50 pts ao concluir

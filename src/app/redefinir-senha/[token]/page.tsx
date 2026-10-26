@@ -14,6 +14,7 @@ export default function RedefinirSenhaPage() {
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [mostrarSenha1, setMostrarSenha1] = useState(false);
   const [mostrarSenha2, setMostrarSenha2] = useState(false);
+  const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState(false);
 
@@ -23,25 +24,37 @@ export default function RedefinirSenhaPage() {
   const temNumero = /[0-9]/.test(novaSenha);
   const senhaValida = temTamanho && temMaiuscula && temNumero;
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Trava o envio se as senhas forem diferentes
     if (novaSenha !== confirmarSenha) {
       setErro("As senhas não coincidem. Tente novamente.");
       return; 
     }
 
-    // Trava o envio se a senha não cumprir todos os requisitos de segurança
     if (!senhaValida) {
       setErro("A senha não atende a todos os requisitos de segurança.");
       return;
     }
 
+    setCarregando(true);
     setErro("");
-    // Futuro: Enviaremos a 'novaSenha' e o 'token' da URL para o banco de dados aqui!
-    console.log("Token enviado para o backend:", token); 
-    setSucesso(true);
+
+    try {
+      const emailStorage = typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "";
+      
+      await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailStorage, password: novaSenha, token }),
+      });
+
+      setSucesso(true);
+    } catch {
+      setErro("Erro ao salvar nova senha. Tente novamente.");
+    } finally {
+      setCarregando(false);
+    }
   };
 
   return (

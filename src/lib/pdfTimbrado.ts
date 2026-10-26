@@ -591,3 +591,180 @@ export function imprimirDocumentoTimbrado(dados: DadosDocumentoTimbrado) {
     }
   }
 }
+
+export interface DadosMaterialAula {
+  id: string;
+  titulo: string;
+  modulo?: string;
+  checklist?: string[];
+  resumo?: string;
+  dicas?: string[];
+}
+
+export function gerarHtmlMaterialAula(aula: DadosMaterialAula): string {
+  const dataHoje = new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  const checklistItens = aula.checklist && aula.checklist.length > 0 ? aula.checklist : [
+    "Identificar sinais corporais de recusa sem forçar",
+    "Organizar o Prato Seguro (70% conforto, 20% ponte, 10% desafio)",
+    "Respeitar o ritmo sensorial da criança",
+    "Evitar distrações com telas durante a refeição",
+    "Comemorar pequenas aproximações e toques no alimento",
+  ];
+
+  const resumoTexto = aula.resumo || "Este guia prático foi elaborado pela Dra. Laís Leles para apoiar sua família na aplicação das estratégias da aula em casa, com passos objetivos e checklist visual.";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Material de Apoio • ${aula.titulo}</title>
+  <style>
+    @page { size: A4; margin: 15mm 15mm 20mm 15mm; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b; background: #ffffff; line-height: 1.5; margin: 0; padding: 20px; font-size: 13px;
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 2px solid #3D5A45; padding-bottom: 14px; margin-bottom: 20px;
+    }
+    .brand-title { font-size: 20px; font-weight: 800; color: #3D5A45; letter-spacing: -0.5px; margin: 0; }
+    .brand-subtitle { font-size: 11px; color: #64748b; margin: 2px 0 0 0; }
+    .nutri-info { text-align: right; }
+    .nutri-name { font-size: 13px; font-weight: 700; color: #1e293b; margin: 0; }
+    .nutri-crn {
+      display: inline-block; font-size: 10px; font-weight: 700; color: #3D5A45;
+      background: #E8F5E9; border: 1px solid #c8e6c9; padding: 2px 8px; border-radius: 9999px; margin-top: 3px;
+    }
+    .badge {
+      display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #3D5A45; background: #f0fdf4; border: 1px solid #bbf7d0;
+      padding: 3px 10px; border-radius: 6px; margin-bottom: 6px;
+    }
+    .doc-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; }
+    .doc-subtitle { font-size: 12px; color: #64748b; margin: 0 0 16px 0; }
+    .card-resumo {
+      background: #f8fafc; border-left: 4px solid #3D5A45; border-radius: 8px;
+      padding: 14px 16px; font-size: 13px; line-height: 1.6; color: #334155; margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 13px; font-weight: 800; color: #3D5A45; text-transform: uppercase;
+      letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;
+      margin-top: 22px; margin-bottom: 12px;
+    }
+    .checklist-item {
+      padding: 10px 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600;
+    }
+    .checkbox-box {
+      width: 16px; height: 16px; border: 2px solid #3D5A45; border-radius: 4px; flex-shrink: 0;
+    }
+    .dica-box {
+      background: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px;
+      padding: 14px; margin-top: 20px; color: #92400e; font-size: 12px; line-height: 1.5;
+    }
+    .footer {
+      margin-top: 40px; padding-top: 14px; border-top: 1px dashed #cbd5e1;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      font-size: 10px; color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1 class="brand-title">Nutrindo em Casa</h1>
+      <p class="brand-subtitle">Material de Apoio Oficial • Aulas & Treinamentos</p>
+    </div>
+    <div class="nutri-info">
+      <p class="nutri-name">Dra. Laís Leles</p>
+      <span class="nutri-crn">CRN-8 18878</span>
+      <p style="font-size: 10px; color: #64748b; margin: 2px 0 0 0;">Nutricionista Especialista</p>
+    </div>
+  </div>
+
+  <div>
+    <span class="badge">${aula.modulo || "Módulo Prático"}</span>
+    <h2 class="doc-title">${aula.titulo}</h2>
+    <p class="doc-subtitle">Guia e Checklist para Aplicação da Aula em Família</p>
+  </div>
+
+  <div class="section-title">💡 Resumo & Direcionamento da Aula</div>
+  <div class="card-resumo">${resumoTexto}</div>
+
+  <div class="section-title">✅ Checklist de Aplicação Prática</div>
+  <div>
+    ${checklistItens.map((item) => `
+      <div class="checklist-item">
+        <div class="checkbox-box"></div>
+        <span>${item}</span>
+      </div>
+    `).join("")}
+  </div>
+
+  <div class="dica-box">
+    <strong>💡 Dica de Ouro da Dra. Laís:</strong> "Lembre-se de que cada degrau conta. Não force a criança a engolir — tolerar o alimento na mesa, tocar ou cheirar já são vitórias sensoriais gigantescas."
+  </div>
+
+  <div class="footer">
+    <div>
+      <p style="margin: 0; font-weight: 600;">Nutrindo em Casa • Acesso exclusivo a alunos e assinantes</p>
+      <p style="margin: 2px 0 0 0;">Emitido em ${dataHoje} • Dra. Laís Leles (CRN-8 18878)</p>
+    </div>
+    <div style="text-align: right;">
+      <p style="margin: 0; font-weight: 700; color: #3D5A45;">metodonutrindoemcasa@gmail.com</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function imprimirMaterialAula(aula: DadosMaterialAula) {
+  if (typeof window === "undefined") return;
+
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) throw new Error("Contexto de impressão indisponível");
+
+    doc.open();
+    doc.write(gerarHtmlMaterialAula(aula));
+    doc.close();
+
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.warn("Aviso na impressão:", err);
+      } finally {
+        setTimeout(() => {
+          if (iframe.parentNode) document.body.removeChild(iframe);
+        }, 1500);
+      }
+    }, 400);
+  } catch (err) {
+    console.warn("Fallback para window.open:", err);
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(gerarHtmlMaterialAula(aula));
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 500);
+    }
+  }
+}

@@ -64,8 +64,11 @@ export async function POST(request: Request) {
       billingType = "CREDIT_CARD", // "PIX" | "CREDIT_CARD"
       plano = "trimestral", // "mensal" | "trimestral" | "anual"
       valor, // number
+      cupom, // string opcional
       cartao, // { holderName, number, expiryMonth, expiryYear, ccv, cpf }
     } = body;
+
+    const cupomLimpo = String(cupom || "").trim().toUpperCase();
 
     // 1. Sanitização dos dados de entrada
     const emailLimpo = sanitizarEmail(email);
@@ -278,7 +281,9 @@ export async function POST(request: Request) {
         {
           user_email: emailLimpo,
           asaas_payment_id: firstPaymentId,
-          descricao: `Assinatura Nutrindo em Casa - Plano ${planoFormatado.charAt(0).toUpperCase() + planoFormatado.slice(1)}`,
+          descricao: cupomLimpo
+            ? `Assinatura Nutrindo em Casa - Plano ${planoFormatado.charAt(0).toUpperCase() + planoFormatado.slice(1)} (Cupom: ${cupomLimpo})`
+            : `Assinatura Nutrindo em Casa - Plano ${planoFormatado.charAt(0).toUpperCase() + planoFormatado.slice(1)}`,
           valor: valorCobrado,
           forma_pagamento: billingType,
           status: paymentStatus,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -11,6 +11,22 @@ import {
 } from "lucide-react";
 
 export default function PaginaInicialLanding() {
+  // Intercepta tokens de recuperação/convite do Supabase que chegam à raiz do site
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    if (
+      hash.includes("access_token=") ||
+      hash.includes("type=recovery") ||
+      hash.includes("type=invite")
+    ) {
+      window.location.replace(`/criar-senha${hash}`);
+    } else if (search.includes("token_hash=") || search.includes("type=recovery") || search.includes("type=invite")) {
+      window.location.replace(`/criar-senha${search}${hash}`);
+    }
+  }, []);
+
   // Estado para acordeão do FAQ
   const [faqAberto, setFaqAberto] = useState<number | null>(0);
 
@@ -441,7 +457,7 @@ export default function PaginaInicialLanding() {
             <div className="lg:col-span-8 space-y-4 text-xs sm:text-sm text-slate-600 leading-relaxed">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#4C6C54]/10 text-[#4C6C54] text-xs font-extrabold uppercase tracking-wider">
                 <Stethoscope className="h-3.5 w-3.5" />
-                <span>Especialista em Dificuldades Alimentares Infantis</span>
+                <span>Atuação com foco em dificuldades alimentares</span>
               </div>
 
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-snug">

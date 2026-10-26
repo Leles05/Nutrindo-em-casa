@@ -10,6 +10,30 @@ import {
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
+function limparCacheSessaoAnterior() {
+  if (typeof window === "undefined") return;
+  const chavesParaLimpar = [
+    "nutrindo_user_email",
+    "nutrindo_auth_token",
+    "nutrindo_user_nome",
+    "nutrindo_user_role",
+    "nutrindo_crianca_nome",
+    "nutrindo_nome_crianca",
+    "nutrindo_anamnese_rascunho",
+    "nutrindo_anamnese_concluida",
+    "nutrindo_consulta_agendada",
+    "nutrindo_dias_restantes",
+    "nutrindo_status_assinatura",
+    "anamnese_concluida",
+    "consulta_agendada",
+  ];
+  chavesParaLimpar.forEach((k) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {}
+  });
+}
+
 function ConteudoLogin() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,6 +50,22 @@ function ConteudoLogin() {
 
   // Monitora flags de URL e sessão OAuth retornada
   useEffect(() => {
+    // Interceptor: se o link veio do e-mail com token de convite ou recuperação, direciona para /criar-senha
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash || "";
+      const search = window.location.search || "";
+      if (
+        hash.includes("type=invite") ||
+        hash.includes("type=recovery") ||
+        hash.includes("access_token=") ||
+        search.includes("type=invite") ||
+        search.includes("type=recovery")
+      ) {
+        window.location.href = `/criar-senha${search}${hash}`;
+        return;
+      }
+    }
+
     const emailParam = searchParams.get("email");
     const senhaParam = searchParams.get("senhaCriada");
     const rascunhoParam = searchParams.get("rascunhoSalvo");
@@ -66,6 +106,7 @@ function ConteudoLogin() {
       const emailNutri = (emailParam || "metodonutrindoemcasa@gmail.com").toLowerCase();
       const tokenNutri = tokenParam || `nutri_${Date.now()}`;
       if (typeof window !== "undefined") {
+        limparCacheSessaoAnterior();
         localStorage.setItem("nutrindo_user_email", emailNutri);
         localStorage.setItem("nutrindo_auth_token", tokenNutri);
         localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
@@ -81,6 +122,7 @@ function ConteudoLogin() {
       const emailCliente = emailParam.toLowerCase();
       const tokenCliente = tokenParam || `cliente_${Date.now()}`;
       if (typeof window !== "undefined") {
+        limparCacheSessaoAnterior();
         localStorage.setItem("nutrindo_user_email", emailCliente);
         localStorage.setItem("nutrindo_auth_token", tokenCliente);
         localStorage.setItem("nutrindo_user_role", "cliente");
@@ -142,6 +184,7 @@ function ConteudoLogin() {
 
           if (isNutri) {
             if (typeof window !== "undefined") {
+              limparCacheSessaoAnterior();
               localStorage.setItem("nutrindo_user_email", userEmail);
               localStorage.setItem("nutrindo_auth_token", authToken);
               localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
@@ -160,7 +203,7 @@ function ConteudoLogin() {
 
             if (!data?.profile) {
               if (typeof window !== "undefined") {
-                localStorage.clear();
+                limparCacheSessaoAnterior();
               }
               await supabase.auth.signOut().catch(() => {});
               setSemAssinatura(true);
@@ -168,6 +211,7 @@ function ConteudoLogin() {
             }
 
             if (typeof window !== "undefined") {
+              limparCacheSessaoAnterior();
               localStorage.setItem("nutrindo_user_email", userEmail);
               localStorage.setItem("nutrindo_auth_token", authToken);
               localStorage.setItem("nutrindo_user_role", "cliente");
@@ -243,6 +287,7 @@ function ConteudoLogin() {
       // Redirecionamento exclusivo se for Nutricionista (Dra. Laís)
       if (data.role === "nutri" || data.redirect === "/nutri") {
         if (typeof window !== "undefined") {
+          limparCacheSessaoAnterior();
           localStorage.setItem("nutrindo_user_email", data.user?.email || emailLimpo);
           localStorage.setItem("nutrindo_auth_token", data.token || `nutri_${Date.now()}`);
           localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
@@ -256,6 +301,7 @@ function ConteudoLogin() {
 
       // Salva dados locais com token oficial de autenticação para clientes
       if (typeof window !== "undefined") {
+        limparCacheSessaoAnterior();
         localStorage.setItem("nutrindo_user_email", data.user?.email || emailLimpo);
         localStorage.setItem("nutrindo_auth_token", data.token || `auth_${Date.now()}`);
         localStorage.setItem("nutrindo_user_nome", data.user?.nome || "Responsável");

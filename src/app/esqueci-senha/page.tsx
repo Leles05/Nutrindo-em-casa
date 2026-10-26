@@ -9,16 +9,39 @@ export default function PaginaEsqueciSenha() {
   const [email, setEmail] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [erro, setErro] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const emailLimpo = email.trim().toLowerCase();
+    if (!emailLimpo) return;
 
     setCarregando(true);
-    setTimeout(() => {
-      setCarregando(false);
+    setErro("");
+
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailLimpo }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErro(
+          data.message ||
+            "Não encontramos uma conta ativa com este e-mail. Verifique a digitação ou escolha um plano para assinar."
+        );
+        return;
+      }
+
       setEnviado(true);
-    }, 800);
+    } catch {
+      setErro("Falha de conexão com o servidor. Verifique sua internet e tente novamente.");
+    } finally {
+      setCarregando(false);
+    }
   };
 
   return (
@@ -44,20 +67,26 @@ export default function PaginaEsqueciSenha() {
           </p>
         </div>
 
+        {erro && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-semibold text-center leading-relaxed animation-fade-in">
+            {erro}
+          </div>
+        )}
+
         {enviado ? (
           <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-3 animation-fade-in">
             <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
             <div>
               <h3 className="text-xs font-bold text-emerald-800">E-mail de recuperação enviado!</h3>
-              <p className="text-[11px] text-emerald-600 mt-1">
-                Verifique sua caixa de entrada e siga as instruções para cadastrar uma nova senha.
+              <p className="text-[11px] text-emerald-600 mt-1 leading-relaxed">
+                Verifique a caixa de entrada do e-mail <strong>{email}</strong> e siga as instruções para cadastrar sua nova senha.
               </p>
             </div>
             <Link
               href="/"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4C6C54] hover:underline pt-2"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o login
+              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a página inicial
             </Link>
           </div>
         ) : (
@@ -70,7 +99,10 @@ export default function PaginaEsqueciSenha() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErro("");
+                  }}
                   placeholder="exemplo@email.com"
                   className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54] focus:bg-white transition-all"
                   required
@@ -99,7 +131,7 @@ export default function PaginaEsqueciSenha() {
 
             <div className="pt-2 text-center">
               <Link
-                href="/"
+                href="/login"
                 className="text-xs font-bold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1"
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o login

@@ -68,19 +68,36 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
       localStorage.setItem(storageKey, "true");
       localStorage.setItem(`nutrindo_tour_visto_${storageKey}`, "true");
       if (naoMostrarNovamente) {
+        localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
         localStorage.setItem("nutrindo_tour_desativado", "true");
         localStorage.setItem(`nutrindo_tour_desativado_${storageKey}`, "true");
       }
     }
   }, [storageKey, naoMostrarNovamente]);
 
-  // Auto-início no primeiro acesso + reabertura via evento
+  // Auto-início no primeiro acesso + verificação de ocultação permanente
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (localStorage.getItem("nutrindo_tour_oculto_permanente") === "true") {
+      setAberto(false);
+      // Se o usuário clicar manualmente em abrir tour, ainda permitimos
+      const handleAbrirManual = () => {
+        setIndice(0);
+        setAberto(true);
+      };
+      window.addEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
+      return () => {
+        window.removeEventListener(EVENTO_ABRIR_TOUR, handleAbrirManual);
+      };
+    }
+
     const visto =
       localStorage.getItem(storageKey) === "true" ||
       localStorage.getItem(`nutrindo_tour_visto_${storageKey}`) === "true" ||
       localStorage.getItem("nutrindo_tour_desativado") === "true" ||
-      localStorage.getItem(`nutrindo_tour_desativado_${storageKey}`) === "true";
+      localStorage.getItem(`nutrindo_tour_desativado_${storageKey}`) === "true" ||
+      localStorage.getItem("nutrindo_tour_oculto_permanente") === "true";
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (!visto) {
@@ -299,7 +316,15 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
             <input
               type="checkbox"
               checked={naoMostrarNovamente}
-              onChange={(e) => setNaoMostrarNovamente(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setNaoMostrarNovamente(checked);
+                if (checked && typeof window !== "undefined") {
+                  localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
+                } else if (!checked && typeof window !== "undefined") {
+                  localStorage.removeItem("nutrindo_tour_oculto_permanente");
+                }
+              }}
               className="rounded border-slate-300 text-[#3D5A45] focus:ring-[#3D5A45] h-3.5 w-3.5 cursor-pointer"
             />
             <span>Não mostrar este guia novamente ao entrar</span>

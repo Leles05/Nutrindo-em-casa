@@ -260,7 +260,20 @@ export default function PaginaDashboard() {
             email: prof.email || email,
             crianca: prof.nome_crianca || criancaSalva || "Joãozinho",
           });
-          setAnamneseConcluida(ehNutri ? true : Boolean(prof.anamnese_concluida));
+          const anamneseOk = ehNutri ? true : Boolean(prof.anamnese_concluida);
+          setAnamneseConcluida(anamneseOk);
+          if (anamneseOk && typeof window !== "undefined") {
+            localStorage.setItem("anamnese_concluida", "true");
+            localStorage.setItem("nutrindo_anamnese_concluida", "true");
+          }
+          if (prof.consulta_agendada) {
+            setConsultaAgendada(true);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("consulta_agendada", "true");
+              localStorage.setItem("nutrindo_consulta_agendada", "true");
+              window.dispatchEvent(new Event("nutrindo_onboarding_atualizado"));
+            }
+          }
         }
 
         // 2. Carrega Agendamentos
@@ -269,6 +282,11 @@ export default function PaginaDashboard() {
           const consultas = agRes.agendamentos.filter((a: any) => a.tipo === "consulta");
           if (consultas.length > 0) {
             setConsultaAgendada(true);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("consulta_agendada", "true");
+              localStorage.setItem("nutrindo_consulta_agendada", "true");
+              window.dispatchEvent(new Event("nutrindo_onboarding_atualizado"));
+            }
             setProximaConsulta({
               data: consultas[0].data,
               horario: consultas[0].horario,
@@ -492,8 +510,12 @@ export default function PaginaDashboard() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
-      {/* TOUR GUIADO */}
-      <GuidedTour storageKey="nutrindo_tour_paciente_visto" steps={passosTourPaciente} />
+      {/* TOUR GUIADO (SÓ AUTO-INICIA SE O ONBOARDING ESTIVER 100% COMPLETO OU SE CLICADO MANUALMENTE) */}
+      <GuidedTour
+        storageKey="nutrindo_tour_paciente_visto"
+        steps={passosTourPaciente}
+        autoIniciar={Boolean(anamneseConcluida && consultaAgendada)}
+      />
 
       {/* TOAST DE FEEDBACK */}
       {toastMensagem && (
@@ -628,34 +650,36 @@ export default function PaginaDashboard() {
         </div>
       )}
 
-      {/* BANNER SE A ANAMNESE ESTIVER CONCLUÍDA MAS 1ª CONSULTA NÃO AGENDADA */}
+      {/* BANNER SE A ANAMNESE ESTIVER CONCLUÍDA MAS 1ª CONSULTA NÃO AGENDADA (PASSO FINAL DE ONBOARDING) */}
       {anamneseConcluida && !consultaAgendada && (
-        <div className="bg-gradient-to-r from-emerald-50 via-white to-sky-50 border-2 border-emerald-300 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-lg shadow-2xs">
+        <div className="bg-gradient-to-r from-emerald-50 via-white to-sky-50 border-2 border-emerald-400 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-md animate-in fade-in">
+          <div className="flex items-center gap-3.5">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-2xl shadow-2xs">
               📅
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
                   Anamnese Concluída ✅
                 </span>
-                <span className="text-[11px] font-bold text-slate-500">Passo 2 de 2</span>
+                <span className="text-[11px] font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full animate-pulse">
+                  Passo Final Obrigatório
+                </span>
               </div>
-              <h2 className="font-extrabold text-slate-900 text-sm mt-1">
-                Agende sua 1ª Consulta Nutricional com a Dra. Laís Leles
+              <h2 className="font-black text-slate-900 text-base sm:text-lg mt-1 tracking-tight">
+                Passo Final: Agende sua 1ª Consulta com a Dra. Laís
               </h2>
-              <p className="text-slate-600 text-xs mt-0.5">
-                Escolha o melhor dia e horário para a sua videochamada individual de acolhimento.
+              <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-xl leading-relaxed">
+                Escolha o melhor dia e horário para a sua videochamada individual de acolhimento e desbloqueie o acesso completo a todos os módulos da plataforma.
               </p>
             </div>
           </div>
           <Link
             href="/dashboard/calendario?onboarding=consulta"
-            className="px-4 py-2.5 bg-[#2A546D] hover:bg-[#1f3f52] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            className="px-5 py-3.5 bg-[#2A546D] hover:bg-[#1f3f52] text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all whitespace-nowrap shrink-0 flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
           >
             <CalendarCheck className="h-4 w-4" />
-            <span>Agendar 1ª Consulta →</span>
+            <span>Agendar 1ª Consulta Agora →</span>
           </Link>
         </div>
       )}

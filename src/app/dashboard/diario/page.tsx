@@ -88,6 +88,8 @@ export default function PaginaDiarioAlimentar() {
   const [novoDetalhe, setNovoDetalhe] = useState("");
   const [novaFoto, setNovaFoto] = useState<string | null>(null);
   const [comprimindoFoto, setComprimindoFoto] = useState(false);
+  const [salvandoRefeicao, setSalvandoRefeicao] = useState(false);
+  const [carregando, setCarregando] = useState(true);
   const [fotoModalZoom, setFotoModalZoom] = useState<{ foto: string; alimento: string } | null>(null);
 
   const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,6 +174,18 @@ export default function PaginaDiarioAlimentar() {
     return `${dia} de ${nomeMes}`;
   };
 
+  // Fechamento de modais com a tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.code === "Escape") {
+        if (modalAberto) setModalAberto(false);
+        if (fotoModalZoom) setFotoModalZoom(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalAberto, fotoModalZoom]);
+
   // Busca do Supabase ao montar a página
   useEffect(() => {
     const carregarRefeicoesSupabase = async () => {
@@ -181,6 +195,7 @@ export default function PaginaDiarioAlimentar() {
           : "lucas@email.com";
 
       try {
+        setCarregando(true);
         const res = await fetch(`/api/diario?email=${encodeURIComponent(emailUsuario)}`);
         if (!res.ok) return;
         const data = await res.json();
@@ -200,6 +215,8 @@ export default function PaginaDiarioAlimentar() {
         }
       } catch (err) {
         console.warn("Aviso ao carregar diário:", err);
+      } finally {
+        setCarregando(false);
       }
     };
 
@@ -208,38 +225,40 @@ export default function PaginaDiarioAlimentar() {
 
   const adicionarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvandoRefeicao) return;
     if (!novoAlimento.trim()) return;
 
-    const emailUsuario =
-      typeof window !== "undefined"
-        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
-        : "lucas@email.com";
-
-    const novo: RegistroRefeicao = {
-      id: Date.now(),
-      data: novaData,
-      refeicao: novaRefeicao,
-      alimento: novoAlimento.trim(),
-      etapa: novaEtapa,
-      degrauSlug: novaEtapaSlug,
-      reacao: novaReacao,
-      detalhe: novoDetalhe.trim() || "Registro realizado no diário alimentar.",
-      foto: novaFoto || undefined,
-    };
-
-    setHistorico((prev) => desduplicarRefeicoes([novo, ...prev]));
-    setNovoAlimento("");
-    setNovoDetalhe("");
-    setNovaFoto(null);
-    setNovaData(hoje);
-    setModalAberto(false);
-
-    setToastMensagem(`Conquista com ${novo.alimento} registrada! 🎉`);
-    setTimeout(() => setToastMensagem(""), 3500);
-
-    // Persistência em background no PostgreSQL Supabase
     try {
-      fetch("/api/diario", {
+      setSalvandoRefeicao(true);
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+          : "lucas@email.com";
+
+      const novo: RegistroRefeicao = {
+        id: Date.now(),
+        data: novaData,
+        refeicao: novaRefeicao,
+        alimento: novoAlimento.trim(),
+        etapa: novaEtapa,
+        degrauSlug: novaEtapaSlug,
+        reacao: novaReacao,
+        detalhe: novoDetalhe.trim() || "Registro realizado no diário alimentar.",
+        foto: novaFoto || undefined,
+      };
+
+      setHistorico((prev) => desduplicarRefeicoes([novo, ...prev]));
+      setNovoAlimento("");
+      setNovoDetalhe("");
+      setNovaFoto(null);
+      setNovaData(hoje);
+      setModalAberto(false);
+
+      setToastMensagem(`Conquista com ${novo.alimento} registrada! 🎉`);
+      setTimeout(() => setToastMensagem(""), 3500);
+
+      // Persistência no PostgreSQL Supabase
+      const res = await fetch("/api/diario", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -250,9 +269,15 @@ export default function PaginaDiarioAlimentar() {
           observacoes: novo.detalhe,
           foto: novo.foto || null,
         }),
-      }).catch((err) => console.warn("Aviso ao salvar no banco:", err));
+      });
+      const data = await res.json();
+      if (data?.refeicao?.id) {
+        novo.id = data.refeicao.id;
+      }
     } catch (err) {
       console.warn("Aviso ao salvar diário:", err);
+    } finally {
+      setSalvandoRefeicao(false);
     }
   };
 
@@ -402,7 +427,17 @@ export default function PaginaDiarioAlimentar() {
         </div>
 
         {/* TIMELINE ORDENADA CRONOLOGICAMENTE */}
-        {gruposPorData.length === 0 ? (
+        {carregando ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-2xs animate-pulse space-y-2.5">
+                <div className="h-3 bg-slate-200 rounded-full w-24" />
+                <div className="h-4 bg-slate-200 rounded-full w-44" />
+                <div className="h-3 bg-slate-100 rounded-full w-64" />
+              </div>
+            ))}
+          </div>
+        ) : gruposPorData.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 border border-dashed border-slate-200 text-center space-y-3">
             <Utensils className="h-7 w-7 text-slate-300 mx-auto" />
             <h3 className="text-sm font-bold text-slate-700">Nenhum registro encontrado</h3>
@@ -721,9 +756,20 @@ export default function PaginaDiarioAlimentar() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 px-3 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                  disabled={salvandoRefeicao || comprimindoFoto}
+                  className="flex-1 py-2 px-3 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check className="h-3.5 w-3.5" /> Salvar Conquista
+                  {salvandoRefeicao ? (
+                    <>
+                      <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Salvando Conquista...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Salvar Conquista</span>
+                    </>
+                  )}
                 </button>
               </div>
 

@@ -14,7 +14,6 @@ export default function Sidebar() {
   const [consultaAgendada, setConsultaAgendada] = useState(true);
   const [anamneseConcluida, setAnamneseConcluida] = useState(true);
   const [isNutri, setIsNutri] = useState(false);
-  const [visitouReceitas, setVisitouReceitas] = useState(false);
   const [modalBloqueioAberto, setModalBloqueioAberto] = useState(false);
   const [moduloBloqueadoNome, setModuloBloqueadoNome] = useState("");
   const [drawerAberto, setDrawerAberto] = useState(false);
@@ -44,15 +43,6 @@ export default function Sidebar() {
 
     setAnamneseConcluida(anamneseSalva);
     setConsultaAgendada(consultaSalva);
-
-    // 3. Status de visita ao módulo de Plano & Receitas
-    const jaVisitou = localStorage.getItem("nutrindo_visitou_receitas") === "true";
-    if (pathname?.startsWith("/dashboard/receitas")) {
-      localStorage.setItem("nutrindo_visitou_receitas", "true");
-      setVisitouReceitas(true);
-    } else {
-      setVisitouReceitas(jaVisitou);
-    }
   };
 
   useEffect(() => {
@@ -62,13 +52,11 @@ export default function Sidebar() {
     window.addEventListener("storage", handleSync);
     window.addEventListener("nutrindo_onboarding_atualizado", handleSync);
     window.addEventListener("nutrindo_assinatura_alterada", handleSync);
-    window.addEventListener("nutrindo_visitou_receitas_alterado", handleSync);
 
     return () => {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("nutrindo_onboarding_atualizado", handleSync);
       window.removeEventListener("nutrindo_assinatura_alterada", handleSync);
-      window.removeEventListener("nutrindo_visitou_receitas_alterado", handleSync);
     };
   }, [pathname]);
 
@@ -399,9 +387,6 @@ export default function Sidebar() {
                 <div className="flex items-center gap-2.5">
                   <item.icon className="h-4 w-4 shrink-0" />
                   <span>{item.name}</span>
-                  {anamneseConcluida && consultaAgendada && !visitouReceitas && item.name === "Plano & Receitas" && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#4C6C54] shrink-0" />
-                  )}
                 </div>
                 {!isNutri && !consultaAgendada && item.name === "Calendário" && (
                   <span className="text-[9px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-full">

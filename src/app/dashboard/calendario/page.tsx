@@ -107,6 +107,8 @@ function ConteudoCalendario() {
   const [modalCheckinAberto, setModalCheckinAberto] = useState(false);
   const [toastMensagem, setToastMensagem] = useState("");
   const [modalSucessoOnboarding, setModalSucessoOnboarding] = useState(false);
+  const [salvandoAgendamento, setSalvandoAgendamento] = useState(false);
+  const [carregandoEventos, setCarregandoEventos] = useState(true);
 
   // Sincronização com Google Calendar
   const [modalGCalAberto, setModalGCalAberto] = useState(false);
@@ -131,8 +133,12 @@ function ConteudoCalendario() {
         return;
       }
 
-      const anamneseSalva = localStorage.getItem("anamnese_concluida") === "true";
-      const consultaSalva = localStorage.getItem("consulta_agendada") === "true";
+      const anamneseSalva =
+        localStorage.getItem("anamnese_concluida") === "true" ||
+        localStorage.getItem("nutrindo_anamnese_concluida") === "true";
+      const consultaSalva =
+        localStorage.getItem("consulta_agendada") === "true" ||
+        localStorage.getItem("nutrindo_consulta_agendada") === "true";
       
       // Se estiver explicitamente com o param onboarding ou se a flag ainda for falsa
       if (modoOnboarding || !consultaSalva) {
@@ -141,6 +147,20 @@ function ConteudoCalendario() {
       }
     }
   }, [modoOnboarding]);
+
+  // Fechamento de modais com a tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.code === "Escape") {
+        if (modalAberto) setModalAberto(false);
+        if (modalCheckinAberto) setModalCheckinAberto(false);
+        if (modalGCalAberto) setModalGCalAberto(false);
+        if (modalSucessoOnboarding) setModalSucessoOnboarding(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalAberto, modalCheckinAberto, modalGCalAberto, modalSucessoOnboarding]);
 
   const [eventos, setEventos] = useState<Evento[]>([]);
 
@@ -215,6 +235,7 @@ function ConteudoCalendario() {
 
     async function carregarAgendamentos() {
       try {
+        setCarregandoEventos(true);
         const res = await fetch(`/api/agendamentos?email=${encodeURIComponent(emailUsuario)}`);
         if (!res.ok) return;
         const data = await res.json();
@@ -241,6 +262,17 @@ function ConteudoCalendario() {
             [...formatados, ...prev].forEach((e) => mapa.set(e.id, e));
             return Array.from(mapa.values());
           });
+
+          const temConsulta = formatados.some((e) => e.tipo === "consulta");
+          if (temConsulta) {
+            setConsultaAgendada(true);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("consulta_agendada", "true");
+              localStorage.setItem("nutrindo_consulta_agendada", "true");
+              window.dispatchEvent(new Event("storage"));
+              window.dispatchEvent(new Event("nutrindo_onboarding_atualizado"));
+            }
+          }
         }
 
         // Busca compromissos sincronizados com o Google Calendar (Zero Mocks)
@@ -251,6 +283,8 @@ function ConteudoCalendario() {
         }
       } catch (err) {
         console.warn("Aviso ao carregar agendamentos:", err);
+      } finally {
+        setCarregandoEventos(false);
       }
     }
 
@@ -467,6 +501,7 @@ function ConteudoCalendario() {
 
   const adicionarEvento = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvandoAgendamento) return;
     if (!novoTitulo.trim()) return;
 
     if (novoTipo === "consulta") {
@@ -494,57 +529,63 @@ function ConteudoCalendario() {
       }
     }
 
-    const emailUsuario =
-      typeof window !== "undefined"
-        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
-        : "lucas@email.com";
-
-    const novo: Evento = {
-      id: Date.now(),
-      data: novaData,
-      titulo: novoTitulo,
-      tipo: novoTipo,
-      horario: novoHorario,
-      plataforma: "Google Meet",
-      link: "https://meet.google.com",
-      concluido: false
-    };
-
-    setEventos([novo, ...eventos]);
-    selecionarDataISO(novaData);
-    setNovoTitulo("");
-    setModalAberto(false);
-
-    // Se foi agendada uma consulta durante o onboarding
-    if (novoTipo === "consulta") {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("consulta_agendada", "true");
-        setConsultaAgendada(true);
-      }
-      setModalSucessoOnboarding(true);
-    } else {
-      setToastMensagem(`Agendado para ${novaData.split("-").reverse().join("/")}! 🗓️`);
-      setTimeout(() => setToastMensagem(""), 3500);
-    }
-
-    // Se for consulta, sincroniza o evento diretamente na agenda Google em background (sem abrir abas extras)
-    if (novoTipo === "consulta") {
-      fetch("/api/google-calendar/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          titulo: novo.titulo,
-          data: novo.data,
-          horario: novo.horario,
-          meetLink: novo.link,
-          detalhes: "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).",
-        }),
-      }).catch((err) => console.warn("Aviso ao criar evento direto no Google Calendar:", err));
-    }
-
-    // Persistência no Supabase
     try {
-      fetch("/api/agendamentos", {
+      setSalvandoAgendamento(true);
+
+      const emailUsuario =
+        typeof window !== "undefined"
+          ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
+          : "lucas@email.com";
+
+      const novo: Evento = {
+        id: Date.now(),
+        data: novaData,
+        titulo: novoTitulo,
+        tipo: novoTipo,
+        horario: novoHorario,
+        plataforma: "Google Meet",
+        link: "https://meet.google.com",
+        concluido: false
+      };
+
+      setEventos([novo, ...eventos]);
+      selecionarDataISO(novaData);
+      setNovoTitulo("");
+      setModalAberto(false);
+
+      // Se foi agendada uma consulta durante o onboarding
+      if (novoTipo === "consulta") {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("consulta_agendada", "true");
+          localStorage.setItem("nutrindo_consulta_agendada", "true");
+          setConsultaAgendada(true);
+          window.dispatchEvent(new Event("storage"));
+          window.dispatchEvent(new Event("nutrindo_onboarding_atualizado"));
+          window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
+        }
+        setModalSucessoOnboarding(true);
+      } else {
+        setToastMensagem(`Agendado para ${novaData.split("-").reverse().join("/")}! 🗓️`);
+        setTimeout(() => setToastMensagem(""), 3500);
+      }
+
+      // Se for consulta, sincroniza o evento diretamente na agenda Google em background (sem abrir abas extras)
+      if (novoTipo === "consulta") {
+        fetch("/api/google-calendar/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titulo: novo.titulo,
+            data: novo.data,
+            horario: novo.horario,
+            meetLink: novo.link,
+            detalhes: "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).",
+          }),
+        }).catch((err) => console.warn("Aviso ao criar evento direto no Google Calendar:", err));
+      }
+
+      // Persistência no Supabase
+      const res = await fetch("/api/agendamentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -556,9 +597,15 @@ function ConteudoCalendario() {
           plataforma: novo.plataforma,
           link: novo.link,
         }),
-      }).catch((err) => console.warn("Aviso ao salvar agendamento:", err));
+      });
+      const data = await res.json();
+      if (data?.agendamento?.id) {
+        novo.id = data.agendamento.id;
+      }
     } catch (err) {
       console.warn("Aviso ao persistir agendamento:", err);
+    } finally {
+      setSalvandoAgendamento(false);
     }
   };
 
@@ -918,7 +965,19 @@ function ConteudoCalendario() {
 
             {/* LISTA DE COMPROMISSOS */}
             <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-              {eventosDoDia.length === 0 ? (
+              {carregandoEventos ? (
+                <div className="space-y-2.5">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 animate-pulse flex items-center justify-between">
+                      <div className="space-y-2 w-2/3">
+                        <div className="h-2.5 bg-slate-200 rounded-full w-20" />
+                        <div className="h-3.5 bg-slate-200 rounded-full w-44" />
+                      </div>
+                      <div className="h-7 w-20 bg-slate-200 rounded-lg" />
+                    </div>
+                  ))}
+                </div>
+              ) : eventosDoDia.length === 0 ? (
                 <div className="p-8 text-center space-y-2 border border-dashed border-slate-200 rounded-xl">
                   <CalendarIcon className="h-6 w-6 text-slate-300 mx-auto" />
                   <p className="text-xs font-bold text-slate-700">Nenhum evento agendado para esta data.</p>
@@ -1256,10 +1315,20 @@ function ConteudoCalendario() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-[#2A546D] hover:bg-[#204054] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2"
+                disabled={salvandoAgendamento}
+                className="w-full py-3 bg-[#2A546D] hover:bg-[#204054] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Check className="h-4 w-4" />
-                <span>Confirmar Agendamento</span>
+                {salvandoAgendamento ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Confirmando Agendamento...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Confirmar Agendamento</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -1289,6 +1358,13 @@ function ConteudoCalendario() {
             <button
               type="button"
               onClick={() => {
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("consulta_agendada", "true");
+                  localStorage.setItem("nutrindo_consulta_agendada", "true");
+                  window.dispatchEvent(new Event("storage"));
+                  window.dispatchEvent(new Event("nutrindo_onboarding_atualizado"));
+                  window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
+                }
                 setModalSucessoOnboarding(false);
                 router.push("/dashboard");
               }}

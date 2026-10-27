@@ -850,14 +850,14 @@ export default function PaginaInicialLanding() {
       </footer>
 
       {/* ===================================================================== */}
-      {/* 10. BOTÃO FLUTUANTE DE DÚVIDAS VIA WHATSAPP */}
+      {/* 10. BOTÃO FLUTUANTE DE DÚVIDAS VIA WHATSAPP (COMPACTO NO MOBILE) */}
       {/* ===================================================================== */}
-      <div className="fixed bottom-6 right-6 z-40">
+      <div className="fixed bottom-3.5 right-3.5 sm:bottom-6 sm:right-6 z-40">
         <a
           href="https://wa.me/5541984926020?text=Ol%C3%A1!%20Tenho%20d%C3%BAvidas%20sobre%20o%20m%C3%A9todo%20Nutrindo%20em%20Casa."
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-700 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-emerald-400/40"
+          className="group flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 sm:px-4 sm:py-3 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-emerald-400/40"
           title="Fale com a nossa equipe via WhatsApp: (41) 98492-6020"
         >
           {/* ÍCONE COM BADGE PULSANTE */}

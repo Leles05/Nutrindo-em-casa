@@ -108,7 +108,7 @@ export default function NotificationBell() {
             tipo: "devolutiva",
             titulo: "Nova Orientação da Dra. Laís",
             descricao: "Seu parecer clínico semanal e metas alimentares foram atualizados.",
-            link: "/dashboard/devolutiva",
+            link: "/dashboard/devolutivas",
           });
         }
 

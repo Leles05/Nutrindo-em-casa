@@ -41,6 +41,17 @@ export default function PaginaChat() {
     };
   }, []);
 
+  // Fechamento de imagem ampliada com a tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.code === "Escape") {
+        if (imagemVisualizandoIndex !== null) setImagemVisualizandoIndex(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [imagemVisualizandoIndex]);
+
   const [conversas, setConversas] = useState<Mensagem[]>([
     {
       id: "boas-vindas",

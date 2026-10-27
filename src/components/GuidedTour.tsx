@@ -21,6 +21,8 @@ interface GuidedTourProps {
   steps: TourStep[];
   /** Chave do localStorage que marca o tour como já visto. */
   storageKey: string;
+  /** Se false, desativa a auto-abertura inicial para não interromper etapas pendentes de onboarding. */
+  autoIniciar?: boolean;
 }
 
 export const EVENTO_ABRIR_TOUR = "nutrindo:abrir-tour";
@@ -134,7 +136,7 @@ export function getElementByTarget(alvo?: string): HTMLElement | null {
   return null;
 }
 
-export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
+export default function GuidedTour({ steps, storageKey, autoIniciar = true }: GuidedTourProps) {
   const [aberto, setAberto] = useState(false);
   const [indice, setIndice] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
@@ -169,7 +171,7 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
     setAberto(false);
   }, []);
 
-  // Auto-início no acesso: abre em 250ms a menos que explicitamente oculto permanente
+  // Auto-início no acesso: abre em 250ms se autoIniciar === true e não estiver oculto
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -184,8 +186,8 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
     let cancelado = false;
     let timer: NodeJS.Timeout | null = null;
 
-    // Abertura rápida imediata (250ms) se localmente não estiver marcado para ocultar
-    if (!isTourOculto(storageKey)) {
+    // Abertura rápida imediata (250ms) se permitido e não estiver marcado para ocultar
+    if (autoIniciar && !isTourOculto(storageKey)) {
       timer = setTimeout(() => {
         if (!cancelado) {
           setIndice(0);
@@ -227,8 +229,8 @@ export default function GuidedTour({ steps, storageKey }: GuidedTourProps) {
             document.cookie = "nutrindo_tour_oculto=; path=/; max-age=0; SameSite=Lax";
             setNaoMostrarNovamente(false);
 
-            // Se ainda não estiver aberto, abre rapidamente em 250ms
-            if (!cancelado) {
+            // Se permitido e ainda não estiver aberto, abre em 250ms
+            if (autoIniciar && !cancelado) {
               if (timer) clearTimeout(timer);
               timer = setTimeout(() => {
                 if (!cancelado) {

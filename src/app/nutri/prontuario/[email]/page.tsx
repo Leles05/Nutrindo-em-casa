@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -33,6 +33,7 @@ import {
   PenSquare,
   Stethoscope,
   MessageSquare,
+  Search,
 } from "lucide-react";
 import BancoRespostasRapidas from "@/components/nutri/BancoRespostasRapidas";
 import {
@@ -115,6 +116,9 @@ export default function ProntuarioDedicadoPage() {
   // Filtro da coluna da esquerda: "todas" vs "atencao" vs "diario"
   const [filtroPerguntas, setFiltroPerguntas] = useState<"todas" | "atencao" | "diario">("todas");
 
+  // Busca rápida de palavra-chave nas 56 perguntas e respostas
+  const [buscaPalavraChave, setBuscaPalavraChave] = useState("");
+
   // Aba da coluna da direita: "devolutiva" vs "anotacoes"
   const [abaDireita, setAbaDireita] = useState<"devolutiva" | "anotacoes">("devolutiva");
 
@@ -138,9 +142,14 @@ export default function ProntuarioDedicadoPage() {
   const [anotacoesInternas, setAnotacoesInternas] = useState("");
   const [salvandoAnotacoes, setSalvandoAnotacoes] = useState(false);
   const [feedbackAnotacoes, setFeedbackAnotacoes] = useState("");
+  const [statusAutoSave, setStatusAutoSave] = useState("");
+  const primeiraCargaAnotacoes = useRef<boolean>(true);
+  const timeoutAutoSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const ultimaAnotacaoSalvaRef = useRef<string>("");
 
   // Estados para salvar modelo próprio no banco de respostas
   const [salvandoModeloInline, setSalvandoModeloInline] = useState(false);
+  const [salvandoModeloProprio, setSalvandoModeloProprio] = useState(false);
   const [nomeModeloInput, setNomeModeloInput] = useState("");
   const [erroSalvarModelo, setErroSalvarModelo] = useState("");
 
@@ -173,7 +182,13 @@ export default function ProntuarioDedicadoPage() {
           const anotacoesSalvas = data.anamnese?.anotacoes_clinicas || data.anamnese?.respostas?.anotacoes_clinicas;
           if (anotacoesSalvas) {
             setAnotacoesInternas(anotacoesSalvas);
+            ultimaAnotacaoSalvaRef.current = anotacoesSalvas;
           }
+
+          // Permite auto-save após montagem inicial
+          setTimeout(() => {
+            primeiraCargaAnotacoes.current = false;
+          }, 350);
 
           // Ajusta número da semana com base nas devolutivas já enviadas
           const totalDevs = (data.devolutivas || []).length;
@@ -192,6 +207,50 @@ export default function ProntuarioDedicadoPage() {
     };
   }, [emailDecodificado]);
 
+  // Auto-Save com debounce de 1500ms nas Anotações Internas
+  useEffect(() => {
+    if (primeiraCargaAnotacoes.current) return;
+    if (!emailDecodificado) return;
+    if (anotacoesInternas === ultimaAnotacaoSalvaRef.current) return;
+
+    setStatusAutoSave("Salvando...");
+
+    if (timeoutAutoSaveRef.current) {
+      clearTimeout(timeoutAutoSaveRef.current);
+    }
+
+    timeoutAutoSaveRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/nutri", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "salvar_anotacoes_prontuario",
+            user_email: emailDecodificado,
+            anotacoes_clinicas: anotacoesInternas,
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          ultimaAnotacaoSalvaRef.current = anotacoesInternas;
+          const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          setStatusAutoSave(`✓ Salvo automaticamente às ${hora}`);
+        } else {
+          setStatusAutoSave("⚠️ Erro ao salvar automaticamente");
+        }
+      } catch {
+        setStatusAutoSave("⚠️ Erro de rede ao salvar");
+      }
+    }, 1500);
+
+    return () => {
+      if (timeoutAutoSaveRef.current) {
+        clearTimeout(timeoutAutoSaveRef.current);
+      }
+    };
+  }, [anotacoesInternas, emailDecodificado]);
+
   // Seções organizadas das 56 perguntas
   const secoes: SecaoProntuario[] = useMemo(() => {
     return obterSecoesProntuario(paciente.anamnese?.respostas);
@@ -201,6 +260,42 @@ export default function ProntuarioDedicadoPage() {
   const totalPontosAtencao = useMemo(() => {
     return secoes.reduce((acc, sec) => acc + sec.itens.filter((i) => i.pontoAtencao).length, 0);
   }, [secoes]);
+
+  // Seções com filtro de busca por palavra-chave e ponto de atenção
+  const secoesFiltradas = useMemo(() => {
+    const termo = buscaPalavraChave.trim().toLowerCase();
+    return secoes.map((secao) => {
+      const itens = secao.itens.filter((item) => {
+        if (filtroPerguntas === "atencao" && !item.pontoAtencao) return false;
+        if (!termo) return true;
+
+        const perguntaStr = (item.pergunta || "").toLowerCase();
+        const respostaStr = String(item.resposta || "").toLowerCase();
+
+        const leituraStr = (item.leituraClinica || "").toLowerCase();
+        const motivoStr = (item.motivoAtencao || "").toLowerCase();
+        const orientacaoStr = (item.orientacaoPais || item.sugestaoConduta || "").toLowerCase();
+
+        return (
+          perguntaStr.includes(termo) ||
+          respostaStr.includes(termo) ||
+          leituraStr.includes(termo) ||
+          motivoStr.includes(termo) ||
+          orientacaoStr.includes(termo)
+        );
+      });
+
+      return {
+        ...secao,
+        itens,
+      };
+    });
+  }, [secoes, filtroPerguntas, buscaPalavraChave]);
+
+  // Total de itens exibidos após busca
+  const totalItensFiltrados = useMemo(() => {
+    return secoesFiltradas.reduce((acc, sec) => acc + sec.itens.length, 0);
+  }, [secoesFiltradas]);
 
   // Ação 1: Inserir Sugestão Humanizada na Devolutiva Semanal + Meta Prática Sugerida
   const handleInserirSugestao = (item: ItemPergunta) => {
@@ -269,6 +364,7 @@ export default function ProntuarioDedicadoPage() {
 
   // Ação 3: Confirmar e salvar modelo atual no Banco de Respostas
   const handleConfirmarSalvarModelo = () => {
+    if (salvandoModeloProprio) return;
     if (!nomeModeloInput.trim()) {
       setErroSalvarModelo("Digite o título do modelo (ex: Conduta para Desmame de Telas).");
       return;
@@ -278,24 +374,29 @@ export default function ProntuarioDedicadoPage() {
       return;
     }
 
-    const novoModelo = salvarRespostaCustom({
-      tituloCurto: nomeModeloInput.trim(),
-      categoria: "personalizado",
-      parecerClinicoSugerido: parecerClinico.trim(),
-      alimentosAlvoSugeridos: alimentosAlvo
-        ? alimentosAlvo
-            .split(",")
-            .map((a) => a.trim())
-            .filter(Boolean)
-        : [],
-      metasSemanaisSugeridas: metas,
-    });
+    try {
+      setSalvandoModeloProprio(true);
+      const novoModelo = salvarRespostaCustom({
+        tituloCurto: nomeModeloInput.trim(),
+        categoria: "personalizado",
+        parecerClinicoSugerido: parecerClinico.trim(),
+        alimentosAlvoSugeridos: alimentosAlvo
+          ? alimentosAlvo
+              .split(",")
+              .map((a) => a.trim())
+              .filter(Boolean)
+          : [],
+        metasSemanaisSugeridas: metas,
+      });
 
-    setSalvandoModeloInline(false);
-    setNomeModeloInput("");
-    setErroSalvarModelo("");
-    setFeedbackSucesso(`Modelo "${novoModelo.tituloCurto}" salvo com sucesso no seu banco! ⭐`);
-    setTimeout(() => setFeedbackSucesso(""), 3500);
+      setSalvandoModeloInline(false);
+      setNomeModeloInput("");
+      setErroSalvarModelo("");
+      setFeedbackSucesso(`Modelo "${novoModelo.tituloCurto}" salvo com sucesso no seu banco! ⭐`);
+      setTimeout(() => setFeedbackSucesso(""), 3500);
+    } finally {
+      setSalvandoModeloProprio(false);
+    }
   };
 
   // Ação 4: Aplicar protocolo do banco de respostas rápidas (preenchimento automático)
@@ -329,6 +430,7 @@ export default function ProntuarioDedicadoPage() {
 
   // Enviar Devolutiva para a Família
   const handleEnviarDevolutiva = async () => {
+    if (enviandoDevolutiva) return;
     if (!parecerClinico.trim()) {
       setFeedbackErro("O parecer clínico não pode estar vazio.");
       setTimeout(() => setFeedbackErro(""), 3500);
@@ -404,6 +506,9 @@ export default function ProntuarioDedicadoPage() {
         throw new Error(data.message || "Falha ao salvar anotações.");
       }
 
+      ultimaAnotacaoSalvaRef.current = anotacoesInternas;
+      const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      setStatusAutoSave(`✓ Salvo manualmente às ${hora}`);
       setFeedbackAnotacoes("Anotações confidenciais salvas com sucesso! 📝");
       setTimeout(() => setFeedbackAnotacoes(""), 3500);
     } catch (err: any) {
@@ -658,6 +763,47 @@ export default function ProntuarioDedicadoPage() {
               </span>
             </div>
 
+            {/* INPUT DE BUSCA INSTANTÂNEA NAS 56 PERGUNTAS E RESPOSTAS */}
+            {filtroPerguntas !== "diario" && (
+              <div className="space-y-1.5">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaPalavraChave}
+                    onChange={(e) => setBuscaPalavraChave(e.target.value)}
+                    placeholder="🔍 Buscar palavra-chave nas 56 perguntas ou respostas (ex: engasgo, telas, escola, leite)..."
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/30 focus:border-[#4C6C54] shadow-2xs transition-all"
+                  />
+                  {buscaPalavraChave && (
+                    <button
+                      type="button"
+                      onClick={() => setBuscaPalavraChave("")}
+                      className="absolute right-3 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                      title="Limpar busca"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {buscaPalavraChave && (
+                  <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-semibold">
+                    <span>
+                      Mostrando {totalItensFiltrados} pergunta{totalItensFiltrados === 1 ? "" : "s"} para: &ldquo;{buscaPalavraChave}&rdquo;
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBuscaPalavraChave("")}
+                      className="text-[#4C6C54] hover:underline font-bold cursor-pointer"
+                    >
+                      Limpar busca
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* SEÇÃO DINÂMICA: DIÁRIO DA CRIANÇA OU ANAMNESE COMPLETA */}
             {filtroPerguntas === "diario" ? (
               <div className="space-y-4 pb-6">
@@ -746,29 +892,44 @@ export default function ProntuarioDedicadoPage() {
             ) : (
               /* LISTAGEM DAS SEÇÕES DE ANAMNESE */
               <div className="space-y-6 pb-12">
-              {secoes.map((secao) => {
-                const itensFiltrados =
-                  filtroPerguntas === "atencao"
-                    ? secao.itens.filter((item) => item.pontoAtencao)
-                    : secao.itens;
+                {totalItensFiltrados === 0 && buscaPalavraChave ? (
+                  <div className="p-8 sm:p-12 text-center space-y-3 bg-white rounded-3xl border border-dashed border-slate-300 shadow-2xs">
+                    <Search className="h-10 w-10 text-slate-300 mx-auto" />
+                    <p className="text-base font-extrabold text-slate-800">
+                      Nenhuma pergunta ou resposta encontrada para &ldquo;{buscaPalavraChave}&rdquo;
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                      Tente outros termos como &ldquo;leite&rdquo;, &ldquo;telas&rdquo;, &ldquo;engasgo&rdquo;, &ldquo;escola&rdquo;, &ldquo;fruta&rdquo; ou limpe a busca para ver todas.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setBuscaPalavraChave("")}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      <span>Limpar busca rápida</span>
+                    </button>
+                  </div>
+                ) : (
+                  secoesFiltradas.map((secao) => {
+                    const itensFiltrados = secao.itens;
+                    if (itensFiltrados.length === 0) return null;
 
-                if (itensFiltrados.length === 0) return null;
-
-                return (
-                  <div
-                    key={secao.numeroSecao}
-                    className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm space-y-4"
-                  >
-                    {/* CABEÇALHO DA SEÇÃO */}
-                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                      <h2 className="text-base sm:text-lg font-black text-[#4C6C54] tracking-tight flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#4C6C54]" />
-                        <span>{secao.titulo}</span>
-                      </h2>
-                      <span className="text-xs font-bold text-slate-400">
-                        {itensFiltrados.length} parâmetros
-                      </span>
-                    </div>
+                    return (
+                      <div
+                        key={secao.numeroSecao}
+                        className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm space-y-4"
+                      >
+                        {/* CABEÇALHO DA SEÇÃO */}
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                          <h2 className="text-base sm:text-lg font-black text-[#4C6C54] tracking-tight flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#4C6C54]" />
+                            <span>{secao.titulo}</span>
+                          </h2>
+                          <span className="text-xs font-bold text-slate-400">
+                            {itensFiltrados.length} parâmetros
+                          </span>
+                        </div>
 
                     {/* CARDS DE CADA PERGUNTA (FONTE GRANDE 16px / text-base) */}
                     <div className="space-y-3.5">
@@ -883,10 +1044,11 @@ export default function ProntuarioDedicadoPage() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })
             )}
-          </section>
+          </div>
+        )}
+      </section>
 
           {/* ========================================================= */}
           {/* COLUNA DA DIREITA (5 COLS): ROLA DE FORMA INDEPENDENTE ATÉ O BOTÃO ENVIAR */}
@@ -991,10 +1153,11 @@ export default function ProntuarioDedicadoPage() {
                           <button
                             type="button"
                             onClick={handleConfirmarSalvarModelo}
-                            className="px-3.5 py-1.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                            disabled={salvandoModeloProprio}
+                            className="px-3.5 py-1.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Check className="h-3.5 w-3.5" />
-                            <span>Salvar Modelo</span>
+                            <span>{salvandoModeloProprio ? "Salvando..." : "Salvar Modelo"}</span>
                           </button>
                         </div>
 
@@ -1107,14 +1270,19 @@ export default function ProntuarioDedicadoPage() {
                     type="button"
                     onClick={handleEnviarDevolutiva}
                     disabled={enviandoDevolutiva}
-                    className="w-full py-3.5 px-6 rounded-2xl bg-[#4C6C54] hover:bg-[#3D5A45] text-white font-black text-sm sm:text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 px-6 rounded-2xl bg-[#4C6C54] hover:bg-[#3D5A45] text-white font-black text-sm sm:text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Send className="h-4 w-4" />
-                    <span>
-                      {enviandoDevolutiva
-                        ? "Enviando Devolutiva..."
-                        : "Enviar Devolutiva para a Família 💌"}
-                    </span>
+                    {enviandoDevolutiva ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Enviando Devolutiva para a Família...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        <span>Enviar Devolutiva para a Família 💌</span>
+                      </>
+                    )}
                   </button>
 
                   {/* HISTÓRICO RÁPIDO DE DEVOLUTIVAS */}
@@ -1169,9 +1337,31 @@ export default function ProntuarioDedicadoPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-700">
-                      Anotações Clínicas & Hipóteses Diagnósticas
-                    </label>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                        Anotações Clínicas & Hipóteses Diagnósticas
+                      </label>
+                      {statusAutoSave && (
+                        <span
+                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-all ${
+                            statusAutoSave.includes("Salvando")
+                              ? "bg-amber-100 text-amber-900 animate-pulse"
+                              : statusAutoSave.includes("✓")
+                              ? "bg-emerald-100 text-emerald-900"
+                              : "bg-rose-100 text-rose-800"
+                          }`}
+                        >
+                          {statusAutoSave.includes("Salvando") ? (
+                            <Clock className="h-3 w-3 animate-spin" />
+                          ) : statusAutoSave.includes("✓") ? (
+                            <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                          ) : (
+                            <AlertTriangle className="h-3 w-3 text-rose-600" />
+                          )}
+                          <span>{statusAutoSave}</span>
+                        </span>
+                      )}
+                    </div>
                     <textarea
                       value={anotacoesInternas}
                       onChange={(e) => setAnotacoesInternas(e.target.value)}

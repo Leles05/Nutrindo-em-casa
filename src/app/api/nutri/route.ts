@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { extrairAnexo, serializarComAnexo } from "@/app/api/chat/route";
 
 export async function GET(request: Request) {
   try {
@@ -9,21 +10,38 @@ export async function GET(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // Consulta específica para Banco de Respostas Rápidas
-    if (tipoParam === "respostas_rapidas") {
+    // Consulta específica para Banco de Respostas Rápidas ou Materiais de Aulas
+    if (tipoParam === "respostas_rapidas" || tipoParam === "materiais_aulas") {
       let respostasRapidas: any[] = [];
+      let materiaisAulas: any[] = [];
       if (isSupabaseConfigured()) {
         try {
           const { data } = await supabaseAdmin
             .from("respostas_rapidas_nutri")
             .select("*")
             .order("created_at", { ascending: false });
-          if (data) respostasRapidas = data;
+          if (data) {
+            respostasRapidas = data;
+            materiaisAulas = data
+              .filter((r: any) => r.categoria === "CURSO_MATERIAL_AULA")
+              .map((r: any) => {
+                try {
+                  return JSON.parse(r.texto);
+                } catch {
+                  return null;
+                }
+              })
+              .filter(Boolean);
+          }
         } catch (err) {
           console.warn("Aviso ao buscar respostas rápidas:", err);
         }
       }
-      return NextResponse.json({ success: true, respostas_rapidas: respostasRapidas });
+      return NextResponse.json({
+        success: true,
+        respostas_rapidas: respostasRapidas,
+        materiais_aulas: materiaisAulas,
+      });
     }
 
     // Consulta específica para o Dashboard/Receitas do Paciente
@@ -78,6 +96,25 @@ export async function GET(request: Request) {
               .order("nome_crianca", { ascending: true }),
           ]);
 
+          let materiaisAulas: any[] = [];
+          try {
+            const { data: respData } = await supabaseAdmin
+              .from("respostas_rapidas_nutri")
+              .select("*")
+              .eq("categoria", "CURSO_MATERIAL_AULA");
+            if (respData) {
+              materiaisAulas = respData
+                .map((r: any) => {
+                  try {
+                    return JSON.parse(r.texto);
+                  } catch {
+                    return null;
+                  }
+                })
+                .filter(Boolean);
+            }
+          } catch {}
+
           if (dRes.data) devolutivas = dRes.data;
           if (pRes.data) prescricao = pRes.data;
           if (aRes.data) agendamentos = aRes.data;
@@ -85,6 +122,19 @@ export async function GET(request: Request) {
           if (anamRes.data) anamnese = anamRes.data;
           if (diaRes.data) diario = diaRes.data;
           if (pacientesRes.data) listaPacientes = pacientesRes.data;
+
+          return NextResponse.json({
+            success: true,
+            user_email: userEmailParam,
+            profile,
+            anamnese,
+            devolutivas,
+            prescricao,
+            agendamentos,
+            diario,
+            lista_pacientes: listaPacientes,
+            materiais_aulas: materiaisAulas,
+          });
         } catch (dbErr) {
           console.warn("Aviso ao buscar dados do paciente no Supabase:", dbErr);
         }
@@ -100,6 +150,7 @@ export async function GET(request: Request) {
         agendamentos,
         diario,
         lista_pacientes: listaPacientes,
+        materiais_aulas: [],
       });
     }
 
@@ -148,7 +199,20 @@ export async function GET(request: Request) {
               };
             });
         }
-        if (mRes.data) mensagens = mRes.data.filter((m: any) => !ehNutri(m.user_email));
+        if (mRes.data) {
+          mensagens = mRes.data
+            .filter((m: any) => !ehNutri(m.user_email))
+            .map((m: any) => {
+              const { texto, anexo } = extrairAnexo(m.texto);
+              return {
+                ...m,
+                remetente: m.remetente === "nutri" ? "nutri" : "usuario",
+                texto,
+                anexo,
+                arquivos: anexo ? [anexo] : undefined,
+              };
+            });
+        }
         if (agRes.data) agendamentos = agRes.data.filter((a: any) => !ehNutri(a.user_email));
         if (devRes.data) devolutivas = devRes.data.filter((d: any) => !ehNutri(d.user_email));
         if (presRes.data) prescricoes = presRes.data.filter((p: any) => !ehNutri(p.user_email));
@@ -229,6 +293,17 @@ export async function GET(request: Request) {
       };
     });
 
+    const materiaisAulas = respostasRapidas
+      .filter((r: any) => r.categoria === "CURSO_MATERIAL_AULA")
+      .map((r: any) => {
+        try {
+          return JSON.parse(r.texto);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
     return NextResponse.json({
       success: true,
       profiles: profilesEnriquecidos,
@@ -239,6 +314,7 @@ export async function GET(request: Request) {
       devolutivas,
       prescricoes,
       respostas_rapidas: respostasRapidas,
+      materiais_aulas: materiaisAulas,
     });
   } catch (error: unknown) {
     console.error("Erro interno no painel da nutricionista:", error);
@@ -258,16 +334,21 @@ export async function POST(request: Request) {
 
     // Ação 1: Enviar Mensagem no Chat como Nutri
     if (action === "enviar_mensagem") {
-      const { user_email, texto, horario } = body;
+      const { user_email, texto, horario, anexo } = body;
       const emailLimpo = String(user_email || "").trim().toLowerCase();
       const textoLimpo = String(texto || "").trim();
 
-      if (!emailLimpo || !textoLimpo) {
+      if (!emailLimpo || (!textoLimpo && !anexo)) {
         return NextResponse.json(
-          { success: false, message: "E-mail do paciente e texto são obrigatórios." },
+          { success: false, message: "E-mail do paciente e conteúdo da mensagem ou anexo são obrigatórios." },
           { status: 400 }
         );
       }
+
+      const textoFinal = serializarComAnexo(textoLimpo, anexo);
+      const agoraHorario =
+        horario ||
+        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
       const { data: novaMsg, error } = await supabaseAdmin
         .from("mensagens_chat")
@@ -275,8 +356,8 @@ export async function POST(request: Request) {
           {
             user_email: emailLimpo,
             remetente: "nutri",
-            texto: textoLimpo,
-            horario: horario || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            texto: textoFinal,
+            horario: agoraHorario,
             created_at: new Date().toISOString(),
           },
         ])
@@ -287,17 +368,78 @@ export async function POST(request: Request) {
         console.warn("Aviso ao salvar mensagem da nutri:", error);
       }
 
-      return NextResponse.json({
-        success: true,
-        message: "Mensagem enviada com sucesso.",
-        mensagem: novaMsg || {
+      const respostaFormatada = {
+        ...(novaMsg || {
           id: Date.now().toString(),
           user_email: emailLimpo,
           remetente: "nutri",
-          texto: textoLimpo,
-          horario: horario || "Agora",
+          horario: agoraHorario,
           created_at: new Date().toISOString(),
-        },
+        }),
+        remetente: "nutri",
+        texto: textoLimpo,
+        anexo: anexo || null,
+        arquivos: anexo ? [anexo] : undefined,
+      };
+
+      return NextResponse.json({
+        success: true,
+        message: "Mensagem enviada com sucesso.",
+        mensagem: respostaFormatada,
+      });
+    }
+
+    // Ação Especial: Salvar Material / Metadados de Apoio de Aula do Curso
+    if (action === "salvar_material_aula") {
+      const { aula_id, titulo, descricao, video_url, material_anexo } = body;
+      const aulaIdNum = Number(aula_id || 1);
+      const chaveTitulo = `[AULA_${aulaIdNum}]`;
+
+      const dadosAula = {
+        aula_id: aulaIdNum,
+        titulo: String(titulo || "").trim(),
+        descricao: String(descricao || "").trim(),
+        video_url: String(video_url || "").trim(),
+        material_anexo: material_anexo || null,
+        atualizado_em: new Date().toISOString(),
+      };
+
+      let salvo = null;
+
+      if (isSupabaseConfigured()) {
+        try {
+          // Remove registro anterior desta aula para evitar duplicatas
+          await supabaseAdmin
+            .from("respostas_rapidas_nutri")
+            .delete()
+            .eq("categoria", "CURSO_MATERIAL_AULA")
+            .ilike("titulo", `${chaveTitulo}%`);
+
+          const { data, error } = await supabaseAdmin
+            .from("respostas_rapidas_nutri")
+            .insert([
+              {
+                categoria: "CURSO_MATERIAL_AULA",
+                titulo: `${chaveTitulo} ${dadosAula.titulo || `Aula ${aulaIdNum}`}`,
+                texto: JSON.stringify(dadosAula),
+                created_at: new Date().toISOString(),
+              },
+            ])
+            .select()
+            .single();
+
+          if (error) console.warn("Aviso ao salvar material de aula:", error);
+          if (data) salvo = data;
+        } catch (dbErr) {
+          console.warn("Aviso ao persistir material de aula:", dbErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Material e dados da aula salvos com sucesso!",
+        material_aula: dadosAula,
+        registro: salvo,
       });
     }
 

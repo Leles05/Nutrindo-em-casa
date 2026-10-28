@@ -146,17 +146,72 @@ export default function PaginaChat() {
     return "documento";
   };
 
-  const handleSelecionarArquivos = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const comprimirImagem = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1200;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          } else {
+            resolve((e.target?.result as string) || "");
+          }
+        };
+        img.onerror = () => resolve((e.target?.result as string) || "");
+        img.src = (e.target?.result as string) || "";
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const converterParaBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string) || "");
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSelecionarArquivos = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const novosArquivos: ArquivoAnexo[] = Array.from(files).map((file) => ({
-      id: `${file.name}-${Date.now()}-${Math.random()}`,
-      nome: file.name,
-      tamanho: formatarTamanho(file.size),
-      tipo: obterTipoArquivo(file),
-      url: URL.createObjectURL(file)
-    }));
+    const novosArquivos: ArquivoAnexo[] = [];
+    for (const file of Array.from(files)) {
+      const tipo = obterTipoArquivo(file);
+      let dataUrl = "";
+      if (tipo === "imagem") {
+        dataUrl = await comprimirImagem(file);
+      } else {
+        dataUrl = await converterParaBase64(file);
+      }
+      novosArquivos.push({
+        id: `${file.name}-${Date.now()}-${Math.random()}`,
+        nome: file.name,
+        tamanho: formatarTamanho(file.size),
+        tipo,
+        url: dataUrl,
+      });
+    }
 
     setArquivosPendentes((prev) => [...prev, ...novosArquivos]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -172,8 +227,8 @@ export default function PaginaChat() {
   useEffect(() => {
     const emailUsuario =
       typeof window !== "undefined"
-        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
-        : "lucas@email.com";
+        ? localStorage.getItem("nutrindo_user_email") || "lucaslimaleles@gmail.com"
+        : "lucaslimaleles@gmail.com";
 
     let intervalId: any = null;
 
@@ -186,12 +241,13 @@ export default function PaginaChat() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.success && Array.isArray(data.mensagens)) {
-          const formatadas: Mensagem[] = data.mensagens.map((m: { id: string | number; remetente: "nutri" | "usuario"; texto?: string; horario: string }) => ({
+          const formatadas: Mensagem[] = data.mensagens.map((m: any) => ({
             id: m.id,
             remetente: m.remetente === "nutri" ? "nutri" : "usuario",
             texto: m.texto,
             horario: m.horario,
             dataEnvio: `Hoje às ${m.horario}`,
+            arquivos: m.anexo ? [m.anexo] : (m.arquivos || undefined),
           }));
 
           setConversas((prev) => {
@@ -239,12 +295,13 @@ export default function PaginaChat() {
     const horarioFormatado = agora.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const textoMensagem = mensagem.trim();
     const tempId = `temp_${Date.now()}`;
+    const anexosParaEnviar = [...arquivosPendentes];
 
     const novaMensagem: Mensagem = {
       id: tempId,
       remetente: "usuario",
       texto: textoMensagem || undefined,
-      arquivos: arquivosPendentes.length > 0 ? [...arquivosPendentes] : undefined,
+      arquivos: anexosParaEnviar.length > 0 ? anexosParaEnviar : undefined,
       horario: horarioFormatado,
       dataEnvio: `Hoje às ${horarioFormatado}`,
     };
@@ -257,35 +314,53 @@ export default function PaginaChat() {
 
     const emailUsuario =
       typeof window !== "undefined"
-        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
-        : "lucas@email.com";
+        ? localStorage.getItem("nutrindo_user_email") || "lucaslimaleles@gmail.com"
+        : "lucaslimaleles@gmail.com";
 
-    if (textoMensagem) {
-      enviandoRef.current = true;
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: emailUsuario,
-            texto: textoMensagem,
-            horario: horarioFormatado,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok && data?.mensagemUsuario?.id) {
-          // Substitui o tempId pelo id real gravado no Supabase
-          setConversas((prev) =>
-            prev.map((m) =>
-              m.id === tempId ? { ...m, id: data.mensagemUsuario.id } : m
-            )
-          );
-        }
-      } catch (err) {
-        console.warn("Aviso ao enviar mensagem para API:", err);
-      } finally {
-        enviandoRef.current = false;
+    enviandoRef.current = true;
+    try {
+      const primeiroAnexo = anexosParaEnviar[0] || null;
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailUsuario,
+          texto: textoMensagem,
+          horario: horarioFormatado,
+          remetente: "usuario",
+          anexo: primeiroAnexo,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.mensagemUsuario?.id) {
+        // Substitui o tempId pelo id real gravado no Supabase
+        setConversas((prev) =>
+          prev.map((m) =>
+            m.id === tempId ? { ...m, id: data.mensagemUsuario.id } : m
+          )
+        );
       }
+
+      // Se enviou mais de 1 anexo, persiste os subsequentes
+      if (anexosParaEnviar.length > 1) {
+        for (let i = 1; i < anexosParaEnviar.length; i++) {
+          await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: emailUsuario,
+              texto: "",
+              horario: horarioFormatado,
+              remetente: "usuario",
+              anexo: anexosParaEnviar[i],
+            }),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Aviso ao enviar mensagem para API:", err);
+    } finally {
+      enviandoRef.current = false;
     }
   };
 
@@ -413,21 +488,15 @@ export default function PaginaChat() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 border-t border-slate-100 text-center divide-x divide-slate-100 bg-slate-50/70">
-                      <a 
-                        href={arq.url} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="py-2 text-xs font-bold text-[#4C6C54] hover:bg-[#4C6C54]/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" /> Ver
-                      </a>
+                    <div className="border-t border-slate-100 p-2 bg-slate-50/70">
                       <a 
                         href={arq.url} 
                         download={arq.nome}
-                        className="py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="w-full py-2 px-3 text-xs font-bold text-[#4C6C54] hover:bg-[#4C6C54]/10 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-white border border-[#4C6C54]/20 shadow-2xs"
                       >
-                        <Download className="h-3.5 w-3.5" /> Salvar como...
+                        <Download className="h-3.5 w-3.5" /> 📥 Baixar / Abrir Arquivo
                       </a>
                     </div>
                   </div>
@@ -543,6 +612,7 @@ export default function PaginaChat() {
               type="file"
               ref={fileInputRef}
               multiple
+              accept="image/*,.pdf,.doc,.docx"
               onChange={handleSelecionarArquivos}
               className="hidden"
             />

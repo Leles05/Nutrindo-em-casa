@@ -1,6 +1,28 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
+export function extrairAnexo(textoRaw?: string | null) {
+  if (!textoRaw || typeof textoRaw !== "string") {
+    return { texto: "", anexo: null };
+  }
+  const match = textoRaw.match(/^__ANEXO_JSON__:(.*?)__FIM_ANEXO__([\s\S]*)$/);
+  if (match) {
+    try {
+      const anexo = JSON.parse(match[1]);
+      return { texto: match[2] || "", anexo };
+    } catch {
+      return { texto: textoRaw, anexo: null };
+    }
+  }
+  return { texto: textoRaw, anexo: null };
+}
+
+export function serializarComAnexo(texto: string, anexo?: any) {
+  const textoLimpo = (texto || "").trim();
+  if (!anexo) return textoLimpo;
+  return `__ANEXO_JSON__:${JSON.stringify(anexo)}__FIM_ANEXO__${textoLimpo}`;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,10 +36,11 @@ export async function GET(request: Request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    // Busca usando .ilike('user_email', email) ordenado por created_at ASC
     const { data, error } = await supabaseAdmin
       .from("mensagens_chat")
       .select("*")
-      .eq("user_email", email)
+      .ilike("user_email", email)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -25,9 +48,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, mensagens: [] });
     }
 
+    // Extrai anexos serializados e padroniza remetente
+    const mensagensProcessadas = (data || []).map((m: any) => {
+      const { texto, anexo } = extrairAnexo(m.texto);
+      const remetenteNormalizado =
+        m.remetente === "nutri" ? "nutri" : "usuario";
+      return {
+        ...m,
+        remetente: remetenteNormalizado,
+        texto,
+        anexo,
+        arquivos: anexo ? [anexo] : undefined,
+      };
+    });
+
     return NextResponse.json({
       success: true,
-      mensagens: data || [],
+      mensagens: mensagensProcessadas,
     });
   } catch (error: unknown) {
     console.error("Erro interno ao buscar mensagens de chat:", error);
@@ -41,14 +78,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, texto, horario } = body;
+    const { email, texto, horario, remetente, anexo } = body;
 
     const emailLimpo = String(email || "").toLowerCase().trim();
     const textoLimpo = String(texto || "").trim();
 
-    if (!emailLimpo || !textoLimpo) {
+    if (!emailLimpo || (!textoLimpo && !anexo)) {
       return NextResponse.json(
-        { success: false, message: "E-mail e texto da mensagem são obrigatórios." },
+        { success: false, message: "E-mail e conteúdo da mensagem ou anexo são obrigatórios." },
         { status: 400 }
       );
     }
@@ -57,35 +94,47 @@ export async function POST(request: Request) {
       horario ||
       new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
+    const remetenteValido = remetente === "nutri" ? "nutri" : "usuario";
+    const textoFinal = serializarComAnexo(textoLimpo, anexo);
+
     const supabaseAdmin = getSupabaseAdmin();
 
-    // 1. Grava a mensagem enviada pelo responsável/paciente com Service Role (Bypass RLS)
+    // Grava a mensagem com Service Role (Bypass RLS)
     const { data: msgUser, error: errUser } = await supabaseAdmin
       .from("mensagens_chat")
       .insert([
         {
           user_email: emailLimpo,
-          remetente: "usuario",
-          texto: textoLimpo,
+          remetente: remetenteValido,
+          texto: textoFinal,
           horario: agoraHorario,
+          created_at: new Date().toISOString(),
         },
       ])
       .select()
       .single();
 
     if (errUser) {
-      console.error("Erro ao inserir mensagem de usuário no Supabase:", errUser);
+      console.error("Erro ao inserir mensagem de chat no Supabase:", errUser);
       return NextResponse.json(
         { success: false, message: "Erro ao salvar mensagem no banco de dados." },
         { status: 500 }
       );
     }
 
+    const respostaFormatada = {
+      ...msgUser,
+      remetente: remetenteValido,
+      texto: textoLimpo,
+      anexo: anexo || null,
+      arquivos: anexo ? [anexo] : undefined,
+    };
+
     return NextResponse.json(
       {
         success: true,
-        mensagem: msgUser,
-        mensagemUsuario: msgUser,
+        mensagem: respostaFormatada,
+        mensagemUsuario: respostaFormatada,
       },
       { status: 201 }
     );

@@ -6,7 +6,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, password } = body;
 
-    const emailLimpo = String(email || "")
+    let emailLimpo = String(email || "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/\s+/g, "")
@@ -19,16 +19,50 @@ export async function POST(request: Request) {
         {
           success: false,
           message:
-            "E-mail ou senha incorretos. Se você acabou de assinar, clique no link enviado ao seu e-mail para criar sua senha.",
+            "E-mail ou CPF e senha são obrigatórios para acessar.",
         },
         { status: 401 }
       );
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // Suporte a Login por CPF (11 dígitos com ou sem pontuação)
+    if (!emailLimpo.includes("@")) {
+      const cpfDigitos = emailLimpo.replace(/\D/g, "");
+      if (cpfDigitos.length === 11) {
+        if (isSupabaseConfigured()) {
+          try {
+            const { data: profilesList } = await supabaseAdmin
+              .from("profiles")
+              .select("email, cpf");
+
+            const perfilEncontrado = profilesList?.find(
+              (p) => String(p.cpf || "").replace(/\D/g, "") === cpfDigitos
+            );
+
+            if (perfilEncontrado?.email) {
+              emailLimpo = perfilEncontrado.email.toLowerCase().trim();
+            } else {
+              return NextResponse.json(
+                {
+                  success: false,
+                  message:
+                    "Nenhuma conta encontrada com este CPF. Verifique os números digitados ou acesse com seu e-mail.",
+                },
+                { status: 401 }
+              );
+            }
+          } catch (cpfErr) {
+            console.warn("Aviso ao buscar perfil por CPF:", cpfErr);
+          }
+        }
+      }
+    }
+
     const isNutri =
       emailLimpo === "metodonutrindoemcasa@gmail.com";
 
-    const supabaseAdmin = getSupabaseAdmin();
     let perfil = null;
     let authUser = null;
     let tokenSessao = "";

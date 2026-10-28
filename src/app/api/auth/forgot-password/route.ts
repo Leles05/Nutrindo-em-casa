@@ -4,8 +4,174 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email } = body;
+    const { tipo, cpf, novoEmail, novaSenha, email } = body;
 
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // 1. Fluxo de Correção de E-mail Digitado Errado Usando o CPF
+    if (tipo === "recuperar_cpf") {
+      const cpfLimpo = String(cpf || "").replace(/\D/g, "");
+      const emailCorreto = String(novoEmail || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toLowerCase();
+      const senhaInformada = String(novaSenha || "").trim();
+
+      if (cpfLimpo.length !== 11) {
+        return NextResponse.json(
+          { success: false, message: "Informe um CPF válido com 11 dígitos numéricos." },
+          { status: 400 }
+        );
+      }
+
+      if (!emailCorreto || !emailCorreto.includes("@")) {
+        return NextResponse.json(
+          { success: false, message: "Informe um novo e-mail válido." },
+          { status: 400 }
+        );
+      }
+
+      if (senhaInformada.length < 6) {
+        return NextResponse.json(
+          { success: false, message: "A nova senha deve ter no mínimo 6 caracteres." },
+          { status: 400 }
+        );
+      }
+
+      if (!isSupabaseConfigured()) {
+        return NextResponse.json({
+          success: true,
+          message: "E-mail e senha atualizados com sucesso!",
+          email: emailCorreto,
+          token: `token_${Date.now()}`,
+        });
+      }
+
+      // Busca perfil pelo CPF
+      const { data: todosPerfis, error: perfisErr } = await supabaseAdmin
+        .from("profiles")
+        .select("*");
+
+      if (perfisErr) {
+        console.error("Erro ao listar perfis para recuperação por CPF:", perfisErr);
+      }
+
+      const perfilEncontrado = todosPerfis?.find(
+        (p) => String(p.cpf || "").replace(/\D/g, "") === cpfLimpo
+      );
+
+      if (!perfilEncontrado) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Nenhum cadastro encontrado com este CPF. Verifique os números digitados ou entre em contato com nosso suporte.",
+          },
+          { status: 404 }
+        );
+      }
+
+      const emailAntigo = String(perfilEncontrado.email || "").toLowerCase().trim();
+
+      // Atualiza o e-mail na tabela profiles
+      await supabaseAdmin
+        .from("profiles")
+        .update({ email: emailCorreto })
+        .eq("id", perfilEncontrado.id);
+
+      // Atualiza o e-mail em anamneses e demais tabelas
+      if (emailAntigo) {
+        try {
+          await supabaseAdmin
+            .from("anamneses")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+
+          await supabaseAdmin
+            .from("faturas")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+
+          await supabaseAdmin
+            .from("mensagens_chat")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+
+          await supabaseAdmin
+            .from("agendamentos")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+
+          await supabaseAdmin
+            .from("devolutivas_semanais")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+
+          await supabaseAdmin
+            .from("diario_refeicoes")
+            .update({ user_email: emailCorreto })
+            .ilike("user_email", emailAntigo);
+        } catch (updateTablesErr) {
+          console.warn("Aviso ao atualizar tabelas auxiliares:", updateTablesErr);
+        }
+      }
+
+      // Atualiza ou cria a conta no Supabase Auth
+      let authUserId = null;
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const existingOldUser = listData?.users?.find(
+          (u) => emailAntigo && u.email?.toLowerCase() === emailAntigo
+        );
+        const existingNewUser = listData?.users?.find(
+          (u) => u.email?.toLowerCase() === emailCorreto
+        );
+
+        if (existingOldUser) {
+          await supabaseAdmin.auth.admin.updateUserById(existingOldUser.id, {
+            email: emailCorreto,
+            password: senhaInformada,
+            email_confirm: true,
+          });
+          authUserId = existingOldUser.id;
+        } else if (existingNewUser) {
+          await supabaseAdmin.auth.admin.updateUserById(existingNewUser.id, {
+            password: senhaInformada,
+            email_confirm: true,
+          });
+          authUserId = existingNewUser.id;
+        } else {
+          const { data: createdUser } = await supabaseAdmin.auth.admin.createUser({
+            email: emailCorreto,
+            password: senhaInformada,
+            email_confirm: true,
+            user_metadata: {
+              name: perfilEncontrado.nome || "Responsável",
+              role: "cliente",
+            },
+          });
+          if (createdUser?.user) authUserId = createdUser.user.id;
+        }
+      } catch (authSyncErr) {
+        console.warn("Aviso ao sincronizar Auth no Supabase:", authSyncErr);
+      }
+
+      const tokenSessao = `token_${authUserId || Date.now()}`;
+
+      return NextResponse.json({
+        success: true,
+        message: "E-mail corrigido e nova senha cadastrada com sucesso! Seu acesso já está liberado.",
+        email: emailCorreto,
+        token: tokenSessao,
+        nome: perfilEncontrado.nome || "Responsável",
+        anamnese_concluida: Boolean(perfilEncontrado.anamnese_concluida),
+        consulta_agendada: Boolean(perfilEncontrado.consulta_agendada),
+      });
+    }
+
+    // 2. Fluxo Tradicional de Esqueci a Senha por E-mail
     const emailLimpo = String(email || "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -21,7 +187,6 @@ export async function POST(request: Request) {
     }
 
     const isNutri = emailLimpo === "metodonutrindoemcasa@gmail.com";
-    const supabaseAdmin = getSupabaseAdmin();
     let existePerfil = false;
     let nomeUsuario = isNutri ? "Dra. Laís Leles" : "Responsável";
 

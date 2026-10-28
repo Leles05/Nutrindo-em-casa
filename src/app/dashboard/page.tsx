@@ -28,6 +28,7 @@ import { encerrarSessao } from "@/hooks/useAuthGuard";
 export { encerrarSessao } from "@/hooks/useAuthGuard";
 import { abrirGoogleCalendar } from "@/lib/googleCalendar";
 import NotificationBell from "@/components/dashboard/NotificationBell";
+import { calcularIniciais } from "@/app/configuracoes/page";
 
 const AULAS_CURSO = [
   { id: 1, titulo: "Terapia Alimentar Descomplicada", modulo: "Módulo 1 - Aula 1" },
@@ -80,6 +81,7 @@ export default function PaginaDashboard() {
     email: "",
     crianca: "Joãozinho",
   });
+  const [fotoPerfil, setFotoPerfil] = useState<string>("");
 
   // Estado de Onboarding
   const [anamneseConcluida, setAnamneseConcluida] = useState(true);
@@ -226,6 +228,8 @@ export default function PaginaDashboard() {
       }
 
       const nomeSalvo = localStorage.getItem("nutrindo_user_nome") || "";
+      const avatarSalvo = localStorage.getItem("nutrindo_user_avatar") || "";
+      if (avatarSalvo) setFotoPerfil(avatarSalvo);
       const criancaSalva =
         localStorage.getItem("nutrindo_crianca_nome") ||
         localStorage.getItem("nutrindo_nome_crianca") ||
@@ -241,6 +245,10 @@ export default function PaginaDashboard() {
       try {
         // 1. Carrega Perfil & Assinatura
         const confRes = await fetch(`/api/configuracoes?email=${encodeURIComponent(email)}`).then((r) => r.json()).catch(() => null);
+        if (confRes?.avatar_url) {
+          setFotoPerfil(confRes.avatar_url);
+          localStorage.setItem("nutrindo_user_avatar", confRes.avatar_url);
+        }
         if (confRes?.tour_oculto === true || confRes?.profile?.tour_oculto === true) {
           localStorage.setItem("nutrindo_tour_oculto_permanente", "true");
           localStorage.setItem("nutrindo_tour_desativado", "true");
@@ -621,6 +629,24 @@ export default function PaginaDashboard() {
           >
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>Plano {dadosPlano.plano} • Ativo</span>
+          </Link>
+
+          {/* Avatar / Iniciais do Usuário */}
+          <Link
+            href="/configuracoes"
+            className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white border border-slate-200 hover:border-[#3D5A45] transition-all shadow-xs group"
+            title="Minha Conta & Configurações"
+          >
+            <div className="h-7 w-7 rounded-full bg-[#3D5A45] text-white flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden ring-1 ring-[#3D5A45]/30">
+              {fotoPerfil ? (
+                <img src={fotoPerfil} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                <span>{calcularIniciais(dadosPlano.responsavel)}</span>
+              )}
+            </div>
+            <span className="text-xs font-bold text-slate-700 group-hover:text-[#3D5A45] max-w-[120px] truncate">
+              {dadosPlano.responsavel.split(" ")[0]}
+            </span>
           </Link>
         </div>
       </div>

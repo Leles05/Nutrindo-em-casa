@@ -8,9 +8,11 @@ import {
   LogOut, Sparkles, CheckCircle2, Clock, Send, Plus, X,
   FileText, ExternalLink, ShieldAlert, Award, Search, ChevronRight,
   Eye, Save, AlertCircle, Heart, User, Check, Video,
-  Mail, UtensilsCrossed, Star, ChefHat, Trash2
+  Mail, UtensilsCrossed, Star, ChefHat, Trash2, Paperclip,
+  GraduationCap, Download
 } from "lucide-react";
 import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
+import { useRef } from "react";
 import GuidedTour, { abrirTour, isTourOculto, type TourStep } from "@/components/GuidedTour";
 import { Receita, RECEITAS_PADRAO, NOTA_ORIENTACAO_PADRAO } from "@/data/receitas";
 import { DevolutivaSemanal, DEVOLUTIVA_PADRAO } from "@/data/devolutivas";
@@ -20,7 +22,21 @@ import BancoRespostasRapidas, { BotaoSalvarRespostaRapida } from "@/components/n
 import AssistentePreAnalise from "@/components/nutri/AssistentePreAnalise";
 import ProntuarioAnamnese56 from "@/components/nutri/ProntuarioAnamnese56";
 
-type AbaNutri = "prontuarios" | "consultas" | "chat" | "diarios";
+type AbaNutri = "prontuarios" | "consultas" | "chat" | "diarios" | "aulas";
+
+interface AulaNutri {
+  id: number;
+  titulo: string;
+  duracao: string;
+  video_url: string;
+  descricao: string;
+  material_anexo?: {
+    nome: string;
+    tipo: string;
+    url: string;
+    tamanho?: string;
+  } | null;
+}
 
 interface Paciente {
   id: string;
@@ -67,6 +83,13 @@ interface MensagemChat {
   texto: string;
   horario: string;
   created_at?: string;
+  anexo?: {
+    nome: string;
+    tipo: "imagem" | "pdf" | "documento" | "arquivo";
+    url: string;
+    tamanho?: string;
+  } | null;
+  arquivos?: any[];
 }
 
 interface RefeicaoDiario {
@@ -386,6 +409,183 @@ export default function PortalNutricionista() {
   const [chatPacienteEmail, setChatPacienteEmail] = useState("");
   const [novoTextoMsg, setNovoTextoMsg] = useState("");
   const [enviandoMsg, setEnviandoMsg] = useState(false);
+  const [anexoChatNutri, setAnexoChatNutri] = useState<{
+    id: string;
+    nome: string;
+    tamanho: string;
+    tipo: "imagem" | "pdf" | "documento" | "arquivo";
+    url: string;
+  } | null>(null);
+  const fileInputChatNutriRef = useRef<HTMLInputElement>(null);
+
+  // Aulas & Materiais
+  const AULAS_CURSO_INICIAL: AulaNutri[] = [
+    {
+      id: 1,
+      titulo: "Terapia Alimentar Descomplicada",
+      duracao: "05:20",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      descricao: "Compreenda as bases da Escalada do Comer e como a aproximação gradual diminui a ansiedade da criança à mesa.",
+      material_anexo: null,
+    },
+    {
+      id: 2,
+      titulo: "Sinais de Alerta na Alimentação",
+      duracao: "12:45",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      descricao: "Aprenda a diferenciar uma fase passageira de desinteresse de uma verdadeira sensibilidade tátil e olfativa.",
+      material_anexo: null,
+    },
+    {
+      id: 3,
+      titulo: "Manejo da Recusa e Comunicação",
+      duracao: "18:30",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      descricao: "Ferramentas práticas de diálogo para evitar chantagens e barganhas na hora das principais refeições.",
+      material_anexo: null,
+    },
+    {
+      id: 4,
+      titulo: "Construindo o Prato Seguro",
+      duracao: "14:10",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      descricao: "Como combinar alimentos de conforto com novos alimentos de teste no mesmo prato sem gerar rejeição imediata.",
+      material_anexo: null,
+    },
+  ];
+
+  const [aulasNutri, setAulasNutri] = useState<AulaNutri[]>(AULAS_CURSO_INICIAL);
+  const [salvandoAulaId, setSalvandoAulaId] = useState<number | null>(null);
+
+  const formatarTamanhoBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const comprimirImagemChat = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1200;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          } else {
+            resolve((e.target?.result as string) || "");
+          }
+        };
+        img.onerror = () => resolve((e.target?.result as string) || "");
+        img.src = (e.target?.result as string) || "";
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSelecionarArquivoChatNutri = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const tipo: "imagem" | "pdf" | "documento" = file.type.startsWith("image/")
+      ? "imagem"
+      : file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+      ? "pdf"
+      : "documento";
+
+    let urlBase64 = "";
+    if (tipo === "imagem") {
+      urlBase64 = await comprimirImagemChat(file);
+    } else {
+      urlBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string) || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    setAnexoChatNutri({
+      id: `${file.name}-${Date.now()}`,
+      nome: file.name,
+      tamanho: formatarTamanhoBytes(file.size),
+      tipo,
+      url: urlBase64,
+    });
+    if (fileInputChatNutriRef.current) fileInputChatNutriRef.current.value = "";
+  };
+
+  const handleAnexarMaterialAula = async (aulaId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const urlBase64 = (reader.result as string) || "";
+      setAulasNutri((prev) =>
+        prev.map((a) =>
+          a.id === aulaId
+            ? {
+                ...a,
+                material_anexo: {
+                  nome: file.name,
+                  tipo: file.type || "application/pdf",
+                  url: urlBase64,
+                  tamanho: formatarTamanhoBytes(file.size),
+                },
+              }
+            : a
+        )
+      );
+      dispararToast(`Arquivo "${file.name}" anexado à Aula ${aulaId}! Clique em "Salvar Aula" para persistir.`);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSalvarMaterialAula = async (aula: AulaNutri) => {
+    setSalvandoAulaId(aula.id);
+    try {
+      const res = await fetch("/api/nutri", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "salvar_material_aula",
+          aula_id: aula.id,
+          titulo: aula.titulo,
+          descricao: aula.descricao,
+          video_url: aula.video_url,
+          material_anexo: aula.material_anexo,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        dispararToast(`Aula ${aula.id} e material salvos com sucesso no banco de dados! 🎓`);
+      } else {
+        dispararToast(data.message || "Erro ao salvar aula.");
+      }
+    } catch (err) {
+      console.warn("Aviso ao salvar aula:", err);
+      dispararToast("Erro ao conectar com servidor.");
+    } finally {
+      setSalvandoAulaId(null);
+    }
+  };
 
   // Feedback Toast
   const [toastMsg, setToastMsg] = useState("");
@@ -426,6 +626,24 @@ export default function PortalNutricionista() {
         setDiario((data.diario || []).filter((d: any) => !ehNutri(d.user_email)));
         setDevolutivasSalvas((data.devolutivas || []).filter((d: any) => !ehNutri(d.user_email)));
         setPrescricoesSalvas((data.prescricoes || []).filter((p: any) => !ehNutri(p.user_email)));
+
+        if (Array.isArray(data.materiais_aulas) && data.materiais_aulas.length > 0) {
+          setAulasNutri((prev) =>
+            prev.map((a) => {
+              const custom = data.materiais_aulas.find((m: any) => Number(m.aula_id) === a.id);
+              if (custom) {
+                return {
+                  ...a,
+                  titulo: custom.titulo || a.titulo,
+                  descricao: custom.descricao || a.descricao,
+                  video_url: custom.video_url || a.video_url,
+                  material_anexo: custom.material_anexo !== undefined ? custom.material_anexo : a.material_anexo,
+                };
+              }
+              return a;
+            })
+          );
+        }
 
         if (perfisFiltrados.length > 0 && !chatPacienteEmail) {
           setChatPacienteEmail(perfisFiltrados[0].email);
@@ -593,11 +811,13 @@ export default function PortalNutricionista() {
   // Handler para Enviar Mensagem no Chat como Nutri
   const handleEnviarMensagem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatPacienteEmail || !novoTextoMsg.trim() || enviandoMsg) return;
+    if (!chatPacienteEmail || (!novoTextoMsg.trim() && !anexoChatNutri) || enviandoMsg) return;
 
     setEnviandoMsg(true);
     const texto = novoTextoMsg.trim();
+    const anexoParaEnviar = anexoChatNutri;
     setNovoTextoMsg("");
+    setAnexoChatNutri(null);
 
     try {
       const res = await fetch("/api/nutri", {
@@ -608,6 +828,7 @@ export default function PortalNutricionista() {
           user_email: chatPacienteEmail,
           texto,
           horario: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          anexo: anexoParaEnviar,
         }),
       });
       const data = await res.json();
@@ -915,6 +1136,20 @@ export default function PortalNutricionista() {
           >
             <Utensils className="h-3.5 w-3.5" />
             <span>Diários Alimentares & Escada do Comer</span>
+          </button>
+
+          <button
+            type="button"
+            id="nutri-aba-aulas"
+            onClick={() => setAbaAtiva("aulas")}
+            className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+              abaAtiva === "aulas"
+                ? "bg-[#4C6C54] text-white shadow-xs"
+                : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
+            }`}
+          >
+            <GraduationCap className="h-3.5 w-3.5" />
+            <span>🎓 Aulas & Materiais (PDF)</span>
           </button>
         </div>
 
@@ -1388,45 +1623,138 @@ export default function PortalNutricionista() {
                     Nenhuma mensagem anterior com esta família. Envie uma orientação abaixo!
                   </div>
                 ) : (
-                  mensagensFiltradas.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`flex flex-col ${
-                        m.remetente === "nutri" ? "items-end" : "items-start"
-                      }`}
-                    >
+                  mensagensFiltradas.map((m) => {
+                    const anexo = m.anexo || (m.arquivos && m.arquivos[0]) || null;
+                    return (
                       <div
-                        className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed ${
-                          m.remetente === "nutri"
-                            ? "bg-[#4C6C54] text-white rounded-br-xs"
-                            : "bg-slate-100 text-slate-800 rounded-bl-xs"
+                        key={m.id}
+                        className={`flex flex-col ${
+                          m.remetente === "nutri" ? "items-end" : "items-start"
                         }`}
                       >
-                        <p className="font-semibold">{m.texto}</p>
-                        <span className={`text-[9px] block text-right mt-1 font-mono ${
-                          m.remetente === "nutri" ? "text-emerald-200" : "text-slate-400"
-                        }`}>
-                          {m.horario} • {m.remetente === "nutri" ? "Dra. Laís" : "Família"}
-                        </span>
+                        <div
+                          className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed space-y-2 ${
+                            m.remetente === "nutri"
+                              ? "bg-[#4C6C54] text-white rounded-br-xs"
+                              : "bg-slate-100 text-slate-800 rounded-bl-xs"
+                          }`}
+                        >
+                          {/* Imagem Anexada */}
+                          {anexo && anexo.tipo === "imagem" && (
+                            <div
+                              onClick={() =>
+                                setFotoZoomNutri({
+                                  foto: anexo.url,
+                                  alimento: anexo.nome || "Imagem",
+                                  email: m.user_email,
+                                })
+                              }
+                              className="rounded-xl overflow-hidden cursor-pointer group max-w-[260px] bg-slate-900 border border-black/10"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={anexo.url}
+                                alt="Anexo"
+                                className="w-full h-auto max-h-60 object-cover group-hover:scale-102 transition-transform"
+                              />
+                            </div>
+                          )}
+
+                          {/* Arquivo / PDF Anexado */}
+                          {anexo && anexo.tipo !== "imagem" && (
+                            <div className="bg-white rounded-xl p-3 border border-slate-200 text-slate-800 space-y-2 shadow-2xs">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-[#4C6C54] shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold truncate">
+                                    {anexo.nome || "Documento Anexo"}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400">
+                                    {anexo.tamanho || "Arquivo"}
+                                  </span>
+                                </div>
+                              </div>
+                              <a
+                                href={anexo.url}
+                                download={anexo.nome}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="py-1.5 px-3 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-bold text-[11px] rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              >
+                                <Download className="h-3 w-3" />
+                                <span>📥 Baixar / Abrir Arquivo</span>
+                              </a>
+                            </div>
+                          )}
+
+                          {m.texto && <p className="font-semibold">{m.texto}</p>}
+                          <span
+                            className={`text-[9px] block text-right font-mono ${
+                              m.remetente === "nutri" ? "text-emerald-200" : "text-slate-400"
+                            }`}
+                          >
+                            {m.horario} • {m.remetente === "nutri" ? "Dra. Laís" : "Família"}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+
+              {/* Prévia de anexo pendente */}
+              {anexoChatNutri && (
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="p-1.5 bg-white text-[#4C6C54] rounded-lg shrink-0 border border-slate-200">
+                      {anexoChatNutri.tipo === "imagem" ? "🖼️" : <FileText className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{anexoChatNutri.nome}</p>
+                      <span className="text-[10px] text-slate-400">{anexoChatNutri.tamanho}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAnexoChatNutri(null)}
+                    className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors cursor-pointer"
+                    title="Remover anexo"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {/* FORMULÁRIO DE ENVIO */}
               <form onSubmit={handleEnviarMensagem} className="flex items-center gap-2 pt-2 border-t border-slate-100">
                 <input
+                  type="file"
+                  ref={fileInputChatNutriRef}
+                  accept="image/*,.pdf,.doc,.docx"
+                  onChange={handleSelecionarArquivoChatNutri}
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => fileInputChatNutriRef.current?.click()}
+                  title="Anexar arquivo ou imagem"
+                  className="h-11 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+
+                <input
                   type="text"
-                  required
+                  required={!anexoChatNutri}
                   value={novoTextoMsg}
                   onChange={(e) => setNovoTextoMsg(e.target.value)}
-                  placeholder={`Responder para ${pacienteDoChat?.nome || "o paciente"}...`}
+                  placeholder={anexoChatNutri ? "Legenda do anexo (opcional)..." : `Responder para ${pacienteDoChat?.nome || "o paciente"}...`}
                   className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
                 />
                 <button
                   type="submit"
-                  disabled={enviandoMsg || !novoTextoMsg.trim()}
+                  disabled={enviandoMsg || (!novoTextoMsg.trim() && !anexoChatNutri)}
                   className="h-11 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" />
@@ -1506,6 +1834,186 @@ export default function PortalNutricionista() {
                   <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-400">
                     <span>Paciente: {d.user_email}</span>
                     <span>{new Date(d.data_registro).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 5: AULAS & MATERIAIS (PDF) DO CURSO */}
+        {/* =================================================================== */}
+        {abaAtiva === "aulas" && (
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4C6C54] mb-1">
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Gestão do Curso Terapia Alimentar Descomplicada</span>
+                </div>
+                <h2 className="text-lg font-black text-slate-900">
+                  Aulas & Materiais de Apoio (PDF / Documentos)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Edite os títulos, resumos e faça o upload direto dos PDFs e materiais que os alunos poderão baixar na plataforma.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+                {aulasNutri.length} Aulas Ativas no Módulo 1
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {aulasNutri.map((aula) => (
+                <div
+                  key={aula.id}
+                  className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-4 shadow-2xs hover:border-[#4C6C54]/40 transition-colors"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
+                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md bg-[#4C6C54] text-white">
+                      Aula {aula.id} • {aula.duracao}
+                    </span>
+                    {aula.material_anexo && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> PDF Anexado
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Título da Aula */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      Título da Aula
+                    </label>
+                    <input
+                      type="text"
+                      value={aula.titulo}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAulasNutri((prev) =>
+                          prev.map((a) => (a.id === aula.id ? { ...a, titulo: val } : a))
+                        );
+                      }}
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
+                    />
+                  </div>
+
+                  {/* URL do Vídeo (YouTube embed ou watch) */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      URL do Vídeo (Embed / YouTube)
+                    </label>
+                    <input
+                      type="text"
+                      value={aula.video_url}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAulasNutri((prev) =>
+                          prev.map((a) => (a.id === aula.id ? { ...a, video_url: val } : a))
+                        );
+                      }}
+                      placeholder="https://www.youtube.com/embed/..."
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
+                    />
+                  </div>
+
+                  {/* Descrição e Resumo Clínico */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      Descrição / Resumo Prático da Aula
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={aula.descricao}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAulasNutri((prev) =>
+                          prev.map((a) => (a.id === aula.id ? { ...a, descricao: val } : a))
+                        );
+                      }}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
+                    />
+                  </div>
+
+                  {/* Material / Documento Anexado */}
+                  <div className="space-y-2 pt-1 border-t border-slate-200/60">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      Documento / PDF de Apoio
+                    </label>
+
+                    {aula.material_anexo ? (
+                      <div className="p-3 bg-white border border-emerald-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg shrink-0">
+                            <FileText className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate" title={aula.material_anexo.nome}>
+                              {aula.material_anexo.nome}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {aula.material_anexo.tamanho || "Arquivo carregado"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <a
+                            href={aula.material_anexo.url}
+                            download={aula.material_anexo.nome}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 text-[#4C6C54] hover:bg-[#4C6C54]/10 rounded-lg transition-colors cursor-pointer"
+                            title="Baixar para conferir"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAulasNutri((prev) =>
+                                prev.map((a) => (a.id === aula.id ? { ...a, material_anexo: null } : a))
+                              );
+                              dispararToast(`Material removido da Aula ${aula.id}. Salve as alterações para confirmar.`);
+                            }}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remover anexo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic">
+                        Nenhum arquivo customizado anexado ainda (alunos usam o gerador de PDF timbrado como fallback).
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,image/*"
+                          onChange={(e) => handleAnexarMaterialAula(aula.id, e)}
+                          className="hidden"
+                        />
+                        <span className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs">
+                          <Paperclip className="h-3.5 w-3.5 text-[#4C6C54]" />
+                          <span>📎 Anexar Documento / PDF</span>
+                        </span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSalvarMaterialAula(aula)}
+                        disabled={salvandoAulaId === aula.id}
+                        className="py-2 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        <span>{salvandoAulaId === aula.id ? "Salvando..." : "Salvar Aula"}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

@@ -38,7 +38,7 @@ export async function GET(request: Request) {
         const { data: existingProfile } = await supabaseAdmin
           .from("profiles")
           .select("id, status_assinatura")
-          .eq("email", email)
+          .ilike("email", email)
           .maybeSingle();
 
         // Se NÃO possuir perfil prévio de assinante, NÃO cria perfil automático e bloqueia

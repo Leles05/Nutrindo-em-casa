@@ -42,6 +42,8 @@ export async function GET(request: Request) {
     let consultaAgendada = email === "metodonutrindoemcasa@gmail.com";
     let tourOculto = false;
 
+    let avatarUrl: string | null = (profile as any)?.avatar_url || null;
+
     try {
       const { data: anamneseRow } = await supabaseAdmin
         .from("anamneses")
@@ -55,6 +57,9 @@ export async function GET(request: Request) {
         }
         if (anamneseRow.respostas?._tour_oculto === true) {
           tourOculto = true;
+        }
+        if (anamneseRow.respostas?._foto_perfil) {
+          avatarUrl = anamneseRow.respostas._foto_perfil;
         }
         const aulasConcluidas = anamneseRow.respostas?.aulas_concluidas || [];
         if (profile) {
@@ -76,13 +81,16 @@ export async function GET(request: Request) {
       console.warn("Aviso ao resolver flags no perfil:", flagErr);
     }
 
-    // Se ainda não encontrou tour_oculto em anamneses, verifica no user_metadata do Supabase Auth
-    if (!tourOculto && isSupabaseConfigured()) {
+    // Se ainda não encontrou tour_oculto ou avatar_url, verifica no user_metadata do Supabase Auth
+    if ((!tourOculto || !avatarUrl) && isSupabaseConfigured()) {
       try {
         const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
         const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === email);
         if (authUser?.user_metadata?.tour_oculto === true) {
           tourOculto = true;
+        }
+        if (!avatarUrl && authUser?.user_metadata?.avatar_url) {
+          avatarUrl = authUser.user_metadata.avatar_url;
         }
       } catch (authErr) {
         console.warn("Aviso ao buscar metadata do auth:", authErr);
@@ -92,6 +100,7 @@ export async function GET(request: Request) {
     const profileComFlags = profile
       ? {
           ...profile,
+          avatar_url: avatarUrl,
           anamnese_concluida: anamneseConcluida,
           consulta_agendada: consultaAgendada,
           tour_oculto: tourOculto,
@@ -101,6 +110,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       tour_oculto: tourOculto,
+      avatar_url: avatarUrl,
       profile: profileComFlags,
       faturas: faturas || [],
       aulas_concluidas: (profile as any)?.aulas_concluidas || [],
@@ -131,6 +141,7 @@ export async function PUT(request: Request) {
       novaSenha,
       aulas_concluidas,
       tour_oculto,
+      avatar_url,
     } = body;
 
     const emailLimpo = String(email || "").toLowerCase().trim();
@@ -232,6 +243,54 @@ export async function PUT(request: Request) {
           }
         } catch (authMetaErr) {
           console.warn("Aviso ao atualizar tour_oculto no user_metadata do Auth:", authMetaErr);
+        }
+      }
+    }
+
+    // Persistência da foto de perfil (anamneses respostas + Supabase Auth user_metadata)
+    if (avatar_url !== undefined) {
+      try {
+        const { data: anamneseAtual } = await supabaseAdmin
+          .from("anamneses")
+          .select("concluida, respostas")
+          .eq("user_email", emailLimpo)
+          .maybeSingle();
+
+        const respostasAtualizadas = {
+          ...(anamneseAtual?.respostas || {}),
+          _foto_perfil: avatar_url,
+        };
+
+        if (anamneseAtual) {
+          await supabaseAdmin
+            .from("anamneses")
+            .update({ respostas: respostasAtualizadas })
+            .eq("user_email", emailLimpo);
+        } else {
+          await supabaseAdmin.from("anamneses").insert({
+            user_email: emailLimpo,
+            concluida: false,
+            respostas: respostasAtualizadas,
+          });
+        }
+      } catch (errFoto) {
+        console.warn("Aviso ao salvar foto de perfil em anamneses:", errFoto);
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
+          if (authUser) {
+            await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+              user_metadata: {
+                ...(authUser.user_metadata || {}),
+                avatar_url: avatar_url,
+              },
+            });
+          }
+        } catch (authMetaErr) {
+          console.warn("Aviso ao atualizar avatar_url no user_metadata do Auth:", authMetaErr);
         }
       }
     }

@@ -8,6 +8,7 @@ import { Home, Utensils, PlayCircle, Calendar, MessageCircle, Settings, LogOut, 
 import { encerrarSessao } from "@/hooks/useAuthGuard";
 export { encerrarSessao } from "@/hooks/useAuthGuard";
 import NotificationBell from "@/components/dashboard/NotificationBell";
+import { calcularIniciais } from "@/app/configuracoes/page";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -17,6 +18,8 @@ export default function Sidebar() {
   const [modalBloqueioAberto, setModalBloqueioAberto] = useState(false);
   const [moduloBloqueadoNome, setModuloBloqueadoNome] = useState("");
   const [drawerAberto, setDrawerAberto] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userAvatar, setUserAvatar] = useState("");
 
   const checarEstado = () => {
     if (typeof window === "undefined") return;
@@ -41,6 +44,11 @@ export default function Sidebar() {
       localStorage.getItem("consulta_agendada") === "true" ||
       localStorage.getItem("nutrindo_consulta_agendada") === "true";
 
+    const nomeSalvo = localStorage.getItem("nutrindo_user_nome") || "";
+    const avatarSalvo = localStorage.getItem("nutrindo_user_avatar") || "";
+    setUserName(nomeSalvo);
+    setUserAvatar(avatarSalvo);
+
     setAnamneseConcluida(anamneseSalva);
     setConsultaAgendada(consultaSalva);
   };
@@ -52,11 +60,13 @@ export default function Sidebar() {
     window.addEventListener("storage", handleSync);
     window.addEventListener("nutrindo_onboarding_atualizado", handleSync);
     window.addEventListener("nutrindo_assinatura_alterada", handleSync);
+    window.addEventListener("nutrindo_avatar_atualizado", handleSync);
 
     return () => {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("nutrindo_onboarding_atualizado", handleSync);
       window.removeEventListener("nutrindo_assinatura_alterada", handleSync);
+      window.removeEventListener("nutrindo_avatar_atualizado", handleSync);
     };
   }, [pathname]);
 
@@ -209,6 +219,18 @@ export default function Sidebar() {
             </Link>
           )}
           <NotificationBell />
+          {/* Avatar / Iniciais Dinâmicas */}
+          <Link
+            href="/configuracoes"
+            className="h-7 w-7 rounded-full bg-[#3D5A45] text-white flex items-center justify-center font-bold text-[11px] shrink-0 overflow-hidden ring-1 ring-slate-200"
+            title="Minha Conta & Configurações"
+          >
+            {userAvatar ? (
+              <img src={userAvatar} alt="Avatar" className="h-full w-full object-cover" />
+            ) : (
+              <span>{calcularIniciais(userName, "NC")}</span>
+            )}
+          </Link>
           <button
             type="button"
             onClick={() => setDrawerAberto(true)}
@@ -312,10 +334,16 @@ export default function Sidebar() {
               <Link
                 href="/configuracoes"
                 onClick={() => setDrawerAberto(false)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-xs font-bold"
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors text-xs font-bold"
               >
-                <Settings className="h-4 w-4 shrink-0" />
-                <span>Minha Conta & Configurações</span>
+                <div className="h-6 w-6 rounded-full bg-[#3D5A45] text-white flex items-center justify-center font-bold text-[10px] shrink-0 overflow-hidden ring-1 ring-slate-200">
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <span>{calcularIniciais(userName, "NC")}</span>
+                  )}
+                </div>
+                <span className="truncate">{userName ? `${userName} (Configurações)` : "Minha Conta & Configurações"}</span>
               </Link>
               <button
                 type="button"
@@ -410,6 +438,27 @@ export default function Sidebar() {
               <span>Portal Clínico</span>
             </Link>
           )}
+
+          {/* Card do Usuário Logado com Iniciais Dinâmicas / Foto */}
+          <Link
+            href="/configuracoes"
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-100/80 transition-colors group border border-slate-100 bg-slate-50/60 mb-1"
+            title="Minha Conta & Configurações"
+          >
+            <div className="h-7 w-7 rounded-full bg-[#3D5A45] text-white flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden ring-1 ring-[#3D5A45]/30">
+              {userAvatar ? (
+                <img src={userAvatar} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                <span>{calcularIniciais(userName, "NC")}</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-xs font-bold text-slate-700 truncate group-hover:text-[#3D5A45]">
+                {userName || "Minha Conta"}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">Configurações</p>
+            </div>
+          </Link>
 
           <button 
             type="button"

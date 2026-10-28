@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,6 +22,15 @@ interface FaturaMock {
   valor: string;
   status: "pago" | "pendente";
   codigoAsaas: string;
+}
+
+export function calcularIniciais(nome?: string, fallback = "NC"): string {
+  if (!nome || !nome.trim()) return fallback;
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 1) {
+    return partes[0].slice(0, 2).toUpperCase();
+  }
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
 function ConteudoConfiguracoes() {
@@ -55,15 +64,25 @@ function ConteudoConfiguracoes() {
   // ESTADO - ABA 1: MEUS DADOS & CRIANÇA
   // ===========================================================================
   const [salvandoDados, setSalvandoDados] = useState(false);
+  const [salvandoFoto, setSalvandoFoto] = useState(false);
+  const fileInputFotoRef = useRef<HTMLInputElement>(null);
+
+  const [fotoPerfil, setFotoPerfil] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("nutrindo_user_avatar") || null;
+    }
+    return null;
+  });
+
   const [dadosForm, setDadosForm] = useState({
-    nome: "Lucas Lima",
-    email: "lucas@email.com",
-    cpf: "384.192.837-12",
-    telefone: "(11) 98888-7777",
-    nomeCrianca: "Pedro Lima",
-    idadeCrianca: "3 anos e 4 meses",
-    alimentosConforto: "Banana 🍌, Maçã em fatias 🍎, Arroz branco 🍚, Pão de queijo 🧀",
-    principaisRecusas: "Vegetais verdes (brócolis, espinafre), texturas pastosas misturadas e molhos quentes"
+    nome: "",
+    email: "",
+    cpf: "",
+    telefone: "",
+    nomeCrianca: "",
+    idadeCrianca: "",
+    alimentosConforto: "",
+    principaisRecusas: "",
   });
 
   const [planoUsuario, setPlanoUsuario] = useState({
@@ -93,26 +112,35 @@ function ConteudoConfiguracoes() {
   useEffect(() => {
     const emailUsuario =
       typeof window !== "undefined"
-        ? localStorage.getItem("nutrindo_user_email") || "lucas@email.com"
-        : "lucas@email.com";
+        ? localStorage.getItem("nutrindo_user_email") || ""
+        : "";
 
     async function carregarPerfil() {
+      if (!emailUsuario) return;
       try {
         const res = await fetch(`/api/configuracoes?email=${encodeURIComponent(emailUsuario)}`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.success) {
+          if (data.avatar_url || data.profile?.avatar_url) {
+            const avatar = data.avatar_url || data.profile?.avatar_url;
+            setFotoPerfil(avatar);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("nutrindo_user_avatar", avatar);
+            }
+          }
+
           if (data.profile) {
             setDadosForm((prev) => ({
               ...prev,
-              nome: data.profile.nome || prev.nome,
-              email: data.profile.email || prev.email,
-              cpf: data.profile.cpf || prev.cpf,
-              telefone: data.profile.telefone || prev.telefone,
-              nomeCrianca: data.profile.nome_crianca || prev.nomeCrianca,
-              idadeCrianca: data.profile.idade_crianca || prev.idadeCrianca,
-              alimentosConforto: data.profile.alimentos_conforto || prev.alimentosConforto,
-              principaisRecusas: data.profile.principais_recusas || prev.principaisRecusas,
+              nome: data.profile.nome || prev.nome || "",
+              email: data.profile.email || prev.email || "",
+              cpf: data.profile.cpf || prev.cpf || "",
+              telefone: data.profile.telefone || prev.telefone || "",
+              nomeCrianca: data.profile.nome_crianca || prev.nomeCrianca || "",
+              idadeCrianca: data.profile.idade_crianca || prev.idadeCrianca || "",
+              alimentosConforto: data.profile.alimentos_conforto || prev.alimentosConforto || "",
+              principaisRecusas: data.profile.principais_recusas || prev.principaisRecusas || "",
             }));
 
             const planoTipo = (data.profile.plano || "trimestral").toLowerCase();
@@ -158,6 +186,67 @@ function ConteudoConfiguracoes() {
 
     carregarPerfil();
   }, []);
+
+  const comprimirFotoPerfil = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const size = 200;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const minDim = Math.min(img.width, img.height);
+            const startX = (img.width - minDim) / 2;
+            const startY = (img.height - minDim) / 2;
+            ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, size, size);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          } else {
+            resolve((e.target?.result as string) || "");
+          }
+        };
+        img.src = (e.target?.result as string) || "";
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleTrocarFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSalvandoFoto(true);
+    try {
+      const dataUrl = await comprimirFotoPerfil(file);
+      setFotoPerfil(dataUrl);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nutrindo_user_avatar", dataUrl);
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new Event("nutrindo_avatar_atualizado"));
+      }
+
+      const emailAlvo = dadosForm.email || localStorage.getItem("nutrindo_user_email") || "";
+      if (emailAlvo) {
+        await fetch("/api/configuracoes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailAlvo, avatar_url: dataUrl }),
+        });
+      }
+
+      dispararToast("Foto de perfil atualizada com sucesso! 📷");
+    } catch (err) {
+      console.warn("Aviso ao trocar foto:", err);
+      dispararToast("Erro ao processar imagem.");
+    } finally {
+      setSalvandoFoto(false);
+      if (fileInputFotoRef.current) fileInputFotoRef.current.value = "";
+    }
+  };
 
   const handleSalvarDados = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,8 +440,13 @@ function ConteudoConfiguracoes() {
               <div className="flex items-center gap-2 p-1.5 pl-3 rounded-full bg-white/90 border border-slate-200/90 shadow-2xs">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-xs font-bold text-slate-700">{planoUsuario.nome}</span>
-                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-extrabold text-xs shadow-xs ring-2 ring-white">
-                  LL
+                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-extrabold text-xs shadow-xs ring-2 ring-white overflow-hidden">
+                  {fotoPerfil ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={fotoPerfil} alt={dadosForm.nome || "Avatar"} className="w-full h-full object-cover" />
+                  ) : (
+                    calcularIniciais(dadosForm.nome || "Responsável")
+                  )}
                 </div>
               </div>
             </div>
@@ -438,6 +532,38 @@ function ConteudoConfiguracoes() {
                       </h2>
                       <p className="text-[11px] text-slate-500">
                         Informações do titular da conta e contato clínico
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* AVATAR DO USUÁRIO + UPLOAD DE FOTO */}
+                  <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                    <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-full overflow-hidden bg-gradient-to-tr from-[#4C6C54] to-[#689373] text-white flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm ring-4 ring-slate-100 shrink-0">
+                      {fotoPerfil ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={fotoPerfil} alt={dadosForm.nome || "Foto de Perfil"} className="w-full h-full object-cover" />
+                      ) : (
+                        calcularIniciais(dadosForm.nome || "Responsável")
+                      )}
+                    </div>
+                    <div className="space-y-1.5 flex-1">
+                      <input
+                        type="file"
+                        ref={fileInputFotoRef}
+                        accept="image/*"
+                        onChange={handleTrocarFoto}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputFotoRef.current?.click()}
+                        disabled={salvandoFoto}
+                        className="px-3.5 py-2 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <span>📷 {salvandoFoto ? "Salvando foto..." : "Adicionar / Trocar Foto de Perfil"}</span>
+                      </button>
+                      <p className="text-[11px] text-slate-400">
+                        Foto pessoal do responsável (comprimida automaticamente em 200x200 JPEG).
                       </p>
                     </div>
                   </div>

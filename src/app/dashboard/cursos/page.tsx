@@ -15,6 +15,13 @@ interface Aula {
   concluido: boolean;
   atual: boolean;
   descricao: string;
+  video_url?: string;
+  material_anexo?: {
+    nome: string;
+    tipo: string;
+    url: string;
+    tamanho?: string;
+  } | null;
 }
 
 export default function PaginaCursos() {
@@ -39,7 +46,9 @@ export default function PaginaCursos() {
       duracao: "05:20",
       concluido: false,
       atual: true,
-      descricao: "Compreenda as bases da Escalada do Comer e como a aproximação gradual diminui a ansiedade da criança à mesa."
+      descricao: "Compreenda as bases da Escalada do Comer e como a aproximação gradual diminui a ansiedade da criança à mesa.",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      material_anexo: null,
     },
     {
       id: 2,
@@ -47,7 +56,9 @@ export default function PaginaCursos() {
       duracao: "12:45",
       concluido: false,
       atual: false,
-      descricao: "Aprenda a diferenciar uma fase passageira de desinteresse de uma verdadeira sensibilidade tátil e olfativa."
+      descricao: "Aprenda a diferenciar uma fase passageira de desinteresse de uma verdadeira sensibilidade tátil e olfativa.",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      material_anexo: null,
     },
     {
       id: 3,
@@ -55,7 +66,9 @@ export default function PaginaCursos() {
       duracao: "18:30",
       concluido: false,
       atual: false,
-      descricao: "Ferramentas práticas de diálogo para evitar chantagens e barganhas na hora das principais refeições."
+      descricao: "Ferramentas práticas de diálogo para evitar chantagens e barganhas na hora das principais refeições.",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      material_anexo: null,
     },
     {
       id: 4,
@@ -63,7 +76,9 @@ export default function PaginaCursos() {
       duracao: "14:10",
       concluido: false,
       atual: false,
-      descricao: "Como combinar alimentos de conforto com novos alimentos de teste no mesmo prato sem gerar rejeição imediata."
+      descricao: "Como combinar alimentos de conforto com novos alimentos de teste no mesmo prato sem gerar rejeição imediata.",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      material_anexo: null,
     }
   ]);
 
@@ -91,6 +106,30 @@ export default function PaginaCursos() {
         console.warn("Aviso ao carregar progresso de aulas:", err);
       }
     }
+
+    // Carrega materiais e customizações cadastradas pela Dra. Laís
+    fetch("/api/nutri?tipo=materiais_aulas")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.materiais_aulas && Array.isArray(data.materiais_aulas) && data.materiais_aulas.length > 0) {
+          setAulas((prev) =>
+            prev.map((a) => {
+              const custom = data.materiais_aulas.find((m: any) => Number(m.aula_id) === a.id);
+              if (custom) {
+                return {
+                  ...a,
+                  titulo: custom.titulo || a.titulo,
+                  descricao: custom.descricao || a.descricao,
+                  video_url: custom.video_url || a.video_url,
+                  material_anexo: custom.material_anexo !== undefined ? custom.material_anexo : a.material_anexo,
+                };
+              }
+              return a;
+            })
+          );
+        }
+      })
+      .catch((err) => console.warn("Aviso ao buscar materiais das aulas:", err));
 
     const email = localStorage.getItem("nutrindo_user_email") || "";
     if (email) {
@@ -251,12 +290,11 @@ export default function PaginaCursos() {
           <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border border-slate-200">
             <iframe
               className="absolute top-0 left-0 w-full h-full"
-              src="https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1"
-              title="Aula de Demonstração"
+              src={aulaAtual.video_url || "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1"}
+              title={aulaAtual.titulo || "Aula de Demonstração"}
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-
             ></iframe>
           </div>
 
@@ -342,19 +380,34 @@ export default function PaginaCursos() {
               <button
                 type="button"
                 onClick={() => {
-                  imprimirMaterialAula({
-                    id: String(aulaAtual.id),
-                    titulo: aulaAtual.titulo,
-                    modulo: "Módulo 1 • Fundamentos da Seletividade Alimentar",
-                    resumo: aulaAtual.descricao,
-                  });
+                  if (aulaAtual.material_anexo?.url) {
+                    const link = document.createElement("a");
+                    link.href = aulaAtual.material_anexo.url;
+                    link.download = aulaAtual.material_anexo.nome || `Material_Aula_${aulaAtual.id}.pdf`;
+                    link.target = "_blank";
+                    link.rel = "noreferrer";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } else {
+                    imprimirMaterialAula({
+                      id: String(aulaAtual.id),
+                      titulo: aulaAtual.titulo,
+                      modulo: "Módulo 1 • Fundamentos da Seletividade Alimentar",
+                      resumo: aulaAtual.descricao,
+                    });
+                  }
                 }}
                 className="inline-flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-xs font-bold text-slate-700 cursor-pointer"
               >
                 <div className="p-1 bg-white rounded-md text-[#EB6D57] shadow-2xs">
                   <FileText className="h-3.5 w-3.5" />
                 </div>
-                <span>Baixar Material de Apoio da Aula (PDF)</span>
+                <span>
+                  {aulaAtual.material_anexo?.nome
+                    ? `Baixar Material Anexado (${aulaAtual.material_anexo.nome})`
+                    : "Baixar Material de Apoio da Aula (PDF)"}
+                </span>
               </button>
 
               <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">

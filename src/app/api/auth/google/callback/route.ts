@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("*")
-        .eq("email", email)
+        .ilike("email", email)
         .maybeSingle();
 
       if (!profile) {
@@ -109,8 +109,35 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${origin}/login?erro=sem_assinatura&email=${encodeURIComponent(email)}`);
       }
 
+      // Se o usuário ainda não existir no Supabase Auth, cria automaticamente com email_confirm: true
+      let authToken = idToken;
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const existingAuthUser = listData?.users?.find(
+          (u) => u.email?.toLowerCase() === email.toLowerCase()
+        );
+
+        if (!existingAuthUser) {
+          const { data: createdUser } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            email_confirm: true,
+            user_metadata: {
+              name: profile.nome || userData.name || "Responsável",
+              role: "cliente",
+            },
+          });
+          if (createdUser?.user) {
+            authToken = `token_${createdUser.user.id}`;
+          }
+        } else {
+          authToken = `token_${existingAuthUser.id}`;
+        }
+      } catch (authCreateErr) {
+        console.warn("Aviso ao garantir usuário no Supabase Auth:", authCreateErr);
+      }
+
       return criarRedirectComCookie(
-        `${origin}/login?oauth=cliente&email=${encodeURIComponent(email)}&token=${encodeURIComponent(idToken)}&calendar_token=${encodeURIComponent(accessToken || "")}`
+        `${origin}/login?oauth=cliente&email=${encodeURIComponent(email)}&token=${encodeURIComponent(authToken)}&calendar_token=${encodeURIComponent(accessToken || "")}`
       );
     }
 

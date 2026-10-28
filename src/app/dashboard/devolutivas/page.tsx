@@ -213,10 +213,10 @@ export default function DevolutivasPage() {
             <span>Acompanhamento Personalizado</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Orientações da Nutri
+            Orientações da Nutri (Devolutivas Semanais)
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Parecer clínico, metas e passos graduais para o acolhimento à mesa • Dra. Laís Leles (CRN-8 18878)
+            Parecer clínico, metas e passos graduais para o acolhimento à mesa enviados pela Dra. Laís Leles (CRN-8 18878)
           </p>
         </div>
 

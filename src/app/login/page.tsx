@@ -185,6 +185,8 @@ function ConteudoLogin() {
 
           if (!anamneseConcluida) {
             router.replace("/anamnese");
+          } else if (!consultaAgendada) {
+            router.replace("/dashboard/calendario?onboarding=consulta");
           } else {
             router.replace("/dashboard");
           }
@@ -266,6 +268,8 @@ function ConteudoLogin() {
 
             if (!anamneseConcluida) {
               router.replace("/anamnese");
+            } else if (!consultaAgendada) {
+              router.replace("/dashboard/calendario?onboarding=consulta");
             } else {
               router.replace("/dashboard");
             }
@@ -377,6 +381,8 @@ function ConteudoLogin() {
       // Redirecionamento condicional de onboarding:
       if (!anamneseConcluida) {
         router.replace("/anamnese");
+      } else if (!consultaAgendada) {
+        router.replace("/dashboard/calendario?onboarding=consulta");
       } else {
         router.replace("/dashboard");
       }
@@ -578,7 +584,7 @@ function ConteudoLogin() {
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-slate-200" />
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              ou com seu e-mail
+              ou com seu e-mail ou CPF
             </span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
@@ -594,18 +600,18 @@ function ConteudoLogin() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                E-mail de Acesso
+                E-MAIL OU CPF DE ACESSO
               </label>
               <div className="relative">
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     setErro("");
                   }}
-                  placeholder="seuemail@exemplo.com"
+                  placeholder="Digite seu e-mail ou CPF"
                   className="w-full h-11 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white transition-all"
                 />
                 <Mail className="h-4 w-4 text-slate-400 absolute left-3 top-3.5" />

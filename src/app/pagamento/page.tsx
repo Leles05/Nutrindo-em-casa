@@ -1115,7 +1115,7 @@ function ConteudoCheckout() {
                   3. Método de Pagamento
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Cobrança oficial processada de forma segura pelo Asaas Sandbox.
+                  Cobrança oficial processada de forma segura via Asaas Pagamentos.
                 </p>
               </div>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
@@ -1408,7 +1408,7 @@ function ConteudoCheckout() {
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Gateway Asaas Sandbox Oficial
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Gateway Asaas Pagamentos
                       </span>
                     </div>
                   </div>
@@ -1422,7 +1422,7 @@ function ConteudoCheckout() {
                       Gerando seu QR Code PIX oficial no Asaas...
                     </span>
                     <span className="text-xs text-slate-500 font-medium">
-                      Conectando com o gateway seguro Asaas Sandbox
+                      Conectando com o gateway seguro Asaas Pagamentos
                     </span>
                   </div>
                 )}

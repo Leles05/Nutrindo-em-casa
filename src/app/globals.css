@@ -8,4 +8,23 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  .custom-nutri-scrollbar::-webkit-scrollbar {
+    height: 8px;
+  }
+  .custom-nutri-scrollbar::-webkit-scrollbar-track {
+    background: #E2E8F0;
+    border-radius: 4px;
+  }
+  .custom-nutri-scrollbar::-webkit-scrollbar-thumb {
+    background: #4C6C54;
+    border-radius: 4px;
+  }
+  .custom-nutri-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #3A5440;
+  }
+  .custom-nutri-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #4C6C54 #E2E8F0;
+  }
 }

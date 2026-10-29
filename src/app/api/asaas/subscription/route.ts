@@ -53,7 +53,13 @@ export async function POST(request: Request) {
       .replace(/\\([$"\\])/g, "$1")
       .trim();
 
-    const ASAAS_API_URL = process.env.ASAAS_API_URL || "https://sandbox.asaas.com/api/v3";
+    // URL base dinâmica: usa variável de ambiente se definida, ou detecta automaticamente produção vs sandbox
+    let ASAAS_API_URL = process.env.ASAAS_API_URL;
+    if (!ASAAS_API_URL) {
+      const apiKey = process.env.ASAAS_API_KEY || "";
+      const isProduction = apiKey.includes("_prod_") || process.env.ASAAS_ENV === "production";
+      ASAAS_API_URL = isProduction ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
+    }
 
     const body = await request.json();
     const {
@@ -226,8 +232,15 @@ export async function POST(request: Request) {
             console.warn("Aviso ao buscar faturas imediatas da assinatura:", payFetchErr);
           }
         } else {
-          // Fallback gracioso: dados de cartão fictício na apresentação (ex: 9874...)
+          // Em produção, retorna erro real do Asaas. Em sandbox, usa fallback para demonstração
           const erroAsaas = await subRes.json().catch(() => ({}));
+          const isProduction = (process.env.ASAAS_API_KEY || "").includes("_prod_") || process.env.ASAAS_ENV === "production";
+          if (isProduction) {
+            return NextResponse.json(
+              { success: false, message: erroAsaas.errors?.[0]?.description || "Erro ao processar assinatura no Asaas." },
+              { status: 400 }
+            );
+          }
           console.warn("Asaas recusou dados fictícios de teste. Ativando fallback aprovado de demonstração:", erroAsaas);
           fallbackAtivo = true;
           subscriptionId = `sub_asaas_${Date.now()}`;
@@ -235,6 +248,13 @@ export async function POST(request: Request) {
           paymentStatus = billingType === "CREDIT_CARD" ? "Pago" : "Pendente";
         }
       } catch (asaasApiErr) {
+        const isProduction = (process.env.ASAAS_API_KEY || "").includes("_prod_") || process.env.ASAAS_ENV === "production";
+        if (isProduction) {
+          return NextResponse.json(
+            { success: false, message: "Erro ao conectar com o Asaas. Tente novamente." },
+            { status: 500 }
+          );
+        }
         console.warn("Exceção na chamada Asaas. Ativando fallback aprovado:", asaasApiErr);
         fallbackAtivo = true;
         subscriptionId = `sub_asaas_${Date.now()}`;
@@ -242,6 +262,13 @@ export async function POST(request: Request) {
         paymentStatus = billingType === "CREDIT_CARD" ? "Pago" : "Pendente";
       }
     } else {
+      const isProduction = (process.env.ASAAS_API_KEY || "").includes("_prod_") || process.env.ASAAS_ENV === "production";
+      if (isProduction) {
+        return NextResponse.json(
+          { success: false, message: "Chave de API do Asaas não configurada." },
+          { status: 500 }
+        );
+      }
       fallbackAtivo = true;
     }
 

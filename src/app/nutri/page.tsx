@@ -1459,7 +1459,7 @@ export default function PortalNutricionista() {
         {/* =================================================================== */}
         {/* NAVEGAÇÃO POR ABAS CLÍNICAS */}
         {/* =================================================================== */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0 custom-nutri-scrollbar relative">
           <button
             type="button"
             id="nutri-aba-prontuarios"

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { 
-  Calendar as CalendarIcon, Clock, Video, CheckCircle2, 
-  ChevronLeft, ChevronRight, Plus, X, Check, Sparkles, AlertCircle, 
+import {
+  Calendar as CalendarIcon, Clock, Video, CheckCircle2,
+  ChevronLeft, ChevronRight, Plus, X, Check, Sparkles, AlertCircle,
   Target, Info, ArrowUpRight, ShieldAlert, Lock, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
@@ -139,7 +139,7 @@ function ConteudoCalendario() {
       const consultaSalva =
         localStorage.getItem("consulta_agendada") === "true" ||
         localStorage.getItem("nutrindo_consulta_agendada") === "true";
-      
+
       // Se estiver explicitamente com o param onboarding ou se a flag ainda for falsa
       if (modoOnboarding || !consultaSalva) {
         setAnamneseConcluida(true);
@@ -278,8 +278,40 @@ function ConteudoCalendario() {
         // Busca compromissos sincronizados com o Google Calendar (Zero Mocks)
         await carregarEventosGoogle(anoVisualizacao, mesVisualizacao);
 
-        if (typeof document !== "undefined" && document.cookie.includes("google_calendar_token")) {
+        const temCookieGoogle = typeof document !== "undefined" && document.cookie.includes("google_calendar_token");
+        if (temCookieGoogle) {
           setContaGoogleConectada(true);
+        }
+
+        // Sincronização Retroativa Automática de Consultas com o Google Calendar do Usuário
+        const consultasAtivas = eventos.filter((e) => e.tipo === "consulta");
+        for (const cons of consultasAtivas) {
+          const syncKey = `nutrindo_gcal_synced_${cons.id}`;
+          const jaSincronizado = typeof window !== "undefined" ? localStorage.getItem(syncKey) : null;
+          if (!jaSincronizado) {
+            fetch("/api/google-calendar/events", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: emailUsuario,
+                titulo: cons.titulo || "Consulta com Dra. Laís Leles",
+                descricao: "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).",
+                data: cons.data,
+                horario: cons.horario,
+                linkMeet: cons.link || "https://meet.google.com",
+                duracaoMinutos: 50,
+              }),
+            })
+              .then((r) => r.json())
+              .then((dataSync) => {
+                if (dataSync?.sincronizado) {
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem(syncKey, "true");
+                  }
+                }
+              })
+              .catch(() => { });
+          }
         }
       } catch (err) {
         console.warn("Aviso ao carregar agendamentos:", err);
@@ -306,7 +338,7 @@ function ConteudoCalendario() {
         if (!isNaN(d.getTime())) {
           return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
         }
-      } catch {}
+      } catch { }
       const limpa = str.includes("T") ? str.split("T")[0].trim() : str.split(" ")[0].trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) return limpa;
     }
@@ -438,8 +470,8 @@ function ConteudoCalendario() {
         temConsultaAgendadaOuRealizada && dataSelecionada < dataMinimaRetornoISO
           ? dataMinimaRetornoISO
           : !temConsultaAgendadaOuRealizada && dataSelecionada < dataMinimaConsultaISO
-          ? dataMinimaConsultaISO
-          : dataSelecionada;
+            ? dataMinimaConsultaISO
+            : dataSelecionada;
       setNovaData(dataSugerida);
       const slotLivre = slotsDraLais.find((s) => !isHorarioOcupado(dataSugerida, s)) || "";
       setNovoHorario(slotLivre);
@@ -569,20 +601,38 @@ function ConteudoCalendario() {
         setTimeout(() => setToastMensagem(""), 3500);
       }
 
-      // Se for consulta, sincroniza o evento diretamente na agenda Google em background (sem abrir abas extras)
-      if (novoTipo === "consulta") {
+      // Sincroniza o evento diretamente na agenda Google em background (para consultas e metas)
+      if (contaGoogleConectada) {
+        const descricaoEvento = novoTipo === "consulta"
+          ? "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa)."
+          : `Meta de Evolução Alimentar Nutrindo em Casa: ${novo.titulo}`;
+
         fetch("/api/google-calendar/events", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            email: emailUsuario,
             titulo: novo.titulo,
+            descricao: descricaoEvento,
             data: novo.data,
             horario: novo.horario,
-            meetLink: novo.link,
-            detalhes: "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).",
+            linkMeet: novo.link || "https://meet.google.com",
+            duracaoMinutos: 50,
           }),
-        }).catch((err) => console.warn("Aviso ao criar evento direto no Google Calendar:", err));
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success) {
+              setToastMensagem(novoTipo === "consulta"
+                ? "✓ Consulta agendada e adicionada automaticamente ao seu Google Calendar!"
+                : "✓ Meta agendada e adicionada automaticamente ao seu Google Calendar!");
+            }
+          })
+          .catch((err) => console.warn("Aviso ao criar evento direto no Google Calendar:", err));
+      } else {
+        setToastMensagem(`Agendado para ${novaData.split("-").reverse().join("/")}! 🗓️`);
       }
+      setTimeout(() => setToastMensagem(""), 4500);
 
       // Persistência no Supabase
       const res = await fetch("/api/agendamentos", {
@@ -649,7 +699,7 @@ function ConteudoCalendario() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 animation-fade-in pb-4 relative">
-      
+
       {/* TOAST FLUTUANTE */}
       {toastMensagem && (
         <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#2A546D] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-2.5 animation-fade-in border border-sky-400/30">
@@ -744,11 +794,10 @@ function ConteudoCalendario() {
                 type="button"
                 disabled={ehDataPassada}
                 onClick={() => abrirModalNovoEvento("meta")}
-                className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
-                  ehDataPassada
+                className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${ehDataPassada
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60"
                     : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
-                }`}
+                  }`}
                 title={ehDataPassada ? "Não é possível agendar em datas passadas" : "Adicionar Meta"}
               >
                 <Plus className="h-3.5 w-3.5" /> Nova Meta / Lembrete
@@ -789,7 +838,7 @@ function ConteudoCalendario() {
 
       {/* GRID PRINCIPAL */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        
+
         {/* MINI CALENDÁRIO MENSAL DINÂMICO */}
         <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -798,23 +847,23 @@ function ConteudoCalendario() {
               <p className="text-[11px] text-slate-400">Fuso horário local sincronizado</p>
             </div>
             <div className="flex items-center gap-1">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={irParaHoje}
                 className="text-xs font-bold text-[#4C6C54] bg-[#4C6C54]/10 hover:bg-[#4C6C54]/20 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
               >
                 Hoje
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={voltarMes}
                 className="p-1 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 cursor-pointer"
                 title="Mês anterior"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={avancarMes}
                 className="p-1 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 cursor-pointer"
                 title="Próximo mês"
@@ -851,18 +900,17 @@ function ConteudoCalendario() {
                   key={dia}
                   type="button"
                   onClick={() => setDiaSelecionado(dia)}
-                  className={`h-10 sm:h-12 w-full rounded-xl flex flex-col items-center justify-center relative transition-all cursor-pointer ${
-                    estaSelecionado 
-                      ? 'bg-[#2A546D] text-white font-extrabold shadow-xs z-10 scale-105' 
+                  className={`h-10 sm:h-12 w-full rounded-xl flex flex-col items-center justify-center relative transition-all cursor-pointer ${estaSelecionado
+                      ? 'bg-[#2A546D] text-white font-extrabold shadow-xs z-10 scale-105'
                       : ehHoje
                         ? 'ring-2 ring-[#4C6C54] text-[#4C6C54] font-black bg-[#4C6C54]/10'
                         : ehPassado
                           ? 'text-slate-400 opacity-60 hover:opacity-100 font-normal'
                           : 'hover:bg-slate-50 text-slate-700 font-semibold'
-                  }`}
+                    }`}
                 >
                   <span className="text-xs sm:text-sm leading-none font-bold">{dia}</span>
-                  
+
                   {tiposEventos && (
                     <div className="flex gap-0.5 mt-0.5">
                       {tiposEventos.includes("consulta") && (
@@ -915,18 +963,16 @@ function ConteudoCalendario() {
                 <button
                   type="button"
                   onClick={() => setFiltroTipo("todos")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    filtroTipo === "todos" ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${filtroTipo === "todos" ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
                 >
                   Todos ({countTodos})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltroTipo("consulta")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    filtroTipo === "consulta" ? 'bg-white text-[#2A546D] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${filtroTipo === "consulta" ? 'bg-white text-[#2A546D] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
                 >
                   Consultas ({countConsultas})
                 </button>
@@ -934,9 +980,8 @@ function ConteudoCalendario() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipo("meta")}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      filtroTipo === "meta" ? 'bg-white text-[#EB6D57] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${filtroTipo === "meta" ? 'bg-white text-[#EB6D57] shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                      }`}
                   >
                     Metas ({countMetas})
                   </button>
@@ -945,9 +990,8 @@ function ConteudoCalendario() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipo("google_calendar")}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      filtroTipo === "google_calendar" ? 'bg-white text-sky-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${filtroTipo === "google_calendar" ? 'bg-white text-sky-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                      }`}
                   >
                     Agenda Google ({countGoogle})
                   </button>
@@ -982,8 +1026,8 @@ function ConteudoCalendario() {
                   <CalendarIcon className="h-6 w-6 text-slate-300 mx-auto" />
                   <p className="text-xs font-bold text-slate-700">Nenhum evento agendado para esta data.</p>
                   <p className="text-[11px] text-slate-400">
-                    {ehDataPassada 
-                      ? "Esta data já passou e não possui eventos registrados." 
+                    {ehDataPassada
+                      ? "Esta data já passou e não possui eventos registrados."
                       : "Aproveite para criar um lembrete ou agendar uma consulta nutricional."}
                   </p>
                 </div>
@@ -991,17 +1035,16 @@ function ConteudoCalendario() {
                 eventosDoDia.map((evt) => {
                   const ehGoogle = evt.tipo === "google_calendar" || evt.origem === "google_calendar";
                   return (
-                    <div 
+                    <div
                       key={evt.id}
-                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        evt.concluido 
-                          ? 'bg-slate-50/70 border-slate-100 opacity-60' 
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${evt.concluido
+                          ? 'bg-slate-50/70 border-slate-100 opacity-60'
                           : ehGoogle
                             ? 'bg-sky-50/50 border-sky-200/90 shadow-2xs'
                             : evt.tipo === 'consulta'
                               ? 'bg-[#2A546D]/5 border-[#2A546D]/20'
                               : 'bg-white border-slate-100 hover:border-slate-200 shadow-xs'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
                         {ehGoogle ? (
@@ -1012,11 +1055,10 @@ function ConteudoCalendario() {
                           <button
                             type="button"
                             onClick={() => toggleConcluido(evt.id)}
-                            className={`h-4 w-4 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
-                              evt.concluido
+                            className={`h-4 w-4 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${evt.concluido
                                 ? 'bg-[#4C6C54] border-[#4C6C54] text-white'
                                 : 'border-slate-300 bg-white hover:border-[#2A546D]'
-                            }`}
+                              }`}
                             title={evt.concluido ? "Marcar como pendente" : "Marcar como concluído"}
                           >
                             {evt.concluido && <Check className="h-3 w-3" />}
@@ -1030,11 +1072,10 @@ function ConteudoCalendario() {
                                 <span>Google Calendar</span>
                               </span>
                             ) : (
-                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                                evt.tipo === 'consulta' 
-                                  ? 'bg-[#2A546D] text-white' 
+                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${evt.tipo === 'consulta'
+                                  ? 'bg-[#2A546D] text-white'
                                   : 'bg-[#EB6D57]/10 text-[#EB6D57]'
-                              }`}>
+                                }`}>
                                 {evt.tipo}
                               </span>
                             )}
@@ -1068,7 +1109,7 @@ function ConteudoCalendario() {
                     </div>
                   );
                 })
-            )}
+              )}
             </div>
           </div>
 
@@ -1113,8 +1154,8 @@ function ConteudoCalendario() {
                   {novoTipo === "consulta" ? "Sessão individual com a Dra. Laís Leles" : "Planejamento da rotina alimentar"}
                 </p>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setModalAberto(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full cursor-pointer"
               >
@@ -1144,11 +1185,10 @@ function ConteudoCalendario() {
                           setNovoTitulo("Consulta Nutricional Pediátrica com Dra. Laís");
                         }
                       }}
-                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        novoTipo === "consulta"
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${novoTipo === "consulta"
                           ? "bg-[#2A546D] text-white border-[#2A546D] shadow-xs"
                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <Video className="h-3.5 w-3.5" /> Consulta Oficial
                     </button>
@@ -1160,11 +1200,10 @@ function ConteudoCalendario() {
                           setNovoTitulo("Oferecer novo vegetal no prato de apoio");
                         }
                       }}
-                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        novoTipo === "meta"
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${novoTipo === "meta"
                           ? "bg-[#EB6D57] text-white border-[#EB6D57] shadow-xs"
                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <Target className="h-3.5 w-3.5" /> Meta ou Lembrete
                     </button>
@@ -1230,13 +1269,12 @@ function ConteudoCalendario() {
                               setNovoHorario(slot);
                               if (erroData) setErroData("");
                             }}
-                            className={`py-2 px-1 text-center rounded-xl text-xs font-bold border transition-all relative ${
-                              ocupado
+                            className={`py-2 px-1 text-center rounded-xl text-xs font-bold border transition-all relative ${ocupado
                                 ? "bg-slate-100 text-slate-400 border-slate-200 line-through cursor-not-allowed opacity-60"
                                 : selecionado
-                                ? "bg-[#2A546D] text-white border-[#2A546D] shadow-xs ring-2 ring-[#2A546D]/30 cursor-pointer"
-                                : "bg-white text-slate-700 border-slate-200 hover:border-[#2A546D] hover:bg-slate-50 cursor-pointer"
-                            }`}
+                                  ? "bg-[#2A546D] text-white border-[#2A546D] shadow-xs ring-2 ring-[#2A546D]/30 cursor-pointer"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-[#2A546D] hover:bg-slate-50 cursor-pointer"
+                              }`}
                           >
                             <div>{slot}</div>
                             {ocupado && (

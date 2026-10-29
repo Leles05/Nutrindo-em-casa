@@ -639,7 +639,7 @@ export default function PaginaInicialLanding() {
                 </div>
 
                 <div className="pt-2 border-t border-slate-100">
-                  <span className="text-3xl font-black text-slate-900">R$ 97,00</span>
+                  <span className="text-3xl font-black text-slate-900">R$ 197,00</span>
                   <span className="text-xs text-slate-500">/mês</span>
                   <span className="text-[11px] text-slate-400 block mt-0.5">Cobrado mensalmente</span>
                 </div>
@@ -689,13 +689,13 @@ export default function PaginaInicialLanding() {
 
                 <div className="pt-2 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-slate-900">R$ 79,90</span>
+                    <span className="text-3xl font-black text-slate-900">R$ 177,30</span>
                     <span className="text-xs text-slate-500">/mês</span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-slate-500">R$ 239,70 por trimestre</span>
+                    <span className="text-[11px] text-slate-500">R$ 531,90 por trimestre</span>
                     <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                      Economize 18%
+                      10% OFF
                     </span>
                   </div>
                 </div>
@@ -704,7 +704,7 @@ export default function PaginaInicialLanding() {
                   {[
                     "Todos os benefícios do Mensal",
                     "Consulta por videochamada (encontro de alinhamento com especialista) a cada 45 dias (ou 6 semanas)",
-                    "Economia de 18% no ciclo"
+                    "Economia de 10% no ciclo"
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
@@ -742,13 +742,13 @@ export default function PaginaInicialLanding() {
 
                 <div className="pt-2 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-slate-900">R$ 59,90</span>
+                    <span className="text-3xl font-black text-slate-900">R$ 167,45</span>
                     <span className="text-xs text-slate-500">/mês</span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-slate-500">R$ 718,80 ao ano (até 12x)</span>
+                    <span className="text-[11px] text-slate-500">R$ 2.009,40 ao ano (até 12x)</span>
                     <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                      Economize 38%
+                      15% OFF
                     </span>
                   </div>
                 </div>

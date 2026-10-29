@@ -9,7 +9,7 @@ import {
   FileText, ExternalLink, ShieldAlert, Award, Search, ChevronRight,
   Eye, Save, AlertCircle, Heart, User, Check, Video,
   Mail, UtensilsCrossed, Star, ChefHat, Trash2, Paperclip,
-  GraduationCap, Download
+  GraduationCap, Download, Tag, Printer, ArrowUp, ArrowDown, Layers, FolderPlus, Edit3
 } from "lucide-react";
 import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
 import { useRef } from "react";
@@ -20,9 +20,11 @@ import { abrirGoogleCalendar } from "@/lib/googleCalendar";
 import { concatenarTexto, mesclarListas, type ProtocoloClinico } from "@/data/sugestoesClinicas";
 import BancoRespostasRapidas, { BotaoSalvarRespostaRapida } from "@/components/nutri/BancoRespostasRapidas";
 import AssistentePreAnalise from "@/components/nutri/AssistentePreAnalise";
-import ProntuarioAnamnese56 from "@/components/nutri/ProntuarioAnamnese56";
+import ProntuarioAnamnese56, { obterSecoesProntuario } from "@/components/nutri/ProntuarioAnamnese56";
+import { imprimirAnamneseCompleta } from "@/lib/pdfTimbrado";
+import { type ModuloCurso, type AulaCurso, ESTRUTURA_CURSO_PADRAO } from "@/app/api/cursos/route";
 
-type AbaNutri = "prontuarios" | "consultas" | "chat" | "diarios" | "aulas";
+type AbaNutri = "prontuarios" | "consultas" | "chat" | "diarios" | "aulas" | "cupons";
 
 interface AulaNutri {
   id: number;
@@ -61,6 +63,8 @@ interface Anamnese {
   concluida: boolean;
   anotacoes_clinicas?: string;
   respostas: Record<string, any>;
+  data_preenchimento?: string;
+  created_at?: string;
   updated_at?: string;
 }
 
@@ -457,6 +461,362 @@ export default function PortalNutricionista() {
   const [aulasNutri, setAulasNutri] = useState<AulaNutri[]>(AULAS_CURSO_INICIAL);
   const [salvandoAulaId, setSalvandoAulaId] = useState<number | null>(null);
 
+  // =========================================================================
+  // GESTÃO DE CUPONS DE DESCONTO (ABA CUPONS)
+  // =========================================================================
+  interface CupomPainel {
+    id: string;
+    codigo: string;
+    percentual: number;
+    dataValidade: string | null;
+    limiteUsos: number | null;
+    usosAtuais: number;
+    ativo: boolean;
+    criadoEm: string;
+    status: "ativo" | "expirado" | "esgotado" | "desativado";
+  }
+
+  const [cupons, setCupons] = useState<CupomPainel[]>([]);
+  const [carregandoCupons, setCarregandoCupons] = useState(false);
+  const [salvandoCupom, setSalvandoCupom] = useState(false);
+  const [novoCupomCodigo, setNovoCupomCodigo] = useState("");
+  const [novoCupomPercentual, setNovoCupomPercentual] = useState("15");
+  const [novoCupomValidade, setNovoCupomValidade] = useState("");
+  const [novoCupomLimite, setNovoCupomLimite] = useState("");
+  const [erroCupomForm, setErroCupomForm] = useState("");
+
+  const carregarCupons = async () => {
+    try {
+      setCarregandoCupons(true);
+      const res = await fetch("/api/cupons");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.cupons)) {
+        setCupons(data.cupons);
+      }
+    } catch (err) {
+      console.warn("Aviso ao carregar cupons:", err);
+    } finally {
+      setCarregandoCupons(false);
+    }
+  };
+
+  const handleCriarCupom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroCupomForm("");
+    const codigoLimpo = novoCupomCodigo.trim().toUpperCase();
+    const percent = Number(novoCupomPercentual);
+
+    if (!codigoLimpo) {
+      setErroCupomForm("Informe o código do cupom (ex: MAES15).");
+      return;
+    }
+    if (isNaN(percent) || percent < 1 || percent > 90) {
+      setErroCupomForm("O percentual de desconto deve estar entre 1% e 90%.");
+      return;
+    }
+
+    setSalvandoCupom(true);
+    try {
+      const res = await fetch("/api/cupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigo: codigoLimpo,
+          percentual: percent,
+          dataValidade: novoCupomValidade || null,
+          limiteUsos: novoCupomLimite ? Number(novoCupomLimite) : null,
+          ativo: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        dispararToast(data.message || `Cupom ${codigoLimpo} criado com sucesso! 🎟️`);
+        setNovoCupomCodigo("");
+        setNovoCupomPercentual("15");
+        setNovoCupomValidade("");
+        setNovoCupomLimite("");
+        await carregarCupons();
+      } else {
+        setErroCupomForm(data.message || "Erro ao criar cupom.");
+      }
+    } catch {
+      setErroCupomForm("Erro ao conectar com o servidor.");
+    } finally {
+      setSalvandoCupom(false);
+    }
+  };
+
+  const handleAlternarStatusCupom = async (cupomId: string, statusAtual: boolean) => {
+    try {
+      const res = await fetch("/api/cupons", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: cupomId, ativo: !statusAtual }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        dispararToast(`Status do cupom atualizado com sucesso!`);
+        setCupons((prev) =>
+          prev.map((c) =>
+            c.id === cupomId
+              ? { ...c, ativo: !statusAtual, status: !statusAtual ? "ativo" : "desativado" }
+              : c
+          )
+        );
+      }
+    } catch (err) {
+      console.warn("Aviso ao alternar status do cupom:", err);
+    }
+  };
+
+  const handleExcluirCupom = async (cupomId: string, codigo: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o cupom "${codigo}"?`)) return;
+    try {
+      const res = await fetch(`/api/cupons?id=${encodeURIComponent(cupomId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        dispararToast(`Cupom ${codigo} excluído com sucesso! 🗑️`);
+        setCupons((prev) => prev.filter((c) => c.id !== cupomId));
+      }
+    } catch (err) {
+      console.warn("Aviso ao excluir cupom:", err);
+    }
+  };
+
+  // =========================================================================
+  // GESTÃO COMPLETA DE MÓDULOS E AULAS DO CURSO (ABA AULAS)
+  // =========================================================================
+  const [modulosCurso, setModulosCurso] = useState<ModuloCurso[]>(ESTRUTURA_CURSO_PADRAO);
+  const [salvandoModulos, setSalvandoModulos] = useState(false);
+  const [moduloAbertoId, setModuloAbertoId] = useState<string>("mod-1");
+
+  const [modalAulaConfig, setModalAulaConfig] = useState<{
+    aberta: boolean;
+    moduloId: string;
+    aulaIndex?: number;
+    aulaDados: {
+      id: number;
+      titulo: string;
+      duracao: string;
+      descricao: string;
+      video_url: string;
+      material_anexo?: {
+        nome: string;
+        tipo: string;
+        url: string;
+        tamanho?: string;
+      } | null;
+    };
+  }>({
+    aberta: false,
+    moduloId: "",
+    aulaDados: {
+      id: 0,
+      titulo: "",
+      duracao: "10:00",
+      descricao: "",
+      video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+      material_anexo: null,
+    },
+  });
+
+  const carregarModulosCurso = async () => {
+    try {
+      const res = await fetch("/api/cursos");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.modulos) && data.modulos.length > 0) {
+        setModulosCurso(data.modulos);
+      }
+    } catch (err) {
+      console.warn("Aviso ao carregar módulos do curso:", err);
+    }
+  };
+
+  const salvarEstruturaModulos = async (novosModulos: ModuloCurso[]) => {
+    setModulosCurso(novosModulos);
+    setSalvandoModulos(true);
+    try {
+      const res = await fetch("/api/cursos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modulos: novosModulos }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        dispararToast("Estrutura do curso salva com sucesso no banco! 🎓");
+      }
+    } catch (err) {
+      console.warn("Aviso ao salvar módulos:", err);
+    } finally {
+      setSalvandoModulos(false);
+    }
+  };
+
+  const handleCriarModulo = () => {
+    const novoNum = modulosCurso.length + 1;
+    const novoId = `mod-${Date.now()}`;
+    const novoModulo: ModuloCurso = {
+      id: novoId,
+      titulo: `Módulo ${novoNum}: Novo Módulo`,
+      descricao: "Descrição prática dos objetivos terapêuticos deste módulo.",
+      aulas: [],
+    };
+    const atualizados = [...modulosCurso, novoModulo];
+    setModuloAbertoId(novoId);
+    salvarEstruturaModulos(atualizados);
+  };
+
+  const handleRenomearModulo = (moduloId: string, novoTitulo: string) => {
+    const atualizados = modulosCurso.map((m) =>
+      m.id === moduloId ? { ...m, titulo: novoTitulo } : m
+    );
+    salvarEstruturaModulos(atualizados);
+  };
+
+  const handleExcluirModulo = (moduloId: string) => {
+    const modAlvo = modulosCurso.find((m) => m.id === moduloId);
+    if (!window.confirm(`Tem certeza que deseja excluir "${modAlvo?.titulo || "este módulo"}" e todas as suas aulas?`)) return;
+    const atualizados = modulosCurso.filter((m) => m.id !== moduloId);
+    salvarEstruturaModulos(atualizados);
+  };
+
+  const handleMoverModulo = (moduloIndex: number, direcao: "up" | "down") => {
+    const destinoIndex = direcao === "up" ? moduloIndex - 1 : moduloIndex + 1;
+    if (destinoIndex < 0 || destinoIndex >= modulosCurso.length) return;
+    const copia = [...modulosCurso];
+    const temp = copia[moduloIndex];
+    copia[moduloIndex] = copia[destinoIndex];
+    copia[destinoIndex] = temp;
+    salvarEstruturaModulos(copia);
+  };
+
+  const handleAbrirModalNovaAula = (moduloId: string) => {
+    let proximoId = 1;
+    modulosCurso.forEach((m) => {
+      m.aulas.forEach((a) => {
+        if (a.id >= proximoId) proximoId = a.id + 1;
+      });
+    });
+
+    setModalAulaConfig({
+      aberta: true,
+      moduloId,
+      aulaDados: {
+        id: proximoId,
+        titulo: `Aula ${proximoId}: Nova Aula`,
+        duracao: "10:00",
+        descricao: "",
+        video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+        material_anexo: null,
+      },
+    });
+  };
+
+  const handleAbrirModalEditarAula = (moduloId: string, aula: AulaCurso, aulaIndex: number) => {
+    setModalAulaConfig({
+      aberta: true,
+      moduloId,
+      aulaIndex,
+      aulaDados: { ...aula },
+    });
+  };
+
+  const handleSalvarAulaModalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const { moduloId, aulaIndex, aulaDados } = modalAulaConfig;
+    if (!moduloId || !aulaDados.titulo.trim()) return;
+
+    const atualizados = modulosCurso.map((m) => {
+      if (m.id !== moduloId) return m;
+      let novasAulas = [...m.aulas];
+      if (aulaIndex !== undefined && aulaIndex >= 0) {
+        novasAulas[aulaIndex] = { ...aulaDados };
+      } else {
+        novasAulas.push({ ...aulaDados });
+      }
+      return { ...m, aulas: novasAulas };
+    });
+
+    salvarEstruturaModulos(atualizados);
+    setModalAulaConfig((prev) => ({ ...prev, aberta: false }));
+  };
+
+  const handleExcluirAulaDoModulo = (moduloId: string, aulaId: number, tituloAula: string) => {
+    if (!window.confirm(`Deseja excluir a aula "${tituloAula}"?`)) return;
+    const atualizados = modulosCurso.map((m) => {
+      if (m.id !== moduloId) return m;
+      return {
+        ...m,
+        aulas: m.aulas.filter((a) => a.id !== aulaId),
+      };
+    });
+    salvarEstruturaModulos(atualizados);
+  };
+
+  const handleMoverAula = (moduloId: string, aulaIndex: number, direcao: "up" | "down") => {
+    const destinoIndex = direcao === "up" ? aulaIndex - 1 : aulaIndex + 1;
+    const mod = modulosCurso.find((m) => m.id === moduloId);
+    if (!mod || destinoIndex < 0 || destinoIndex >= mod.aulas.length) return;
+
+    const atualizados = modulosCurso.map((m) => {
+      if (m.id !== moduloId) return m;
+      const copiaAulas = [...m.aulas];
+      const temp = copiaAulas[aulaIndex];
+      copiaAulas[aulaIndex] = copiaAulas[destinoIndex];
+      copiaAulas[destinoIndex] = temp;
+      return { ...m, aulas: copiaAulas };
+    });
+    salvarEstruturaModulos(atualizados);
+  };
+
+  const handleMoverAulaParaOutroModulo = (moduloOrigemId: string, moduloDestinoId: string, aulaId: number) => {
+    const modOrigem = modulosCurso.find((m) => m.id === moduloOrigemId);
+    const aula = modOrigem?.aulas.find((a) => a.id === aulaId);
+    if (!aula || moduloOrigemId === moduloDestinoId) return;
+
+    const atualizados = modulosCurso.map((m) => {
+      if (m.id === moduloOrigemId) {
+        return { ...m, aulas: m.aulas.filter((a) => a.id !== aulaId) };
+      }
+      if (m.id === moduloDestinoId) {
+        return { ...m, aulas: [...m.aulas, aula] };
+      }
+      return m;
+    });
+    salvarEstruturaModulos(atualizados);
+  };
+
+  // Helper para exportar Anamnese em PDF Timbrado oficial com 1 clique
+  const handleExportarAnamnesePaciente = (pacienteEmail: string) => {
+    const p = pacientes.find((item) => item.email === pacienteEmail);
+    const a = anamneses.find((item) => item.user_email === pacienteEmail);
+    const secoes = obterSecoesProntuario(a?.respostas);
+
+    imprimirAnamneseCompleta({
+      paciente: p?.nome || "Responsável Legal",
+      email: pacienteEmail,
+      crianca: p?.nome_crianca || "Paciente Pediátrico",
+      idadeCrianca: p?.idade_crianca || "Não informada",
+      telefone: p?.telefone || "",
+      plano: p?.plano || "Trimestral",
+      dataPreenchimento: a?.data_preenchimento || a?.created_at,
+      secoes: secoes.map((sec) => ({
+        titulo: sec.titulo,
+        numeroSecao: sec.numeroSecao,
+        itens: sec.itens.map((it) => ({
+          numero: it.numero,
+          pergunta: it.pergunta,
+          resposta: it.resposta,
+          pontoAtencao: it.pontoAtencao,
+          motivoAtencao: it.motivoAtencao,
+          sugestaoConduta: it.sugestaoConduta,
+        })),
+      })),
+    });
+  };
+
   const formatarTamanhoBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -659,6 +1019,8 @@ export default function PortalNutricionista() {
 
   useEffect(() => {
     carregarDadosClinicos();
+    carregarCupons();
+    carregarModulosCurso();
   }, []);
 
   // Verificação unificada de ocultação do Tour (localStorage / Cookie)
@@ -930,6 +1292,26 @@ export default function PortalNutricionista() {
       dicaPratica: "Comemore pequenas conquistas (como tolerar ou cheirar) nas devolutivas semanais para fortalecer o engajamento familiar.",
       onEnter: () => setAbaAtiva("diarios"),
     },
+    {
+      id: "aulas",
+      target: "#nutri-aba-aulas",
+      title: "Gestão de Módulos, Aulas & Materiais PDF",
+      subtitulo: "Conteúdo Educativo da Dra. Laís",
+      description:
+        "Gerencie a estrutura do curso de Terapia Alimentar Descomplicada: crie módulos, adicione aulas com vídeos e anexe materiais PDF para download dos pacientes.",
+      dicaPratica: "Organize os módulos por temas clínicos e anexe PDFs práticos para reforçar o aprendizado em casa.",
+      onEnter: () => setAbaAtiva("aulas"),
+    },
+    {
+      id: "cupons",
+      target: "#nutri-aba-cupons",
+      title: "Campanhas & Cupons de Desconto",
+      subtitulo: "Gestão de Promoções",
+      description:
+        "Crie e gerencie cupons de desconto percentual, defina validades e limites de uso para promover campanhas especiais e novos aquisições.",
+      dicaPratica: "Use cupons estratégicos para incentivar upgrades de plano ou novos cadastros em datas especiais.",
+      onEnter: () => setAbaAtiva("cupons"),
+    },
   ];
 
   const totalPacientes = pacientes.length;
@@ -1077,7 +1459,7 @@ export default function PortalNutricionista() {
         {/* =================================================================== */}
         {/* NAVEGAÇÃO POR ABAS CLÍNICAS */}
         {/* =================================================================== */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-slate-200 scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           <button
             type="button"
             id="nutri-aba-prontuarios"
@@ -1149,7 +1531,21 @@ export default function PortalNutricionista() {
             }`}
           >
             <GraduationCap className="h-3.5 w-3.5" />
-            <span>🎓 Aulas & Materiais (PDF)</span>
+            <span>Aulas & Materiais (PDF)</span>
+          </button>
+
+          <button
+            type="button"
+            id="nutri-aba-cupons"
+            onClick={() => setAbaAtiva("cupons")}
+            className={`py-2 px-4 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+              abaAtiva === "cupons"
+                ? "bg-[#4C6C54] text-white shadow-xs"
+                : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
+            }`}
+          >
+            <Tag className="h-3.5 w-3.5" />
+            <span>Cupons de Desconto</span>
           </button>
         </div>
 
@@ -1228,14 +1624,26 @@ export default function PortalNutricionista() {
                         )}
                       </div>
 
-                      <Link
-                        href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
-                        className="w-full py-2.5 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                        title="Abrir Prontuário Completo e Redigir Devolutiva Semanal"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>Abrir Prontuário & Devolutiva</span>
-                      </Link>
+                      <div className="flex flex-col gap-2 w-full">
+                        <Link
+                          href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
+                          className="w-full py-2.5 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                          title="Abrir Prontuário Completo e Redigir Devolutiva Semanal"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          <span>Abrir Prontuário & Devolutiva</span>
+                        </Link>
+
+                        <button
+                          type="button"
+                          onClick={() => handleExportarAnamnesePaciente(p.email)}
+                          className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-[#3D5A45] border border-slate-200 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Exportar Anamnese em PDF Timbrado oficial da Dra. Laís"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-[#3D5A45]" />
+                          <span>🖨️ Exportar Anamnese em PDF</span>
+                        </button>
+                      </div>
                     </div>
                   );
                 })
@@ -1340,7 +1748,17 @@ export default function PortalNutricionista() {
                         </td>
 
                         <td className="py-3.5 px-3 text-right">
-                          <div className="flex items-center justify-end">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleExportarAnamnesePaciente(p.email)}
+                              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-[#3D5A45] border border-slate-200 font-extrabold text-xs transition-all shadow-2xs hover:shadow cursor-pointer"
+                              title="Exportar Anamnese em PDF Timbrado oficial da Dra. Laís"
+                            >
+                              <Printer className="h-3.5 w-3.5 text-[#3D5A45]" />
+                              <span>Exportar PDF</span>
+                            </button>
+
                             <Link
                               href={`/nutri/prontuario/${encodeURIComponent(p.email)}`}
                               className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs hover:shadow cursor-pointer"
@@ -1842,181 +2260,597 @@ export default function PortalNutricionista() {
         )}
 
         {/* =================================================================== */}
-        {/* ABA 5: AULAS & MATERIAIS (PDF) DO CURSO */}
+        {/* ABA 5: GESTÃO COMPLETA DE MÓDULOS E AULAS DO CURSO */}
         {/* =================================================================== */}
         {abaAtiva === "aulas" && (
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4C6C54] mb-1">
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Gestão Pedagógica do Curso Terapia Alimentar Descomplicada</span>
+                </div>
+                <h2 className="text-lg font-black text-slate-900">
+                  Estrutura de Módulos, Aulas & Materiais de Apoio (PDF)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Crie e reordene módulos, adicione videoaulas com links do YouTube/Vimeo e anexe PDFs para os alunos.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCriarModulo}
+                  className="py-2.5 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  <span>+ Criar Novo Módulo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* LISTAGEM DOS MÓDULOS E SUAS AULAS */}
+            <div className="space-y-6">
+              {modulosCurso.map((modulo, modIdx) => (
+                <div
+                  key={modulo.id}
+                  className="border border-slate-200 rounded-2xl bg-slate-50/70 overflow-hidden shadow-2xs"
+                >
+                  {/* CABEÇALHO DO MÓDULO */}
+                  <div className="p-4 sm:p-5 bg-white border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="p-2.5 bg-[#4C6C54]/10 text-[#4C6C54] rounded-xl font-black text-xs shrink-0 flex items-center justify-center">
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <input
+                          type="text"
+                          value={modulo.titulo}
+                          onChange={(e) => handleRenomearModulo(modulo.id, e.target.value)}
+                          className="w-full text-sm sm:text-base font-extrabold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-[#4C6C54] focus:bg-slate-50 px-1 py-0.5 rounded transition-all focus:outline-none"
+                          title="Clique para renomear este módulo"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-0.5 px-1">
+                          {modulo.aulas.length} aula(s) cadastrada(s)
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* AÇÕES DO MÓDULO */}
+                    <div className="flex items-center gap-2 flex-wrap self-end md:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleMoverModulo(modIdx, "up")}
+                        disabled={modIdx === 0}
+                        className="p-2 border border-slate-200 hover:bg-slate-100 rounded-xl disabled:opacity-40 text-slate-600 transition-colors cursor-pointer"
+                        title="Mover módulo para cima"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoverModulo(modIdx, "down")}
+                        disabled={modIdx === modulosCurso.length - 1}
+                        className="p-2 border border-slate-200 hover:bg-slate-100 rounded-xl disabled:opacity-40 text-slate-600 transition-colors cursor-pointer"
+                        title="Mover módulo para baixo"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirModalNovaAula(modulo.id)}
+                        className="py-2 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>+ Nova Aula neste Módulo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleExcluirModulo(modulo.id)}
+                        className="p-2 text-rose-500 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+                        title="Excluir módulo"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* AULAS DO MÓDULO */}
+                  <div className="p-4 sm:p-5 space-y-3">
+                    {modulo.aulas.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs bg-white rounded-xl border border-dashed border-slate-200">
+                        Nenhuma aula cadastrada neste módulo. Clique em <strong>"+ Nova Aula neste Módulo"</strong> para começar.
+                      </div>
+                    ) : (
+                      modulo.aulas.map((aula, aIdx) => (
+                        <div
+                          key={aula.id}
+                          className="p-3.5 sm:p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:border-[#4C6C54]/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                        >
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-1 rounded-md bg-[#4C6C54] text-white shrink-0 mt-0.5">
+                              Aula {aIdx + 1}
+                            </span>
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+                                {aula.titulo}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                                {aula.descricao || "Sem resumo clínico informado."}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400 flex-wrap">
+                                <span>⏱️ Duração: <strong>{aula.duracao}</strong></span>
+                                <span>•</span>
+                                <span className="truncate max-w-[200px]" title={aula.video_url}>
+                                  🎥 Vídeo: {aula.video_url || "Padrão"}
+                                </span>
+                                {aula.material_anexo && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-emerald-700 font-extrabold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-flex items-center gap-1">
+                                      <CheckCircle2 className="h-2.5 w-2.5" /> PDF: {aula.material_anexo.nome}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* AÇÕES DA AULA */}
+                          <div className="flex items-center gap-1.5 shrink-0 self-end md:self-auto">
+                            {/* Reordenação dentro do módulo */}
+                            <button
+                              type="button"
+                              onClick={() => handleMoverAula(modulo.id, aIdx, "up")}
+                              disabled={aIdx === 0}
+                              className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg disabled:opacity-30 transition-colors"
+                              title="Subir aula"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoverAula(modulo.id, aIdx, "down")}
+                              disabled={aIdx === modulo.aulas.length - 1}
+                              className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg disabled:opacity-30 transition-colors"
+                              title="Descer aula"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Mover para outro módulo */}
+                            {modulosCurso.length > 1 && (
+                              <select
+                                value={modulo.id}
+                                onChange={(e) =>
+                                  handleMoverAulaParaOutroModulo(modulo.id, e.target.value, aula.id)
+                                }
+                                className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none"
+                                title="Mover para outro módulo"
+                              >
+                                {modulosCurso.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    Mover p/ {m.titulo.split(":")[0]}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {/* Editar Aula */}
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirModalEditarAula(modulo.id, aula, aIdx)}
+                              className="p-1.5 text-[#4C6C54] hover:bg-[#4C6C54]/10 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Editar aula e anexar PDF"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              <span className="text-[11px] font-extrabold hidden sm:inline">Editar</span>
+                            </button>
+
+                            {/* Excluir Aula */}
+                            <button
+                              type="button"
+                              onClick={() => handleExcluirAulaDoModulo(modulo.id, aula.id, aula.titulo)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir aula"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 6: GESTÃO DE CUPONS DE DESCONTO */}
+        {/* =================================================================== */}
+        {abaAtiva === "cupons" && (
           <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
               <div>
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4C6C54] mb-1">
-                  <GraduationCap className="h-4 w-4" />
-                  <span>Gestão do Curso Terapia Alimentar Descomplicada</span>
+                  <Tag className="h-4 w-4" />
+                  <span>Campanhas Promocionais & Parcerias</span>
                 </div>
                 <h2 className="text-lg font-black text-slate-900">
-                  Aulas & Materiais de Apoio (PDF / Documentos)
+                  Gestão de Cupons de Desconto
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Edite os títulos, resumos e faça o upload direto dos PDFs e materiais que os alunos poderão baixar na plataforma.
+                  Crie cupons promocionais com porcentagem de desconto, data de validade e limite de utilizações para o checkout.
                 </p>
               </div>
+
               <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl self-start sm:self-auto">
-                {aulasNutri.length} Aulas Ativas no Módulo 1
+                {cupons.length} Cupom(ns) Cadastrado(s)
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {aulasNutri.map((aula) => (
-                <div
-                  key={aula.id}
-                  className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-4 shadow-2xs hover:border-[#4C6C54]/40 transition-colors"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md bg-[#4C6C54] text-white">
-                      Aula {aula.id} • {aula.duracao}
-                    </span>
-                    {aula.material_anexo && (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> PDF Anexado
-                      </span>
-                    )}
-                  </div>
+            {/* FORMULÁRIO DE CRIAÇÃO DE NOVO CUPOM */}
+            <form
+              onSubmit={handleCriarCupom}
+              className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-4"
+            >
+              <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                <Plus className="h-4 w-4 text-[#4C6C54]" />
+                <span>Cadastrar Novo Cupom</span>
+              </h3>
 
-                  {/* Título da Aula */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
-                      Título da Aula
-                    </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* Código do Cupom */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 block">
+                    Código do Cupom *
+                  </label>
+                  <input
+                    type="text"
+                    value={novoCupomCodigo}
+                    onChange={(e) => setNovoCupomCodigo(e.target.value.toUpperCase())}
+                    placeholder="Ex: MAES15"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50"
+                  />
+                </div>
+
+                {/* Porcentagem de Desconto */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 block">
+                    Desconto (%) *
+                  </label>
+                  <div className="relative">
                     <input
-                      type="text"
-                      value={aula.titulo}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAulasNutri((prev) =>
-                          prev.map((a) => (a.id === aula.id ? { ...a, titulo: val } : a))
-                        );
-                      }}
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={novoCupomPercentual}
+                      onChange={(e) => setNovoCupomPercentual(e.target.value)}
+                      placeholder="Ex: 15"
+                      className="w-full h-10 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50"
                     />
-                  </div>
-
-                  {/* URL do Vídeo (YouTube embed ou watch) */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
-                      URL do Vídeo (Embed / YouTube)
-                    </label>
-                    <input
-                      type="text"
-                      value={aula.video_url}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAulasNutri((prev) =>
-                          prev.map((a) => (a.id === aula.id ? { ...a, video_url: val } : a))
-                        );
-                      }}
-                      placeholder="https://www.youtube.com/embed/..."
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
-                    />
-                  </div>
-
-                  {/* Descrição e Resumo Clínico */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
-                      Descrição / Resumo Prático da Aula
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={aula.descricao}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAulasNutri((prev) =>
-                          prev.map((a) => (a.id === aula.id ? { ...a, descricao: val } : a))
-                        );
-                      }}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
-                    />
-                  </div>
-
-                  {/* Material / Documento Anexado */}
-                  <div className="space-y-2 pt-1 border-t border-slate-200/60">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block">
-                      Documento / PDF de Apoio
-                    </label>
-
-                    {aula.material_anexo ? (
-                      <div className="p-3 bg-white border border-emerald-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg shrink-0">
-                            <FileText className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-800 truncate" title={aula.material_anexo.nome}>
-                              {aula.material_anexo.nome}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {aula.material_anexo.tamanho || "Arquivo carregado"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <a
-                            href={aula.material_anexo.url}
-                            download={aula.material_anexo.nome}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 text-[#4C6C54] hover:bg-[#4C6C54]/10 rounded-lg transition-colors cursor-pointer"
-                            title="Baixar para conferir"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAulasNutri((prev) =>
-                                prev.map((a) => (a.id === aula.id ? { ...a, material_anexo: null } : a))
-                              );
-                              dispararToast(`Material removido da Aula ${aula.id}. Salve as alterações para confirmar.`);
-                            }}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="Remover anexo"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400 italic">
-                        Nenhum arquivo customizado anexado ainda (alunos usam o gerador de PDF timbrado como fallback).
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 cursor-pointer">
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx,image/*"
-                          onChange={(e) => handleAnexarMaterialAula(aula.id, e)}
-                          className="hidden"
-                        />
-                        <span className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs">
-                          <Paperclip className="h-3.5 w-3.5 text-[#4C6C54]" />
-                          <span>📎 Anexar Documento / PDF</span>
-                        </span>
-                      </label>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSalvarMaterialAula(aula)}
-                        disabled={salvandoAulaId === aula.id}
-                        className="py-2 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        <span>{salvandoAulaId === aula.id ? "Salvando..." : "Salvar Aula"}</span>
-                      </button>
-                    </div>
+                    <span className="absolute right-3 top-2.5 text-xs font-extrabold text-slate-400">%</span>
                   </div>
                 </div>
-              ))}
+
+                {/* Data de Validade (Opcional) */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 block">
+                    Data de Validade (Opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={novoCupomValidade}
+                    onChange={(e) => setNovoCupomValidade(e.target.value)}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50"
+                  />
+                </div>
+
+                {/* Quantidade Máxima de Usos (Opcional) */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 block">
+                    Limite de Usos (Opcional)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={novoCupomLimite}
+                    onChange={(e) => setNovoCupomLimite(e.target.value)}
+                    placeholder="Vazio = Ilimitado"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50"
+                  />
+                </div>
+              </div>
+
+              {erroCupomForm && (
+                <p className="text-xs text-rose-600 font-bold">{erroCupomForm}</p>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={salvandoCupom}
+                  className="py-2.5 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  <span>{salvandoCupom ? "Cadastrando..." : "Criar Cupom de Desconto"}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* TABELA / LISTA DE CUPONS CADASTRADOS */}
+            <div className="overflow-x-auto">
+              {carregandoCupons ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  Carregando cupons cadastrados...
+                </div>
+              ) : cupons.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  Nenhum cupom de desconto cadastrado no momento. Use o formulário acima para criar o primeiro!
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200/80 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-3">Código</th>
+                      <th className="py-3 px-3">Desconto</th>
+                      <th className="py-3 px-3">Usos</th>
+                      <th className="py-3 px-3">Validade</th>
+                      <th className="py-3 px-3">Status</th>
+                      <th className="py-3 px-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cupons.map((c) => {
+                      const limiteTexto = c.limiteUsos && c.limiteUsos > 0 ? `${c.usosAtuais} / ${c.limiteUsos}` : `${c.usosAtuais} (Ilimitado)`;
+                      const dataTexto = c.dataValidade
+                        ? new Date(c.dataValidade + "T12:00:00").toLocaleDateString("pt-BR")
+                        : "Sem validade";
+
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3 px-3">
+                            <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-900">
+                              {c.codigo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-extrabold text-emerald-700">
+                            {c.percentual}% OFF
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 font-semibold">
+                            {limiteTexto}
+                          </td>
+                          <td className="py-3 px-3 text-slate-500 font-medium">
+                            {dataTexto}
+                          </td>
+                          <td className="py-3 px-3">
+                            {c.status === "ativo" && (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                Ativo
+                              </span>
+                            )}
+                            {c.status === "expirado" && (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                Expirado
+                              </span>
+                            )}
+                            {c.status === "esgotado" && (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                                Esgotado
+                              </span>
+                            )}
+                            {c.status === "desativado" && (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                Desativado
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAlternarStatusCupom(c.id, c.ativo)}
+                                className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                  c.ativo
+                                    ? "text-slate-600 hover:bg-slate-100"
+                                    : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                                }`}
+                              >
+                                {c.ativo ? "Desativar" : "Ativar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleExcluirCupom(c.id, c.codigo)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir cupom"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* MODAL CONFIGURAR / EDITAR AULA */}
+        {/* =================================================================== */}
+        {modalAulaConfig.aberta && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-[#4C6C54]" />
+                  <span>
+                    {modalAulaConfig.aulaIndex !== undefined ? "Editar Aula" : "Nova Aula"}
+                  </span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setModalAulaConfig((prev) => ({ ...prev, aberta: false }))}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSalvarAulaModalSubmit} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase text-slate-600 block">
+                    Título da Aula *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={modalAulaConfig.aulaDados.titulo}
+                    onChange={(e) =>
+                      setModalAulaConfig((prev) => ({
+                        ...prev,
+                        aulaDados: { ...prev.aulaDados, titulo: e.target.value },
+                      }))
+                    }
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/40"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase text-slate-600 block">
+                      Duração (ex: 12:45)
+                    </label>
+                    <input
+                      type="text"
+                      value={modalAulaConfig.aulaDados.duracao}
+                      onChange={(e) =>
+                        setModalAulaConfig((prev) => ({
+                          ...prev,
+                          aulaDados: { ...prev.aulaDados, duracao: e.target.value },
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase text-slate-600 block">
+                      URL do Vídeo (YouTube/Vimeo)
+                    </label>
+                    <input
+                      type="text"
+                      value={modalAulaConfig.aulaDados.video_url}
+                      onChange={(e) =>
+                        setModalAulaConfig((prev) => ({
+                          ...prev,
+                          aulaDados: { ...prev.aulaDados, video_url: e.target.value },
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase text-slate-600 block">
+                    Descrição / Resumo Prático da Aula
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={modalAulaConfig.aulaDados.descricao}
+                    onChange={(e) =>
+                      setModalAulaConfig((prev) => ({
+                        ...prev,
+                        aulaDados: { ...prev.aulaDados, descricao: e.target.value },
+                      }))
+                    }
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none"
+                  />
+                </div>
+
+                {/* ANEXO DE PDF / DOCUMENTO */}
+                <div className="space-y-1 pt-1">
+                  <label className="text-[11px] font-extrabold uppercase text-slate-600 block">
+                    Documento de Apoio / PDF da Aula
+                  </label>
+                  {modalAulaConfig.aulaDados.material_anexo ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900 font-bold">
+                      <div className="flex items-center gap-2 truncate">
+                        <FileText className="h-4 w-4 text-emerald-700 shrink-0" />
+                        <span className="truncate">{modalAulaConfig.aulaDados.material_anexo.nome}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setModalAulaConfig((prev) => ({
+                            ...prev,
+                            aulaDados: { ...prev.aulaDados, material_anexo: null },
+                          }))
+                        }
+                        className="text-rose-500 hover:text-rose-700 ml-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-bold text-slate-600 flex items-center justify-center gap-2 cursor-pointer transition-all">
+                      <Paperclip className="h-4 w-4 text-[#4C6C54]" />
+                      <span>Anexar Arquivo PDF / Documento</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setModalAulaConfig((prev) => ({
+                              ...prev,
+                              aulaDados: {
+                                ...prev.aulaDados,
+                                material_anexo: {
+                                  nome: file.name,
+                                  tipo: file.type || "application/pdf",
+                                  tamanho: formatarTamanhoBytes(file.size),
+                                  url: reader.result as string,
+                                },
+                              },
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setModalAulaConfig((prev) => ({ ...prev, aberta: false }))}
+                    className="py-2 px-4 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs rounded-xl shadow-xs"
+                  >
+                    Salvar Aula
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -2046,13 +2880,25 @@ export default function PortalNutricionista() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setAnamneseModalAberta(null)}
-                className="h-8 w-8 rounded-full bg-white hover:bg-slate-200 border border-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExportarAnamnesePaciente(anamneseModalAberta.user_email)}
+                  className="py-1.5 px-3.5 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Exportar Anamnese em PDF Timbrado oficial da Dra. Laís"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>🖨️ Exportar em PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAnamneseModalAberta(null)}
+                  className="h-8 w-8 rounded-full bg-white hover:bg-slate-200 border border-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             {/* CORPO DO PRONTUÁRIO */}

@@ -160,12 +160,27 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { titulo, data, horario, meetLink, detalhes, duracaoMinutos = 60, email, token: bodyToken } = body;
+    const {
+      titulo,
+      data,
+      horario,
+      meetLink,
+      linkMeet,
+      descricao,
+      detalhes,
+      duracaoMinutos = 50,
+      email,
+      token: bodyToken,
+    } = body;
 
     const cookieToken = req.cookies.get("google_calendar_token")?.value;
     const authHeader = req.headers.get("authorization");
     const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-    const token = cookieToken || headerToken || bodyToken || (email ? await obterOuRenovarTokenGoogle(email) : null);
+    const token =
+      cookieToken ||
+      headerToken ||
+      bodyToken ||
+      (email ? await obterOuRenovarTokenGoogle(email) : null);
 
     if (!token) {
       return NextResponse.json({
@@ -187,23 +202,29 @@ export async function POST(req: NextRequest) {
     const mm = parseInt(mmStr, 10);
 
     const horaInicioFormatada = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
-    
-    // Cálculo do horário de término
+
+    // Cálculo do horário de término com duração padrão de 50 minutos
     const fimTotalMin = hh * 60 + mm + duracaoMinutos;
     const hhFim = Math.floor(fimTotalMin / 60) % 24;
     const mmFim = fimTotalMin % 60;
     const horaFimFormatada = `${String(hhFim).padStart(2, "0")}:${String(mmFim).padStart(2, "0")}:00`;
 
+    const linkEfetivo = linkMeet || meetLink || "https://meet.google.com";
+    const descricaoEfetiva =
+      descricao ||
+      detalhes ||
+      "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa).";
+
     const payloadGoogle = {
       summary: titulo,
-      description: `${detalhes || "Consulta Nutricional Pediátrica com Dra. Laís Leles (Nutrindo em Casa)."}\n\nLink do Google Meet: ${meetLink || "https://meet.google.com"}`,
-      location: meetLink ? `Google Meet (${meetLink})` : "Google Meet (Online)",
+      description: `${descricaoEfetiva}\n\nLink da Videochamada (Google Meet): ${linkEfetivo}`,
+      location: `Google Meet (${linkEfetivo})`,
       start: {
-        dateTime: `${data}T${horaInicioFormatada}`,
+        dateTime: `${data}T${horaInicioFormatada}-03:00`,
         timeZone: "America/Sao_Paulo",
       },
       end: {
-        dateTime: `${data}T${horaFimFormatada}`,
+        dateTime: `${data}T${horaFimFormatada}-03:00`,
         timeZone: "America/Sao_Paulo",
       },
       reminders: {
@@ -229,6 +250,7 @@ export async function POST(req: NextRequest) {
       console.warn("Aviso ao criar evento na API do Google Calendar:", errText);
       return NextResponse.json({
         success: false,
+        sincronizado: false,
         message: "Não foi possível sincronizar o evento diretamente no Google Calendar.",
       });
     }
@@ -238,6 +260,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       sincronizado: true,
+      googleEventId: eventCreated.id,
       eventId: eventCreated.id,
       htmlLink: eventCreated.htmlLink,
     });

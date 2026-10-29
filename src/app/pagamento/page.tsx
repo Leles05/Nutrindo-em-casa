@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
   QrCode, ArrowLeft, Sparkles, AlertCircle, ChevronRight,
-  Clock, Award, Shield, Flame, RefreshCw, Loader2, Tag, X
+  Clock, Award, Shield, Flame, RefreshCw, Loader2, Tag, X, Info
 } from "lucide-react";
 
 type TipoPlano = "mensal" | "trimestral" | "anual";
@@ -46,8 +46,8 @@ function ConteudoCheckout() {
   const planoInicial: TipoPlano = ehUpgrade
     ? "anual"
     : (planoParam === "mensal" || planoParam === "trimestral" || planoParam === "anual")
-    ? planoParam
-    : "trimestral";
+      ? planoParam
+      : "trimestral";
 
   const [planoSelecionado, setPlanoSelecionado] = useState<TipoPlano>(planoInicial);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>("credito");
@@ -130,16 +130,16 @@ function ConteudoCheckout() {
   const [erroForm, setErroForm] = useState("");
 
   // Crédito proporcional do plano vigente
-  const creditoProporcional = ehUpgrade ? 79.90 : 0;
+  const creditoProporcional = ehUpgrade ? 177.30 : 0;
 
   // Planos disponíveis
   const planos: Record<TipoPlano, DetalhesPlano> = {
     mensal: {
       id: "mensal",
       nome: "Plano Mensal",
-      precoEquivalenteMes: "R$ 97,00",
-      precoCobradoTotal: 97.00,
-      subtotal: 97.00,
+      precoEquivalenteMes: "R$ 197,00",
+      precoCobradoTotal: 197.00,
+      subtotal: 197.00,
       periodicidade: "Cobrado mensalmente",
       descricao: "Flexibilidade para testar mês a mês",
       beneficios: [
@@ -157,31 +157,31 @@ function ConteudoCheckout() {
       nome: "Plano Trimestral",
       badge: ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido pelas Famílias",
       badgeCor: ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white",
-      precoEquivalenteMes: "R$ 79,90",
-      precoCobradoTotal: 239.70,
-      subtotal: 291.00,
-      economiaTexto: "Economize 18%",
-      economiaValor: 51.30,
-      periodicidade: "Cobrado R$ 239,70 a cada 3 meses",
+      precoEquivalenteMes: "R$ 177,30",
+      precoCobradoTotal: 531.90,
+      subtotal: 591.00,
+      economiaTexto: "10% OFF",
+      economiaValor: 59.10,
+      periodicidade: "Cobrado R$ 531,90 a cada 3 meses",
       descricao: "Tempo ideal para consolidação das rotinas",
       destaque: !ehUpgrade,
       beneficios: [
         "Todos os benefícios do Mensal",
         "Consulta por videochamada (encontro de alinhamento com especialista) a cada 45 dias (ou 6 semanas)",
-        "Economia de 18% no ciclo"
+        "Economia de 10% no ciclo"
       ]
     },
     anual: {
       id: "anual",
       nome: "Plano Anual",
-      badge: ehUpgrade ? "🔥 Oportunidade: Economize R$ 225,00 no ano" : "Melhor Custo-Benefício",
+      badge: ehUpgrade ? "🔥 Oportunidade: Economize R$ 354,60 no ano" : "Melhor Custo-Benefício",
       badgeCor: "bg-[#EB6D57] text-white",
-      precoEquivalenteMes: "R$ 59,90",
-      precoCobradoTotal: 718.80,
-      subtotal: 1164.00,
-      economiaTexto: "Economize 38%",
-      economiaValor: 445.20,
-      periodicidade: "Cobrado R$ 718,80 ao ano",
+      precoEquivalenteMes: "R$ 167,45",
+      precoCobradoTotal: 2009.40,
+      subtotal: 2364.00,
+      economiaTexto: "15% OFF",
+      economiaValor: 354.60,
+      periodicidade: "Cobrado R$ 2.009,40 ao ano",
       descricao: "Consolidação dos ganhos e continuação do progresso",
       destaque: ehUpgrade,
       beneficios: [
@@ -198,6 +198,7 @@ function ConteudoCheckout() {
   const [cupomCodigo, setCupomCodigo] = useState("");
   const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; descontoPercent: number } | null>(null);
   const [cupomErro, setCupomErro] = useState("");
+  const [cupomCarregando, setCupomCarregando] = useState(false);
 
   const cuponsValidos: Record<string, number> = {
     NUTRINDO10: 10,
@@ -207,18 +208,46 @@ function ConteudoCheckout() {
     FAMILIA10: 10,
   };
 
-  const aplicarCupom = () => {
+  const aplicarCupom = async () => {
     setCupomErro("");
     const codigoLimpo = cupomCodigo.trim().toUpperCase();
     if (!codigoLimpo) {
       setCupomErro("Digite o código do cupom.");
       return;
     }
-    if (cuponsValidos[codigoLimpo]) {
-      setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
-      setCupomErro("");
-    } else {
-      setCupomErro("Cupom inválido ou expirado.");
+
+    setCupomCarregando(true);
+    try {
+      const res = await fetch(`/api/cupons?codigo=${encodeURIComponent(codigoLimpo)}`);
+      const data = await res.json();
+
+      if (res.ok && data.success && data.cupom) {
+        setCupomAplicado({
+          codigo: data.cupom.codigo,
+          descontoPercent: Number(data.cupom.percentual),
+        });
+        setCupomErro("");
+      } else {
+        // Se a API retornou erro específico (expirado, esgotado, etc.)
+        if (data.message && data.message !== "Cupom inválido ou não encontrado.") {
+          setCupomErro(data.message);
+        } else if (cuponsValidos[codigoLimpo]) {
+          // Fallback para códigos pré-definidos se não cadastrado dinamicamente
+          setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
+          setCupomErro("");
+        } else {
+          setCupomErro(data.message || "Cupom inválido ou expirado.");
+        }
+      }
+    } catch {
+      if (cuponsValidos[codigoLimpo]) {
+        setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
+        setCupomErro("");
+      } else {
+        setCupomErro("Erro ao verificar cupom. Tente novamente.");
+      }
+    } finally {
+      setCupomCarregando(false);
     }
   };
 
@@ -291,6 +320,7 @@ function ConteudoCheckout() {
         subscriptionId: data.subscriptionId,
         paymentId: data.paymentId
       });
+      setTempoRestantePix(899);
       setIdAssinaturaGerada(data.subscriptionId);
       if (data.emailEnviado) {
         setEmailEnviado(true);
@@ -308,12 +338,10 @@ function ConteudoCheckout() {
     }
   }, [clienteNome, clienteEmail, clienteCpf, clienteCelular, cartaoNome, cartaoCpf, planoSelecionado, valorTotalFinal, cupomAplicado, ehUpgrade]);
 
-  // Dispara a geração de Pix do Asaas ao trocar para aba Pix ou trocar de plano
+  // Reseta o PIX caso o usuário troque de plano para garantir valor atualizado
   useEffect(() => {
-    if (metodoPagamento === "pix") {
-      gerarPixAsaas();
-    }
-  }, [metodoPagamento, planoSelecionado, gerarPixAsaas]);
+    setPixDados(null);
+  }, [planoSelecionado]);
 
   // Contador regressivo do Pix (15 minutos)
   useEffect(() => {
@@ -498,10 +526,9 @@ function ConteudoCheckout() {
 
   // Helper para classes visuais com erro ou padrão
   const getInputClass = (hasError: boolean) =>
-    `w-full h-11 px-3.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-      hasError
-        ? "bg-red-50/20 border border-red-400 ring-2 ring-red-100 text-slate-900 focus:outline-none focus:border-red-500"
-        : "bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white"
+    `w-full h-11 px-3.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${hasError
+      ? "bg-red-50/20 border border-red-400 ring-2 ring-red-100 text-slate-900 focus:outline-none focus:border-red-500"
+      : "bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] focus:bg-white"
     }`;
 
   // =========================================================================
@@ -537,9 +564,10 @@ function ConteudoCheckout() {
     // Fluxo do PIX
     if (metodoPagamento === "pix") {
       if (!pixDados?.encodedImage) {
+        setProcessando(true);
         await gerarPixAsaas();
+        setProcessando(false);
       }
-      setModalSucesso(true);
       return;
     }
 
@@ -602,7 +630,7 @@ function ConteudoCheckout() {
         if (!res.ok || !data.success) {
           setErroForm(
             data.message ||
-              "Não foi possível autorizar o cartão no Asaas. Verifique os dados ou utilize o Pix."
+            "Não foi possível autorizar o cartão no Asaas. Verifique os dados ou utilize o Pix."
           );
           setProcessando(false);
           return;
@@ -680,7 +708,7 @@ function ConteudoCheckout() {
 
       {/* CONTEÚDO PRINCIPAL COM PADDING ADEQUADO */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-20">
-        
+
         {/* TÍTULO E SUBTÍTULO / HERO BANNER */}
         <div className="text-center max-w-3xl mx-auto mb-10 overflow-visible">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#4C6C54]/10 text-[#4C6C54] text-xs font-extrabold uppercase tracking-wider mb-3">
@@ -699,7 +727,7 @@ function ConteudoCheckout() {
                 <span>✨</span> Upgrade Exclusivo de Assinatura
               </p>
               <p className="leading-relaxed text-emerald-800 max-w-2xl mx-auto">
-                Lucas, você possui o <strong>Plano Trimestral ativo até 18/10/2026</strong>. Ao migrar para o <strong>Plano Anual</strong>, você garante o menor valor mensal (R$ 59,90/mês), estende seu acompanhamento com a Dra. Laís e mantém seus dias já pagos como crédito proporcional!
+                Lucas, você possui o <strong>Plano Trimestral ativo até 18/10/2026</strong>. Ao migrar para o <strong>Plano Anual</strong>, você garante o menor valor mensal (R$ 167,45/mês), estende seu acompanhamento com a Dra. Laís e mantém seus dias já pagos como crédito proporcional!
               </p>
             </div>
           ) : (
@@ -719,7 +747,7 @@ function ConteudoCheckout() {
           </div>
 
           <div className={`grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6 items-stretch ${ehUpgrade ? "mt-8 pt-2" : "mt-6"}`}>
-            
+
             {/* =============================================================== */}
             {/* CARD 1: PLANO MENSAL */}
             {/* =============================================================== */}
@@ -727,13 +755,12 @@ function ConteudoCheckout() {
               onClick={() => {
                 if (!ehUpgrade) setPlanoSelecionado("mensal");
               }}
-              className={`rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${
-                ehUpgrade
-                  ? "opacity-60 hover:opacity-100 transition-opacity bg-white/70 border border-slate-200 cursor-default"
-                  : planoSelecionado === "mensal"
+              className={`rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${ehUpgrade
+                ? "opacity-60 hover:opacity-100 transition-opacity bg-white/70 border border-slate-200 cursor-default"
+                : planoSelecionado === "mensal"
                   ? "bg-white border-2 border-[#4C6C54] shadow-xl ring-4 ring-[#4C6C54]/10 cursor-pointer"
                   : "bg-white/80 hover:bg-white border border-slate-200 shadow-xs hover:shadow-md cursor-pointer"
-              }`}
+                }`}
             >
               <div>
                 <div className="flex items-start justify-between mb-3">
@@ -743,11 +770,10 @@ function ConteudoCheckout() {
                   </div>
                   {!ehUpgrade && (
                     <div
-                      className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${
-                        planoSelecionado === "mensal"
-                          ? "border-[#4C6C54] bg-[#4C6C54] text-white"
-                          : "border-slate-300 bg-white"
-                      }`}
+                      className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${planoSelecionado === "mensal"
+                        ? "border-[#4C6C54] bg-[#4C6C54] text-white"
+                        : "border-slate-300 bg-white"
+                        }`}
                     >
                       {planoSelecionado === "mensal" && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                     </div>
@@ -757,7 +783,7 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 97,00
+                      R$ 197,00
                     </span>
                     <span className="text-xs font-semibold text-slate-500">/mês</span>
                   </div>
@@ -787,11 +813,10 @@ function ConteudoCheckout() {
                   <button
                     type="button"
                     onClick={() => setPlanoSelecionado("mensal")}
-                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-                      planoSelecionado === "mensal"
-                        ? "bg-[#4C6C54] text-white shadow-xs"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
+                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${planoSelecionado === "mensal"
+                      ? "bg-[#4C6C54] text-white shadow-xs"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
                   >
                     <span>{planoSelecionado === "mensal" ? "Plano Selecionado" : "Escolher este plano"}</span>
                     {planoSelecionado === "mensal" && <Check className="h-3.5 w-3.5" />}
@@ -807,19 +832,17 @@ function ConteudoCheckout() {
               onClick={() => {
                 if (!ehUpgrade) setPlanoSelecionado("trimestral");
               }}
-              className={`relative rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${
-                ehUpgrade
-                  ? "bg-slate-50/90 border border-slate-300 shadow-2xs"
-                  : planoSelecionado === "trimestral"
+              className={`relative rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${ehUpgrade
+                ? "bg-slate-50/90 border border-slate-300 shadow-2xs"
+                : planoSelecionado === "trimestral"
                   ? "bg-white border-2 border-[#4C6C54] shadow-xl ring-4 ring-[#4C6C54]/10 cursor-pointer"
                   : "bg-white/80 hover:bg-white border border-slate-200 shadow-xs hover:shadow-md cursor-pointer"
-              }`}
+                }`}
             >
               {/* BADGE SUPERIOR */}
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
-                <span className={`px-3.5 py-1 rounded-full text-[11px] font-extrabold shadow-sm tracking-wide ${
-                  ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white"
-                }`}>
+                <span className={`px-3.5 py-1 rounded-full text-[11px] font-extrabold shadow-sm tracking-wide ${ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white"
+                  }`}>
                   {ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido pelas Famílias"}
                 </span>
               </div>
@@ -832,11 +855,10 @@ function ConteudoCheckout() {
                   </div>
                   {!ehUpgrade && (
                     <div
-                      className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${
-                        planoSelecionado === "trimestral"
-                          ? "border-[#4C6C54] bg-[#4C6C54] text-white"
-                          : "border-slate-300 bg-white"
-                      }`}
+                      className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${planoSelecionado === "trimestral"
+                        ? "border-[#4C6C54] bg-[#4C6C54] text-white"
+                        : "border-slate-300 bg-white"
+                        }`}
                     >
                       {planoSelecionado === "trimestral" && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                     </div>
@@ -846,15 +868,15 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 79,90
+                      R$ 177,30
                     </span>
                     <span className="text-xs font-semibold text-slate-500">/mês</span>
                   </div>
 
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-500 font-medium">R$ 239,70 a cada 3 meses</span>
+                    <span className="text-xs text-slate-500 font-medium">R$ 531,90 a cada 3 meses</span>
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
-                      Economize 18%
+                      10% OFF
                     </span>
                   </div>
                 </div>
@@ -886,11 +908,10 @@ function ConteudoCheckout() {
                   <button
                     type="button"
                     onClick={() => setPlanoSelecionado("trimestral")}
-                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-                      planoSelecionado === "trimestral"
-                        ? "bg-[#4C6C54] text-white shadow-xs"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
+                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${planoSelecionado === "trimestral"
+                      ? "bg-[#4C6C54] text-white shadow-xs"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
                   >
                     <span>{planoSelecionado === "trimestral" ? "Plano Selecionado" : "Escolher este plano"}</span>
                     {planoSelecionado === "trimestral" && <Check className="h-3.5 w-3.5" />}
@@ -904,19 +925,18 @@ function ConteudoCheckout() {
             {/* =============================================================== */}
             <div
               onClick={() => setPlanoSelecionado("anual")}
-              className={`relative rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${
-                ehUpgrade
-                  ? "scale-105 shadow-xl border-2 border-emerald-600 ring-4 ring-emerald-100 relative bg-white z-10 cursor-pointer"
-                  : planoSelecionado === "anual"
+              className={`relative rounded-3xl p-5 sm:p-6 transition-all flex flex-col justify-between ${ehUpgrade
+                ? "scale-105 shadow-xl border-2 border-emerald-600 ring-4 ring-emerald-100 relative bg-white z-10 cursor-pointer"
+                : planoSelecionado === "anual"
                   ? "bg-white border-2 border-[#4C6C54] shadow-xl ring-4 ring-[#4C6C54]/10 cursor-pointer"
                   : "bg-white/80 hover:bg-white border border-slate-200 shadow-xs hover:shadow-md cursor-pointer"
-              }`}
+                }`}
             >
               {/* BADGE PULSANTE DE ALTO DESTAQUE */}
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
                 <span className="px-3.5 py-1 rounded-full text-[11px] font-extrabold shadow-md tracking-wide bg-[#EB6D57] text-white flex items-center gap-1.5 animate-pulse">
                   <Flame className="h-3.5 w-3.5" />
-                  <span>🔥 Oportunidade: Economize R$ 225,00 no ano</span>
+                  <span>🔥 Oportunidade: Economize R$ 354,60 no ano</span>
                 </span>
               </div>
 
@@ -927,11 +947,10 @@ function ConteudoCheckout() {
                     <p className="text-xs text-slate-500 mt-0.5">Consolidação dos ganhos e continuação do progresso</p>
                   </div>
                   <div
-                    className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${
-                      planoSelecionado === "anual"
-                        ? "border-[#4C6C54] bg-[#4C6C54] text-white"
-                        : "border-slate-300 bg-white"
-                    }`}
+                    className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${planoSelecionado === "anual"
+                      ? "border-[#4C6C54] bg-[#4C6C54] text-white"
+                      : "border-slate-300 bg-white"
+                      }`}
                   >
                     {planoSelecionado === "anual" && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                   </div>
@@ -940,15 +959,15 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 59,90
+                      R$ 167,45
                     </span>
                     <span className="text-xs font-semibold text-slate-500">/mês</span>
                   </div>
 
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-500 font-medium">Cobrado R$ 718,80 ao ano</span>
+                    <span className="text-xs text-slate-500 font-medium">Cobrado R$ 2.009,40 ao ano</span>
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
-                      Economize 38%
+                      15% OFF
                     </span>
                   </div>
                 </div>
@@ -980,11 +999,10 @@ function ConteudoCheckout() {
                   <button
                     type="button"
                     onClick={() => setPlanoSelecionado("anual")}
-                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-                      planoSelecionado === "anual"
-                        ? "bg-[#4C6C54] text-white shadow-xs"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
+                    className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${planoSelecionado === "anual"
+                      ? "bg-[#4C6C54] text-white shadow-xs"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
                   >
                     <span>{planoSelecionado === "anual" ? "Plano Selecionado" : "Escolher este plano"}</span>
                     {planoSelecionado === "anual" && <Check className="h-3.5 w-3.5" />}
@@ -1001,10 +1019,10 @@ function ConteudoCheckout() {
           ref={secaoPagamentoRef}
           className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start scroll-mt-24"
         >
-          
+
           {/* COLUNA ESQUERDA: DADOS PESSOAIS + FORMAS DE PAGAMENTO (7 COLUNAS) */}
           <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
-            
+
             {/* SEÇÃO 1: DADOS DO COMPRADOR E ACESSO À PLATAFORMA */}
             <div className="space-y-4 pb-6 border-b border-slate-100">
               <div className="flex items-center justify-between">
@@ -1110,11 +1128,10 @@ function ConteudoCheckout() {
               <button
                 type="button"
                 onClick={() => setMetodoPagamento("credito")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  metodoPagamento === "credito"
-                    ? "bg-white text-slate-900 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${metodoPagamento === "credito"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
               >
                 <CreditCard className="h-4 w-4 text-slate-600" />
                 <span>Crédito</span>
@@ -1123,11 +1140,10 @@ function ConteudoCheckout() {
               <button
                 type="button"
                 onClick={() => setMetodoPagamento("pix")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  metodoPagamento === "pix"
-                    ? "bg-white text-emerald-700 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${metodoPagamento === "pix"
+                  ? "bg-white text-emerald-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
               >
                 <QrCode className="h-4 w-4 text-emerald-600" />
                 <span>PIX</span>
@@ -1139,11 +1155,10 @@ function ConteudoCheckout() {
               <button
                 type="button"
                 onClick={() => setMetodoPagamento("debito")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  metodoPagamento === "debito"
-                    ? "bg-white text-slate-900 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${metodoPagamento === "debito"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
               >
                 <CreditCard className="h-4 w-4 text-slate-400" />
                 <span>Débito</span>
@@ -1342,57 +1357,102 @@ function ConteudoCheckout() {
               </form>
             )}
 
-            {/* ABA 2: PIX COM QR CODE REAL GERADO NO ASAAS SANDBOX */}
+            {/* ABA 2: PIX INSTANTÂNEO COM FLUXO REAL DO ASAAS */}
             {metodoPagamento === "pix" && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between text-xs text-emerald-900 font-medium">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>O código Pix expira em:</span>
-                  </div>
-                  <strong className="font-mono text-emerald-800 text-sm font-bold bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
-                    {formatarTempo(tempoRestantePix)}
-                  </strong>
-                </div>
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {/* ESTADO 1: ANTES DE GERAR O PIX (CARD INFORMATIVO LIMPO) */}
+                {!pixDados && !pixCarregando && (
+                  <div className="p-5 sm:p-6 bg-emerald-50/60 border border-emerald-200/90 rounded-2xl space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-[#4C6C54] text-white flex items-center justify-center shadow-xs">
+                        <QrCode className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900">
+                          Liberação Imediata via PIX
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Pagamento instantâneo e seguro processado pelo Asaas
+                        </p>
+                      </div>
+                    </div>
 
-                {/* ÁREA DO QR CODE REAL DO ASAAS */}
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3 min-h-[260px]">
-                  {pixCarregando ? (
-                    <div className="flex flex-col items-center justify-center space-y-3 py-8">
-                      <Loader2 className="h-9 w-9 animate-spin text-[#4C6C54]" />
-                      <span className="text-xs font-extrabold text-slate-700">
-                        Gerando QR Code Pix oficial no Asaas...
+                    <div className="p-4 bg-white rounded-xl border border-emerald-200/70 space-y-2 text-xs text-slate-700">
+                      <p className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                        <Info className="h-4 w-4 text-[#4C6C54]" />
+                        <span>Como funciona a liberação via PIX:</span>
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1.5 text-slate-600 font-medium leading-relaxed">
+                        <li>
+                          <strong>1. Preencha seus dados</strong> de contato e acesso acima;
+                        </li>
+                        <li>
+                          <strong>2. Clique em Concluir Assinatura Segura</strong> ao lado para gerar seu QR Code PIX exclusivo e o código Copia e Cola com o valor atualizado.
+                        </li>
+                        <li>
+                          Após o pagamento, o acesso é liberado instantaneamente.
+                        </li>
+                      </ol>
+                    </div>
+
+                    {pixErro && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                        <span>{pixErro}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 text-[11px] font-bold text-emerald-800 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Aprovação em segundos
                       </span>
-                      <span className="text-[11px] text-slate-400">
-                        Conectando com o gateway seguro Asaas Sandbox
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Gateway Asaas Sandbox Oficial
                       </span>
                     </div>
-                  ) : pixErro ? (
-                    <div className="text-center space-y-3 py-4 max-w-sm">
-                      <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
-                      <p className="text-xs font-bold text-rose-700">{pixErro}</p>
-                      <button
-                        type="button"
-                        onClick={() => gerarPixAsaas()}
-                        className="py-2 px-4 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Tentar Novamente</span>
-                      </button>
+                  </div>
+                )}
+
+                {/* ESTADO 2: CARREGANDO GERAÇÃO DO PIX */}
+                {pixCarregando && (
+                  <div className="flex flex-col items-center justify-center space-y-3 p-10 bg-slate-50 rounded-2xl border border-slate-200">
+                    <Loader2 className="h-10 w-10 animate-spin text-[#4C6C54]" />
+                    <span className="text-sm font-extrabold text-slate-800">
+                      Gerando seu QR Code PIX oficial no Asaas...
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">
+                      Conectando com o gateway seguro Asaas Sandbox
+                    </span>
+                  </div>
+                )}
+
+                {/* ESTADO 3: PIX GERADO COM SUCESSO (QR CODE + COPIA E COLA + SIMULADOR SANDBOX) */}
+                {pixDados?.encodedImage && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    {/* CONTADOR DE EXPIRAÇÃO */}
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900 font-medium">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>O código Pix expira em:</span>
+                      </div>
+                      <strong className="font-mono text-emerald-800 text-sm font-extrabold bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+                        {formatarTempo(tempoRestantePix)}
+                      </strong>
                     </div>
-                  ) : pixDados?.encodedImage ? (
-                    <>
-                      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md">
-                        {/* Imagem Base64 Real do Asaas */}
+
+                    {/* IMAGEM DO QR CODE */}
+                    <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-md">
                         <img
-                          src={`data:image/png;base64,${pixDados.encodedImage}`}
+                          src={pixDados.encodedImage.startsWith("data:") ? pixDados.encodedImage : `data:image/png;base64,${pixDados.encodedImage}`}
                           alt="QR Code Pix Asaas"
-                          className="w-48 h-48 rounded-lg object-contain"
+                          className="w-48 h-48 sm:w-52 sm:h-52 rounded-lg object-contain"
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold text-slate-600">
-                          Aponte a câmera do seu banco para pagar
+                        <span className="text-xs font-bold text-slate-700">
+                          Aponte a câmera do aplicativo do seu banco para pagar
                         </span>
                         <button
                           type="button"
@@ -1403,60 +1463,58 @@ function ConteudoCheckout() {
                           <RefreshCw className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-4">
-                      <button
-                        type="button"
-                        onClick={() => gerarPixAsaas()}
-                        className="py-2.5 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer inline-flex items-center gap-2"
-                      >
-                        <QrCode className="h-4 w-4" />
-                        <span>Gerar QR Code Pix Oficial</span>
-                      </button>
                     </div>
-                  )}
-                </div>
 
-                {/* CAMPO COPIA E COLA REAL DO ASAAS */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Pix Copia e Cola:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      autoComplete="off"
-                      data-form-type="other"
-                      data-lpignore="true"
-                      value={pixDados?.payload || (pixCarregando ? "Gerando código Pix oficial..." : "Aguardando geração do QR Code...")}
-                      className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none select-all"
-                    />
+                    {/* CAMPO PIX COPIA E COLA COM FEEDBACK */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-700 uppercase">
+                        Código PIX Copia e Cola:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          autoComplete="off"
+                          value={pixDados.payload}
+                          className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none select-all font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={copiarChavePix}
+                          className={`h-11 px-4 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs ${copiadoPix
+                            ? "bg-emerald-600 text-white"
+                            : "bg-[#4C6C54] hover:bg-[#3a5340] text-white"
+                            }`}
+                        >
+                          {copiadoPix ? (
+                            <>
+                              <Check className="h-4 w-4 stroke-[3]" />
+                              <span>Código PIX Copiado! ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-4 w-4" />
+                              <span>Copiar Código</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* BOTÃO DE CONFIRMAÇÃO IMEDIATA SANDBOX */}
                     <button
                       type="button"
-                      onClick={copiarChavePix}
-                      disabled={!pixDados?.payload || pixCarregando}
-                      className={`h-11 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed ${
-                        copiadoPix
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-900 hover:bg-slate-800 text-white"
-                      }`}
+                      onClick={() => {
+                        const emailDestino = (clienteEmail || localStorage.getItem("nutrindo_user_email") || "").trim().toLowerCase();
+                        window.location.href = `/criar-senha?email=${encodeURIComponent(emailDestino)}`;
+                      }}
+                      className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
                     >
-                      {copiadoPix ? (
-                        <>
-                          <Check className="h-4 w-4" />
-                          <span>Copiado!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4" />
-                          <span>Copiar Código</span>
-                        </>
-                      )}
+                      <CheckCircle2 className="h-4 w-4 text-emerald-200" />
+                      <span>✅ Já realizei o pagamento PIX → Criar Minha Senha e Acessar</span>
                     </button>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1574,7 +1632,7 @@ function ConteudoCheckout() {
           {/* COLUNA DIREITA: RESUMO DO PEDIDO ADAPTADO AO UPGRADE (5 COLUNAS) */}
           <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-20">
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-              
+
               <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
                 Resumo do Pedido
               </h2>
@@ -1646,9 +1704,10 @@ function ConteudoCheckout() {
                       <button
                         type="button"
                         onClick={aplicarCupom}
-                        className="h-9 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shrink-0"
+                        disabled={cupomCarregando}
+                        className="h-9 px-3 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shrink-0"
                       >
-                        Aplicar
+                        {cupomCarregando ? "..." : "Aplicar"}
                       </button>
                     </div>
                     {cupomErro && (
@@ -1722,7 +1781,9 @@ function ConteudoCheckout() {
                     <span>
                       {ehUpgrade && planoSelecionado === "trimestral"
                         ? "✓ Plano Vigente (Você já possui)"
-                        : "Concluir Assinatura Segura"}
+                        : metodoPagamento === "pix" && pixDados
+                          ? "✅ Já Paguei via PIX → Acessar"
+                          : "Concluir Assinatura Segura"}
                     </span>
                   </>
                 )}
@@ -1801,8 +1862,8 @@ function ConteudoCheckout() {
                 {metodoPagamento === "pix"
                   ? "Sua cobrança Pix foi registrada com sucesso no Asaas. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
                   : ehUpgrade
-                  ? "Sua assinatura foi atualizada para o Plano Anual no Asaas. O crédito proporcional de R$ 79,90 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
-                  : `Seu acesso ao ${planoAtivo.nome} foi liberado com sucesso. Todos os recursos, anamnese e ferramentas já estão disponíveis.`}
+                    ? "Sua assinatura foi atualizada para o Plano Anual no Asaas. O crédito proporcional de R$ 177,30 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
+                    : `Seu acesso ao ${planoAtivo.nome} foi liberado com sucesso. Todos os recursos, anamnese e ferramentas já estão disponíveis.`}
               </p>
             </div>
 
@@ -1901,3 +1962,4 @@ export default function PaginaCheckout() {
     </Suspense>
   );
 }
+

@@ -768,3 +768,402 @@ export function imprimirMaterialAula(aula: DadosMaterialAula) {
     }
   }
 }
+
+// =============================================================================
+// RELATÓRIO CLÍNICO DE ANAMNESE PEDIÁTRICA COMPLETA (56 PERGUNTAS)
+// =============================================================================
+
+export interface ItemAnamnesePergunta {
+  numero: number;
+  pergunta: string;
+  resposta: string;
+  pontoAtencao?: boolean;
+  motivoAtencao?: string;
+  sugestaoConduta?: string;
+}
+
+export interface SecaoAnamneseCompleta {
+  titulo: string;
+  numeroSecao: number;
+  itens: ItemAnamnesePergunta[];
+}
+
+export interface DadosAnamneseCompleta {
+  paciente?: string; // Nome do responsável
+  email?: string;
+  crianca?: string;
+  idadeCrianca?: string;
+  telefone?: string;
+  plano?: string;
+  dataPreenchimento?: string;
+  pontosAtencao?: Array<{
+    numero: number;
+    pergunta: string;
+    resposta: string;
+    motivoAtencao?: string;
+  }>;
+  secoes?: SecaoAnamneseCompleta[];
+}
+
+export function gerarHtmlAnamneseCompleta(dados: DadosAnamneseCompleta): string {
+  const dataHoje = dados.dataPreenchimento || new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const nomeResponsavel = dados.paciente || "Responsável Legal";
+  const nomeCrianca = dados.crianca || "Paciente Pediátrico";
+  const idade = dados.idadeCrianca || "Não informada";
+  const email = dados.email || "Não informado";
+  const telefone = dados.telefone || "Não informado";
+  const plano = dados.plano || "Plano Trimestral";
+
+  const secoes = dados.secoes || [];
+
+  // Coleta pontos de atenção caso não tenham sido passados prontos
+  let pontos = dados.pontosAtencao || [];
+  if (pontos.length === 0 && secoes.length > 0) {
+    secoes.forEach((sec) => {
+      sec.itens.forEach((it) => {
+        if (it.pontoAtencao) {
+          pontos.push({
+            numero: it.numero,
+            pergunta: it.pergunta,
+            resposta: it.resposta,
+            motivoAtencao: it.motivoAtencao,
+          });
+        }
+      });
+    });
+  }
+
+  // Gera o HTML das 8 seções e 56 perguntas
+  const secoesHtml = secoes.map((sec) => {
+    const itensHtml = sec.itens.map((it) => {
+      const destaqueAlerta = it.pontoAtencao
+        ? `border-left: 3.5px solid #d97706; background: #fffdf5;`
+        : `border-left: 3.5px solid #e2e8f0; background: #ffffff;`;
+
+      const badgeAlerta = it.pontoAtencao
+        ? `<span style="display: inline-block; font-size: 9px; font-weight: 800; text-transform: uppercase; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; padding: 2px 7px; border-radius: 9999px; margin-left: 6px;">⚠️ Ponto de Atenção</span>`
+        : "";
+
+      const motivoHtml = it.pontoAtencao && it.motivoAtencao
+        ? `<div style="margin-top: 6px; padding: 6px 10px; background: #fef2f2; border-left: 2px solid #ef4444; border-radius: 4px; font-size: 11px; color: #991b1b;">
+             <strong>Nota Clínica:</strong> ${it.motivoAtencao}
+           </div>`
+        : "";
+
+      return `
+        <div style="margin-bottom: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0; ${destaqueAlerta} page-break-inside: avoid;">
+          <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px;">
+            <span style="font-size: 11px; font-weight: 800; color: #3D5A45; background: #E8F5E9; padding: 2px 6px; border-radius: 4px;">Q${String(it.numero).padStart(2, "0")}</span>
+            <span style="font-size: 12px; font-weight: 700; color: #0f172a; flex: 1;">${it.pergunta}</span>
+            ${badgeAlerta}
+          </div>
+          <div style="font-size: 12px; color: #334155; margin-left: 32px; line-height: 1.45;">
+            <strong>Resposta:</strong> <span style="color: #1e293b;">${it.resposta || "Não informado"}</span>
+          </div>
+          ${motivoHtml}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div style="margin-top: 22px; margin-bottom: 16px; page-break-inside: avoid;">
+        <div style="background: #3D5A45; color: #ffffff; padding: 8px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <h3 style="margin: 0; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+            ${sec.titulo}
+          </h3>
+          <span style="font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 9999px;">
+            ${sec.itens.length} itens
+          </span>
+        </div>
+        ${itensHtml}
+      </div>
+    `;
+  }).join("");
+
+  // Bloco de Resumo dos Pontos de Atenção
+  const pontosAtencaoHtml = pontos.length > 0 ? `
+    <div style="background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 12px; padding: 16px; margin-bottom: 22px; page-break-inside: avoid;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #fde68a; padding-bottom: 8px; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">⚠️</span>
+          <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px;">
+            Resumo dos Pontos de Atenção Clínica Detectados
+          </h3>
+        </div>
+        <span style="font-size: 11px; font-weight: 800; background: #fef3c7; color: #b45309; padding: 3px 10px; border-radius: 9999px; border: 1px solid #fde68a;">
+          ${pontos.length} alertas identificados
+        </span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+        ${pontos.map((p) => `
+          <div style="background: #ffffff; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px 12px; font-size: 11px; color: #451a03;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+              <span style="font-weight: 800; color: #b45309;">Q${String(p.numero).padStart(2, "0")}</span>
+              <span style="font-weight: 700; color: #1e293b;">${p.pergunta}</span>
+            </div>
+            <div style="color: #475569; margin-left: 28px;">
+              <strong>Registrado:</strong> ${p.resposta}
+              ${p.motivoAtencao ? ` | <span style="color: #b91c1c; font-weight: 600;">${p.motivoAtencao}</span>` : ""}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  ` : `
+    <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 12px; padding: 14px; margin-bottom: 22px; text-align: center; color: #166534; font-size: 12px; font-weight: 700;">
+      ✅ Nenhum ponto de risco ou alerta crítico detectado nas respostas da anamnese.
+    </div>
+  `;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Anamnese Completa • ${nomeCrianca} • Dra. Laís Leles</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm 15mm 16mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      line-height: 1.5;
+      margin: 0;
+      padding: 16px;
+      font-size: 12px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2.5px solid #3D5A45;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .brand-title {
+      font-size: 19px;
+      font-weight: 900;
+      color: #3D5A45;
+      letter-spacing: -0.5px;
+      margin: 0;
+    }
+    .brand-subtitle {
+      font-size: 10.5px;
+      color: #64748b;
+      margin: 2px 0 0 0;
+    }
+    .nutri-info {
+      text-align: right;
+    }
+    .nutri-name {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #1e293b;
+      margin: 0;
+    }
+    .nutri-crn {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #3D5A45;
+      background: #E8F5E9;
+      border: 1px solid #c8e6c9;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      margin-top: 2px;
+    }
+    .title-banner {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .title-banner h1 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 900;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .title-banner p {
+      margin: 3px 0 0 0;
+      font-size: 10.5px;
+      color: #64748b;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+    }
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .meta-label {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+    .meta-value {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 1px;
+    }
+    .footer {
+      margin-top: 32px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #94a3b8;
+      page-break-inside: avoid;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- CABEÇALHO TIMBRADO OFICIAL -->
+  <div class="header">
+    <div>
+      <h2 class="brand-title">Nutrindo em Casa</h2>
+      <p class="brand-subtitle">Terapia Alimentar & Nutrição Pediátrica Descomplicada</p>
+    </div>
+    <div class="nutri-info">
+      <p class="nutri-name">Dra. Laís Leles</p>
+      <span class="nutri-crn">CRN-8 18878</span>
+    </div>
+  </div>
+
+  <!-- BANNER DO DOCUMENTO -->
+  <div class="title-banner">
+    <h1>Relatório Clínico de Anamnese Pediátrica Completa</h1>
+    <p>Mapeamento Biopsicossocial e Sensorial dos Hábitos Alimentares (56 Perguntas Clínicas)</p>
+  </div>
+
+  <!-- GRID COM DADOS CLÍNICOS DO PACIENTE -->
+  <div class="meta-grid">
+    <div class="meta-item">
+      <span class="meta-label">Criança / Paciente</span>
+      <span class="meta-value">${nomeCrianca}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Idade</span>
+      <span class="meta-value">${idade}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Responsável</span>
+      <span class="meta-value">${nomeResponsavel}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Plano Vigente</span>
+      <span class="meta-value" style="color: #3D5A45; font-weight: 800;">${plano}</span>
+    </div>
+    <div class="meta-item" style="grid-column: span 2;">
+      <span class="meta-label">E-mail de Contato</span>
+      <span class="meta-value">${email}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">WhatsApp</span>
+      <span class="meta-value">${telefone}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Data de Emissão</span>
+      <span class="meta-value">${dataHoje}</span>
+    </div>
+  </div>
+
+  <!-- QUADRO DE DESTAQUE: PONTOS DE ATENÇÃO -->
+  ${pontosAtencaoHtml}
+
+  <!-- TODAS AS 8 SEÇÕES DA ANAMNESE -->
+  ${secoesHtml}
+
+  <!-- ASSINATURA & RODAPÉ OFICIAL -->
+  <div class="footer">
+    <div>
+      <p style="margin: 0; font-weight: 700; color: #475569;">Nutrindo em Casa • Dra. Laís Leles • CRN-8 18878</p>
+      <p style="margin: 2px 0 0 0;">Documento Clínico Confidencial • Uso restrito ao acompanhamento nutricional</p>
+    </div>
+    <div style="text-align: right;">
+      <p style="margin: 0; font-weight: 700; color: #3D5A45;">metodonutrindoemcasa@gmail.com</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function imprimirAnamneseCompleta(dados: DadosAnamneseCompleta) {
+  if (typeof window === "undefined") return;
+
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) throw new Error("Contexto de impressão indisponível");
+
+    doc.open();
+    doc.write(gerarHtmlAnamneseCompleta(dados));
+    doc.close();
+
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.warn("Aviso na impressão:", err);
+      } finally {
+        setTimeout(() => {
+          if (iframe.parentNode) document.body.removeChild(iframe);
+        }, 1500);
+      }
+    }, 400);
+  } catch (err) {
+    console.warn("Fallback para window.open:", err);
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(gerarHtmlAnamneseCompleta(dados));
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 500);
+    }
+  }
+}
+

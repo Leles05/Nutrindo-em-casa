@@ -486,9 +486,9 @@ export default function PaginaDashboard() {
       id: "curso-descomplicado",
       target: "#tour-curso",
       title: "Curso Terapia Alimentar Descomplicada",
-      subtitulo: "Aulas Práticas e Sequenciais",
-      description: "Assista às aulas exclusivas gravadas pela Dra. Laís Leles sobre manejo da recusa, sinais de alerta e construção do prato seguro.",
-      dicaPratica: "Assista no seu próprio ritmo pelo celular ou computador.",
+      subtitulo: "Aulas Práticas e Materiais PDF da Dra.",
+      description: "Assista às aulas exclusivas gravadas pela Dra. Laís Leles sobre manejo da recusa, sinais de alerta e construção do prato seguro. Baixe os materiais PDF complementares em cada módulo.",
+      dicaPratica: "Assista no seu próprio ritmo pelo celular ou computador e baixe os PDFs para referência futura.",
     },
     {
       id: "card-devolutiva",
@@ -511,8 +511,8 @@ export default function PaginaDashboard() {
       target: "#tour-consulta",
       title: "Próxima Consulta & Calendário",
       subtitulo: "Integrado com o Google Calendar",
-      description: "Visualize a data e horário da sua videochamada individual com a Dra. Laís Leles, entre direto na sala do Meet e visualize seus compromissos no Google Calendar.",
-      dicaPratica: "Sincronize com o Google Calendar para receber lembretes no celular.",
+      description: "Visualize a data e horário da sua videochamada individual com a Dra. Laís Leles, entre direto na sala do Meet. As consultas são sincronizadas automaticamente com seu Google Calendar.",
+      dicaPratica: "Sincronize com o Google Calendar para receber lembretes no celular e ver seus compromissos integrados.",
     },
   ];
 

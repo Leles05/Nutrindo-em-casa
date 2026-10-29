@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import {
   Play, CheckCircle2, FileText, ArrowRight, ArrowLeft,
-  Check, Trophy, Sparkles, ChevronLeft, ChevronRight, Circle, X, Lock
+  Check, Trophy, Sparkles, ChevronLeft, ChevronRight, Circle, X, Lock,
+  ChevronDown, ChevronUp, Layers
 } from "lucide-react";
 import Link from "next/link";
 import { imprimirMaterialAula } from "@/lib/pdfTimbrado";
+import { type ModuloCurso } from "@/app/api/cursos/route";
 
 interface Aula {
   id: number;
@@ -16,6 +18,8 @@ interface Aula {
   atual: boolean;
   descricao: string;
   video_url?: string;
+  moduloId?: string;
+  moduloTitulo?: string;
   material_anexo?: {
     nome: string;
     tipo: string;
@@ -27,6 +31,8 @@ interface Aula {
 export default function PaginaCursos() {
   const [toastConquista, setToastConquista] = useState(false);
   const [avisoBloqueio, setAvisoBloqueio] = useState("");
+  const [modulos, setModulos] = useState<ModuloCurso[]>([]);
+  const [moduloAbertoId, setModuloAbertoId] = useState<string>("mod-1");
 
   const dispararAviso = (msg: string) => {
     setAvisoBloqueio(msg);
@@ -49,6 +55,8 @@ export default function PaginaCursos() {
       descricao: "Compreenda as bases da Escalada do Comer e como a aproximação gradual diminui a ansiedade da criança à mesa.",
       video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
       material_anexo: null,
+      moduloId: "mod-1",
+      moduloTitulo: "Módulo 1: Fundamentos da Seletividade Alimentar",
     },
     {
       id: 2,
@@ -59,6 +67,8 @@ export default function PaginaCursos() {
       descricao: "Aprenda a diferenciar uma fase passageira de desinteresse de uma verdadeira sensibilidade tátil e olfativa.",
       video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
       material_anexo: null,
+      moduloId: "mod-1",
+      moduloTitulo: "Módulo 1: Fundamentos da Seletividade Alimentar",
     },
     {
       id: 3,
@@ -69,6 +79,8 @@ export default function PaginaCursos() {
       descricao: "Ferramentas práticas de diálogo para evitar chantagens e barganhas na hora das principais refeições.",
       video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
       material_anexo: null,
+      moduloId: "mod-1",
+      moduloTitulo: "Módulo 1: Fundamentos da Seletividade Alimentar",
     },
     {
       id: 4,
@@ -79,89 +91,109 @@ export default function PaginaCursos() {
       descricao: "Como combinar alimentos de conforto com novos alimentos de teste no mesmo prato sem gerar rejeição imediata.",
       video_url: "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
       material_anexo: null,
+      moduloId: "mod-1",
+      moduloTitulo: "Módulo 1: Fundamentos da Seletividade Alimentar",
     }
   ]);
 
-  // Carrega progresso salvo no localStorage e sincroniza com o banco de dados
+  // Carrega a estrutura de módulos e aulas cadastrada pela Dra. Laís
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = obterStorageKey();
-    const salvas = localStorage.getItem(key);
-    if (salvas) {
-      try {
-        const concluidasIds: number[] = JSON.parse(salvas);
-        setAulas((prev) => {
-          let encontrouAtual = false;
-          return prev.map((a, idx) => {
-            const concl = concluidasIds.includes(a.id);
-            let atual = false;
-            if (!encontrouAtual && !concl) {
-              atual = true;
-              encontrouAtual = true;
-            }
-            return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
-          });
-        });
-      } catch (err) {
-        console.warn("Aviso ao carregar progresso de aulas:", err);
-      }
-    }
-
-    // Carrega materiais e customizações cadastradas pela Dra. Laís
-    fetch("/api/nutri?tipo=materiais_aulas")
+    fetch("/api/cursos")
       .then((res) => res.json())
       .then((data) => {
-        if (data?.materiais_aulas && Array.isArray(data.materiais_aulas) && data.materiais_aulas.length > 0) {
-          setAulas((prev) =>
-            prev.map((a) => {
-              const custom = data.materiais_aulas.find((m: any) => Number(m.aula_id) === a.id);
-              if (custom) {
-                return {
-                  ...a,
-                  titulo: custom.titulo || a.titulo,
-                  descricao: custom.descricao || a.descricao,
-                  video_url: custom.video_url || a.video_url,
-                  material_anexo: custom.material_anexo !== undefined ? custom.material_anexo : a.material_anexo,
-                };
-              }
-              return a;
-            })
-          );
-        }
-      })
-      .catch((err) => console.warn("Aviso ao buscar materiais das aulas:", err));
+        if (data?.modulos && Array.isArray(data.modulos) && data.modulos.length > 0) {
+          setModulos(data.modulos);
+          if (data.modulos[0]?.id) {
+            setModuloAbertoId(data.modulos[0].id);
+          }
 
-    const email = localStorage.getItem("nutrindo_user_email") || "";
-    if (email) {
-      fetch(`/api/configuracoes?email=${encodeURIComponent(email)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.aulas_concluidas && Array.isArray(data.aulas_concluidas) && data.aulas_concluidas.length > 0) {
-            const concluidasIds: number[] = data.aulas_concluidas;
-            setAulas((prev) => {
-              let encontrouAtual = false;
-              return prev.map((a, idx) => {
-                const concl = concluidasIds.includes(a.id);
-                let atual = false;
-                if (!encontrouAtual && !concl) {
-                  atual = true;
-                  encontrouAtual = true;
-                }
-                return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
+          const todasAulas: Aula[] = [];
+          data.modulos.forEach((mod: ModuloCurso) => {
+            (mod.aulas || []).forEach((a) => {
+              todasAulas.push({
+                id: a.id,
+                titulo: a.titulo,
+                duracao: a.duracao || "10:00",
+                descricao: a.descricao || "",
+                video_url: a.video_url || "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1",
+                material_anexo: a.material_anexo || null,
+                concluido: false,
+                atual: false,
+                moduloId: mod.id,
+                moduloTitulo: mod.titulo,
               });
             });
-            localStorage.setItem(key, JSON.stringify(concluidasIds));
+          });
+
+          if (todasAulas.length > 0) {
+            const key = obterStorageKey();
+            const salvas = typeof window !== "undefined" ? localStorage.getItem(key) : null;
+            let concluidasIds: number[] = [];
+            if (salvas) {
+              try {
+                concluidasIds = JSON.parse(salvas);
+              } catch {}
+            }
+
+            let encontrouAtual = false;
+            const aulasMapeadas = todasAulas.map((a, idx) => {
+              const concl = concluidasIds.includes(a.id);
+              let atual = false;
+              if (!encontrouAtual && !concl) {
+                atual = true;
+                encontrouAtual = true;
+              }
+              return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
+            });
+
+            setAulas(aulasMapeadas);
+
+            // Ajusta o módulo aberto para o módulo da aula atual
+            const atualObj = aulasMapeadas.find((a) => a.atual);
+            if (atualObj?.moduloId) {
+              setModuloAbertoId(atualObj.moduloId);
+            }
           }
-        })
-        .catch(() => {});
-    }
+        }
+      })
+      .catch((err) => console.warn("Aviso ao carregar estrutura de cursos:", err));
+  }, []);
+
+  // Sincroniza progresso com o banco de dados
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const email = localStorage.getItem("nutrindo_user_email") || "";
+    if (!email) return;
+
+    fetch(`/api/configuracoes?email=${encodeURIComponent(email)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.aulas_concluidas && Array.isArray(data.aulas_concluidas) && data.aulas_concluidas.length > 0) {
+          const concluidasIds: number[] = data.aulas_concluidas;
+          setAulas((prev) => {
+            let encontrouAtual = false;
+            return prev.map((a, idx) => {
+              const concl = concluidasIds.includes(a.id);
+              let atual = false;
+              if (!encontrouAtual && !concl) {
+                atual = true;
+                encontrouAtual = true;
+              }
+              return { ...a, concluido: concl, atual: atual || (idx === 0 && !encontrouAtual) };
+            });
+          });
+          const key = obterStorageKey();
+          localStorage.setItem(key, JSON.stringify(concluidasIds));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const aulaAtualIndex = aulas.findIndex((a) => a.atual);
   const aulaAtual = aulas[aulaAtualIndex] || aulas[0];
 
   const totalConcluidas = aulas.filter((a) => a.concluido).length;
-  const porcentagemProgresso = Math.round((totalConcluidas / aulas.length) * 100);
+  const porcentagemProgresso = aulas.length > 0 ? Math.round((totalConcluidas / aulas.length) * 100) : 0;
 
   // Regra Sequencial: Aula N só fica desbloqueada se a Aula N-1 estiver concluída
   const isAulaDesbloqueada = (index: number) => {
@@ -210,6 +242,10 @@ export default function PaginaCursos() {
       return;
     }
     if (aulaAtualIndex < aulas.length - 1) {
+      const proxima = aulas[aulaAtualIndex + 1];
+      if (proxima?.moduloId) {
+        setModuloAbertoId(proxima.moduloId);
+      }
       setAulas((prev) =>
         prev.map((a, idx) => ({
           ...a,
@@ -221,6 +257,10 @@ export default function PaginaCursos() {
 
   const irParaAulaAnterior = () => {
     if (aulaAtualIndex > 0) {
+      const anterior = aulas[aulaAtualIndex - 1];
+      if (anterior?.moduloId) {
+        setModuloAbertoId(anterior.moduloId);
+      }
       setAulas((prev) =>
         prev.map((a, idx) => ({
           ...a,
@@ -232,8 +272,12 @@ export default function PaginaCursos() {
 
   const selecionarAula = (index: number) => {
     if (!isAulaDesbloqueada(index)) {
-      dispararAviso("Marque a aula atual como concluída para liberar a próxima aula.");
+      dispararAviso("Marque a aula anterior como concluída para liberar esta aula.");
       return;
+    }
+    const escolhida = aulas[index];
+    if (escolhida?.moduloId) {
+      setModuloAbertoId(escolhida.moduloId);
     }
     setAulas((prev) =>
       prev.map((a, idx) => ({
@@ -251,8 +295,8 @@ export default function PaginaCursos() {
         <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 p-4 bg-[#4C6C54] text-white text-xs font-bold rounded-2xl shadow-2xl flex items-center gap-3 animation-fade-in border border-emerald-400/30">
           <Trophy className="h-5 w-5 text-amber-300 shrink-0" />
           <div>
-            <p className="font-extrabold text-sm">Parabéns! Módulo 1 Concluído! 🎉</p>
-            <p className="text-white/80 text-[11px] font-medium">Você concluiu todas as 4 aulas deste ciclo terapêutico.</p>
+            <p className="font-extrabold text-sm">Parabéns! Módulo Concluído! 🎉</p>
+            <p className="text-white/80 text-[11px] font-medium">Você concluiu as aulas deste ciclo terapêutico.</p>
           </div>
           <button
             type="button"
@@ -271,13 +315,13 @@ export default function PaginaCursos() {
             Terapia Alimentar Descomplicada
           </h1>
           <p className="text-xs text-slate-400 font-medium">
-            Módulo 1: Entendendo a Seletividade Sensorial
+            {aulaAtual.moduloTitulo || "Módulo 1: Fundamentos da Seletividade Alimentar"}
           </p>
         </div>
 
         {porcentagemProgresso === 100 && (
           <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-2xs">
-            <Trophy className="h-4 w-4 text-emerald-600" /> Módulo Concluído! (100%)
+            <Trophy className="h-4 w-4 text-emerald-600" /> Curso Concluído! (100%)
           </span>
         )}
       </div>
@@ -291,7 +335,7 @@ export default function PaginaCursos() {
             <iframe
               className="absolute top-0 left-0 w-full h-full"
               src={aulaAtual.video_url || "https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0&modestbranding=1"}
-              title={aulaAtual.titulo || "Aula de Demonstração"}
+              title={aulaAtual.titulo || "Aula do Curso"}
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -393,7 +437,7 @@ export default function PaginaCursos() {
                     imprimirMaterialAula({
                       id: String(aulaAtual.id),
                       titulo: aulaAtual.titulo,
-                      modulo: "Módulo 1 • Fundamentos da Seletividade Alimentar",
+                      modulo: aulaAtual.moduloTitulo || "Módulo 1 • Fundamentos da Seletividade Alimentar",
                       resumo: aulaAtual.descricao,
                     });
                   }
@@ -417,11 +461,11 @@ export default function PaginaCursos() {
           </div>
         </div>
 
-        {/* LISTA LATERAL (4 COLUNAS) */}
-        <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+        {/* LISTA LATERAL SEPARADA POR MÓDULOS (4 COLUNAS) */}
+        <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3.5">
 
           <div className="space-y-1.5 border-b border-slate-100 pb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-800">Conteúdo do Módulo</h3>
+            <h3 className="text-sm font-extrabold text-slate-800">Estrutura do Curso</h3>
             <div className="flex justify-between text-[10px] font-bold text-slate-400">
               <span>{totalConcluidas} de {aulas.length} aulas concluídas</span>
               <span className={porcentagemProgresso === 100 ? "text-emerald-600 font-extrabold" : "text-[#EB6D57]"}>
@@ -437,65 +481,138 @@ export default function PaginaCursos() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            {aulas.map((aula, idx) => {
-              const desbloqueada = isAulaDesbloqueada(idx);
+          {/* MÓDULOS SEPARADOS EM ACCORDIONS INTUITIVOS */}
+          <div className="space-y-3">
+            {(modulos.length > 0 ? modulos : [
+              {
+                id: "mod-1",
+                titulo: "Módulo 1: Fundamentos da Seletividade Alimentar",
+                aulas: aulas.map((a) => ({
+                  id: a.id,
+                  titulo: a.titulo,
+                  duracao: a.duracao,
+                  descricao: a.descricao,
+                  video_url: a.video_url || "",
+                  material_anexo: a.material_anexo,
+                })),
+              }
+            ]).map((mod) => {
+              const aulasDoModulo = aulas.filter(
+                (a) => a.moduloId === mod.id || (!a.moduloId && mod.id === "mod-1")
+              );
+              const concluidasNoModulo = aulasDoModulo.filter((a) => a.concluido).length;
+              const estaAberto = moduloAbertoId === mod.id;
 
               return (
                 <div
-                  key={aula.id}
-                  onClick={() => selecionarAula(idx)}
-                  className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
-                    !desbloqueada
-                      ? "border-slate-100 bg-slate-50/70 text-slate-400 opacity-60 hover:opacity-80"
-                      : aula.atual
-                        ? "border-[#EB6D57] bg-[#EB6D57]/5 shadow-xs ring-1 ring-[#EB6D57]/30"
-                        : "border-slate-100 hover:bg-slate-50"
-                  }`}
-                  title={!desbloqueada ? "Conclua a aula anterior para desbloquear esta aula" : aula.titulo}
+                  key={mod.id}
+                  className="border border-slate-200/80 rounded-xl overflow-hidden bg-slate-50/50"
                 >
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    {!desbloqueada ? (
-                      <div className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200 text-amber-500 flex items-center justify-center shrink-0">
-                        <Lock className="h-3 w-3" />
+                  {/* CABEÇALHO DO MÓDULO */}
+                  <button
+                    type="button"
+                    onClick={() => setModuloAbertoId(estaAberto ? "" : mod.id)}
+                    className="w-full p-2.5 sm:p-3 bg-white hover:bg-slate-50/80 transition-colors flex items-center justify-between text-left cursor-pointer border-b border-slate-100"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      <Layers className="h-3.5 w-3.5 text-[#4C6C54] shrink-0" />
+                      <div className="truncate">
+                        <h4 className="text-xs font-extrabold text-slate-900 truncate">
+                          {mod.titulo}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {concluidasNoModulo} de {aulasDoModulo.length} concluídas
+                        </span>
                       </div>
-                    ) : aula.concluido ? (
-                      <div className="h-5 w-5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
-                        <Check className="h-3 w-3 stroke-[3]" />
-                      </div>
-                    ) : aula.atual ? (
-                      <div className="h-5 w-5 rounded-full bg-[#EB6D57]/10 text-[#EB6D57] flex items-center justify-center shrink-0">
-                        <Play className="h-3 w-3 fill-current translate-x-0.2" />
-                      </div>
-                    ) : (
-                      <div className="h-5 w-5 rounded-full border border-slate-200 text-slate-300 flex items-center justify-center shrink-0">
-                        <Circle className="h-2 w-2 fill-slate-200" />
-                      </div>
-                    )}
-
-                    <div className="truncate">
-                      <h4 className={`text-xs font-bold truncate ${
-                        !desbloqueada
-                          ? "text-slate-400"
-                          : aula.atual
-                            ? "text-[#EB6D57]"
-                            : aula.concluido
-                              ? "text-slate-700"
-                              : "text-slate-600"
-                      }`}>
-                        {aula.titulo}
-                      </h4>
-                      <span className="text-[10px] text-slate-400 font-medium">{aula.duracao}</span>
                     </div>
-                  </div>
 
-                  {!desbloqueada ? (
-                    <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                  ) : aula.atual ? (
-                    <span className="text-[9px] font-extrabold text-[#EB6D57] bg-[#EB6D57]/10 px-1.5 py-0.5 rounded uppercase shrink-0">
-                      Assistindo
-                    </span>
-                  ) : null}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {concluidasNoModulo === aulasDoModulo.length && aulasDoModulo.length > 0 ? (
+                        <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">
+                          Concluído
+                        </span>
+                      ) : null}
+                      {estaAberto ? (
+                        <ChevronUp className="h-4 w-4 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-slate-400" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* AULAS DO MÓDULO */}
+                  {estaAberto && (
+                    <div className="p-2 space-y-1.5 bg-white">
+                      {aulasDoModulo.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 text-center py-2">
+                          Nenhuma aula neste módulo.
+                        </p>
+                      ) : (
+                        aulasDoModulo.map((aula) => {
+                          const idxGlobal = aulas.findIndex((a) => a.id === aula.id);
+                          const desbloqueada = isAulaDesbloqueada(idxGlobal);
+
+                          return (
+                            <div
+                              key={aula.id}
+                              onClick={() => selecionarAula(idxGlobal)}
+                              className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                                !desbloqueada
+                                  ? "border-slate-100 bg-slate-50/70 text-slate-400 opacity-60 hover:opacity-80"
+                                  : aula.atual
+                                    ? "border-[#EB6D57] bg-[#EB6D57]/5 shadow-xs ring-1 ring-[#EB6D57]/30"
+                                    : "border-slate-100 hover:bg-slate-50"
+                              }`}
+                              title={!desbloqueada ? "Conclua a aula anterior para desbloquear esta aula" : aula.titulo}
+                            >
+                              <div className="flex items-center gap-2.5 overflow-hidden">
+                                {!desbloqueada ? (
+                                  <div className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200 text-amber-500 flex items-center justify-center shrink-0">
+                                    <Lock className="h-3 w-3" />
+                                  </div>
+                                ) : aula.concluido ? (
+                                  <div className="h-5 w-5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
+                                    <Check className="h-3 w-3 stroke-[3]" />
+                                  </div>
+                                ) : aula.atual ? (
+                                  <div className="h-5 w-5 rounded-full bg-[#EB6D57]/10 text-[#EB6D57] flex items-center justify-center shrink-0">
+                                    <Play className="h-3 w-3 fill-current translate-x-0.2" />
+                                  </div>
+                                ) : (
+                                  <div className="h-5 w-5 rounded-full border border-slate-200 text-slate-300 flex items-center justify-center shrink-0">
+                                    <Circle className="h-2 w-2 fill-slate-200" />
+                                  </div>
+                                )}
+
+                                <div className="truncate">
+                                  <h4 className={`text-xs font-bold truncate ${
+                                    !desbloqueada
+                                      ? "text-slate-400"
+                                      : aula.atual
+                                        ? "text-[#EB6D57]"
+                                        : aula.concluido
+                                          ? "text-slate-700"
+                                          : "text-slate-600"
+                                  }`}>
+                                    {aula.titulo}
+                                  </h4>
+                                  <span className="text-[10px] text-slate-400 font-medium">{aula.duracao}</span>
+                                </div>
+                              </div>
+
+                              {!desbloqueada ? (
+                                <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                              ) : aula.atual ? (
+                                <span className="text-[9px] font-extrabold text-[#EB6D57] bg-[#EB6D57]/10 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                  Assistindo
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

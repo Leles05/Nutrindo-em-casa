@@ -90,11 +90,11 @@ export async function POST(request: Request) {
     let valorCobrado = Number(valor);
     if (!valorCobrado || isNaN(valorCobrado) || valorCobrado <= 0) {
       if (planoFormatado === "anual") {
-        valorCobrado = 718.8;
+        valorCobrado = 2009.40;
       } else if (planoFormatado === "trimestral") {
-        valorCobrado = 239.7;
+        valorCobrado = 531.90;
       } else {
-        valorCobrado = 97.0;
+        valorCobrado = 197.0;
       }
     }
     valorCobrado = Number(valorCobrado.toFixed(2));
@@ -294,6 +294,32 @@ export async function POST(request: Request) {
 
       if (faturaErr) {
         console.warn("Aviso ao salvar fatura no Supabase:", faturaErr.message);
+      }
+
+      // 2.1 Incremento automático do uso do cupom no Supabase
+      if (cupomLimpo) {
+        try {
+          const { data: cupomRows } = await supabaseAdmin
+            .from("respostas_rapidas_nutri")
+            .select("*")
+            .eq("categoria", "CUPOM_DESCONTO")
+            .ilike("titulo", cupomLimpo);
+
+          if (cupomRows && cupomRows.length > 0) {
+            const cupomRow = cupomRows[0];
+            let cDados: any = {};
+            try {
+              cDados = typeof cupomRow.texto === "string" ? JSON.parse(cupomRow.texto) : cupomRow.texto;
+            } catch {}
+            cDados.usosAtuais = (Number(cDados.usosAtuais) || 0) + 1;
+            await supabaseAdmin
+              .from("respostas_rapidas_nutri")
+              .update({ texto: JSON.stringify(cDados) })
+              .eq("id", cupomRow.id);
+          }
+        } catch (cupomErr) {
+          console.warn("Aviso ao incrementar uso do cupom no Supabase:", cupomErr);
+        }
       }
 
       // 3. Verificação no Auth e Envio Direto de E-mail (evitando rate limit do generateLink)

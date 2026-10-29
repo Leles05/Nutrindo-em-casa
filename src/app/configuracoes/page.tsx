@@ -88,7 +88,7 @@ function ConteudoConfiguracoes() {
   const [planoUsuario, setPlanoUsuario] = useState({
     tipo: "trimestral",
     nome: "Plano Trimestral",
-    valor: "R$ 239,70",
+    valor: "R$ 531,90",
     periodicidade: "Cobrado a cada 3 meses",
     asaasId: "sub_88294",
     status: "ATIVO"
@@ -145,16 +145,16 @@ function ConteudoConfiguracoes() {
 
             const planoTipo = (data.profile.plano || "trimestral").toLowerCase();
             let nomePlano = "Plano Trimestral";
-            let valorPlano = "R$ 239,70";
+            let valorPlano = "R$ 531,90";
             let periodicidadePlano = "Cobrado a cada 3 meses";
 
             if (planoTipo === "mensal") {
               nomePlano = "Plano Mensal";
-              valorPlano = "R$ 97,00";
+              valorPlano = "R$ 197,00";
               periodicidadePlano = "Cobrado mensalmente";
             } else if (planoTipo === "anual") {
               nomePlano = "Plano Anual";
-              valorPlano = "R$ 718,80";
+              valorPlano = "R$ 2.009,40";
               periodicidadePlano = "Cobrado anualmente";
             }
 

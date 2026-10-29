@@ -34,8 +34,10 @@ import {
   Stethoscope,
   MessageSquare,
   Search,
+  Printer,
 } from "lucide-react";
 import BancoRespostasRapidas from "@/components/nutri/BancoRespostasRapidas";
+import { imprimirAnamneseCompleta } from "@/lib/pdfTimbrado";
 import {
   obterSecoesProntuario,
   type ItemPergunta,
@@ -645,34 +647,68 @@ export default function ProntuarioDedicadoPage() {
             </p>
           </div>
 
-          {/* RESUMO RÁPIDO DE CONSULTAS & DEVOLUTIVAS */}
-          <div className="flex items-center gap-3 sm:gap-4 flex-wrap bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80">
-            <div className="text-center px-2">
-              <span className="block text-xl font-black text-[#4C6C54]">
-                {paciente.devolutivas.length}
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Devolutivas
-              </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* RESUMO RÁPIDO DE CONSULTAS & DEVOLUTIVAS */}
+            <div className="flex items-center gap-3 sm:gap-4 flex-wrap bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200/80">
+              <div className="text-center px-2">
+                <span className="block text-xl font-black text-[#4C6C54]">
+                  {paciente.devolutivas.length}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Devolutivas
+                </span>
+              </div>
+              <div className="h-7 w-px bg-slate-300" />
+              <div className="text-center px-2">
+                <span className="block text-xl font-black text-amber-600">
+                  {totalPontosAtencao}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Pontos de Atenção
+                </span>
+              </div>
+              <div className="h-7 w-px bg-slate-300" />
+              <div className="text-center px-2">
+                <span className="block text-xl font-black text-blue-600">
+                  {paciente.diario.length}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Registros Diário
+                </span>
+              </div>
             </div>
-            <div className="h-7 w-px bg-slate-300" />
-            <div className="text-center px-2">
-              <span className="block text-xl font-black text-amber-600">
-                {totalPontosAtencao}
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Pontos de Atenção
-              </span>
-            </div>
-            <div className="h-7 w-px bg-slate-300" />
-            <div className="text-center px-2">
-              <span className="block text-xl font-black text-blue-600">
-                {paciente.diario.length}
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Registros Diário
-              </span>
-            </div>
+
+            {/* BOTÃO EXPORTAR ANAMNESE EM PDF TIMBRADO */}
+            <button
+              type="button"
+              onClick={() => {
+                imprimirAnamneseCompleta({
+                  paciente: nomeResponsavel,
+                  email: emailDecodificado,
+                  crianca: nomeCrianca,
+                  idadeCrianca: idadeCrianca,
+                  telefone: paciente.profile?.telefone || "",
+                  plano: plano,
+                  secoes: secoes.map((sec: SecaoProntuario) => ({
+                    titulo: sec.titulo,
+                    numeroSecao: sec.numeroSecao,
+                    itens: sec.itens.map((it: ItemPergunta) => ({
+                      numero: it.numero,
+                      pergunta: it.pergunta,
+                      resposta: it.resposta,
+                      pontoAtencao: it.pontoAtencao,
+                      motivoAtencao: it.motivoAtencao,
+                      sugestaoConduta: it.sugestaoConduta,
+                    })),
+                  })),
+                });
+              }}
+              className="py-2.5 px-4 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white font-black text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer shrink-0"
+              title="Gerar e imprimir relatório completo em PDF timbrado oficial da Dra. Laís"
+            >
+              <Printer className="h-4 w-4" />
+              <span>🖨️ Exportar Anamnese em PDF</span>
+            </button>
           </div>
         </section>
 

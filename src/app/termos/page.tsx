@@ -150,7 +150,7 @@ const SECOES: Secao[] = [
   {
     titulo: "15. Contato",
     paragrafos: [
-      "Fornecedor do serviço: LAIS VIEIRA DE LIMA LELES LTDA (nome fantasia: Nutricionista Laís Leles), CNPJ 65.024.114/0001-17, com sede em Curitiba/PR.",
+      "Fornecedor do serviço: LAIS VIEIRA DE LIMA LELES LTDA (nome fantasia: Nutricionista Laís Leles), CNPJ 65.024.114/0001-17, com sede na Rua Dom Pedro I, nº 1013, apto 401, Cond. Green Valley, bairro Água Verde, Curitiba/PR, CEP 80620-130.",
       "Dúvidas, solicitações de cancelamento, reembolso ou exercício de direitos sobre dados: contato@nutrindoemcasa.com.br. Responsável técnica e encarregada de dados: Dra. Laís Leles (CRN-8 18878). Atendimento online para todo o Brasil.",
     ],
   },

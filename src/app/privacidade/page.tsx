@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Shield, Lock, FileText, CheckCircle2, HeartHandshake, UserCheck } from "lucide-react";
+import { ArrowLeft, Shield, Lock, FileText, CheckCircle2, HeartHandshake, UserCheck, Server, CreditCard } from "lucide-react";
+import { TERMOS_DATA, TERMOS_VERSAO } from "@/lib/termos";
 
 export const metadata = {
   title: "Política de Privacidade • Nutrindo em Casa",
@@ -52,7 +53,7 @@ export default function PaginaPrivacidade() {
           </p>
 
           <p className="text-[11px] text-slate-400">
-            Última atualização: Outubro de 2026 • Versão 2.4
+            Última atualização: {TERMOS_DATA} • Versão {TERMOS_VERSAO}
           </p>
         </div>
 
@@ -70,7 +71,7 @@ export default function PaginaPrivacidade() {
             </p>
             <ul className="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5 leading-relaxed">
               <li>
-                <strong>Dados dos Responsáveis:</strong> Nome completo, e-mail, telefone/WhatsApp, CPF (exigido para emissão de recibos e faturas legais) e dados de cobrança processados via gateway criptografado.
+                <strong>Dados dos Responsáveis:</strong> Nome completo, e-mail, telefone/WhatsApp, CPF (exigido para emissão de recibos e faturas legais) e dados de cobrança (forma de pagamento, valores e histórico de faturas) processados pelo gateway de pagamentos Asaas.
               </li>
               <li>
                 <strong>Dados Pediátricos Sensíveis da Criança:</strong> Nome da criança, idade, data de nascimento, histórico alimentar, anamnese clínica de 56 parâmetros (rotina de mastigação, tolerâncias texturais, aversões sensoriais, seletividade alimentar) e registros diários de refeições.
@@ -114,11 +115,11 @@ export default function PaginaPrivacidade() {
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="text-xs text-slate-700">Políticas de Row Level Security (RLS), garantindo que apenas a família e a nutricionista acessem o prontuário.</span>
+                <span className="text-xs text-slate-700">Controle de acesso no servidor: cada família acessa somente os próprios dados e apenas a nutricionista acessa o prontuário dos pacientes. O banco de dados não é acessível diretamente pela internet.</span>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="text-xs text-slate-700">Processamento de pagamentos 100% em conformidade com o padrão PCI-DSS via gateway Asaas.</span>
+                <span className="text-xs text-slate-700">Pagamentos processados pelo Asaas. Não armazenamos o número completo nem o CVV do cartão: guardamos apenas um identificador seguro (token) fornecido pelo processador.</span>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -145,11 +146,65 @@ export default function PaginaPrivacidade() {
             </ul>
           </div>
 
-          {/* SEÇÃO 5 */}
+          {/* SEÇÃO 5: PAGAMENTOS E CARTÃO */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
+              <CreditCard className="h-5 w-5 text-[#4C6C54]" />
+              <span>5. Pagamentos e Cartão de Crédito</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Os dados do cartão são enviados ao Asaas apenas para autorizar a cobrança e não ficam armazenados em nossos bancos de dados. Para possibilitar a <strong>renovação automática</strong> da assinatura, o Asaas devolve um identificador seguro do cartão (token), que guardamos separadamente, com acesso restrito ao servidor, junto com a bandeira, os 4 últimos dígitos e o IP da contratação. Esse token só pode ser usado por nós para cobrar a sua assinatura e deixa de ser usado quando você cancela.
+            </p>
+          </div>
+
+          {/* SEÇÃO 6: OPERADORES */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
+              <Server className="h-5 w-5 text-[#4C6C54]" />
+              <span>6. Prestadores de Serviço (Operadores) e Transferência Internacional</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Para operar a plataforma contamos com prestadores que tratam dados em nosso nome, sob contrato e somente para as finalidades descritas aqui:
+            </p>
+            <ul className="text-xs sm:text-sm text-slate-600 space-y-1.5 list-disc pl-5 leading-relaxed">
+              <li><strong>Asaas:</strong> processamento de pagamentos e emissão de cobranças;</li>
+              <li><strong>Supabase:</strong> banco de dados e autenticação;</li>
+              <li><strong>Vercel:</strong> hospedagem da aplicação;</li>
+              <li><strong>Resend:</strong> envio de e-mails (acesso, avisos de renovação e cobrança);</li>
+              <li><strong>Google:</strong> login social e agenda/Google Meet, quando você os utiliza.</li>
+            </ul>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Alguns desses prestadores podem armazenar ou processar dados em servidores fora do Brasil. Nesses casos, a transferência ocorre com garantias de proteção compatíveis com a LGPD (art. 33).
+            </p>
+          </div>
+
+          {/* SEÇÃO 7: RETENÇÃO */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
+              <FileText className="h-5 w-5 text-[#4C6C54]" />
+              <span>7. Por Quanto Tempo Guardamos os Dados</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Mantemos os dados enquanto a assinatura estiver ativa e, depois dela, pelo prazo exigido em lei: o prontuário nutricional e os registros fiscais e de cobrança seguem os prazos legais e das normas do Conselho Federal de Nutricionistas. Dados que não precisem ser guardados por obrigação legal são eliminados mediante solicitação.
+            </p>
+          </div>
+
+          {/* SEÇÃO 8: REGISTRO DO ACEITE */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
+              <CheckCircle2 className="h-5 w-5 text-[#4C6C54]" />
+              <span>8. Registro do Seu Aceite</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Para comprovar o consentimento, registramos a versão dos Termos e desta Política que você aceitou, a data e o horário, o endereço IP e o navegador utilizado. Quando houver uma nova versão, pediremos um novo aceite no seu próximo acesso.
+            </p>
+          </div>
+
+          {/* SEÇÃO 9: CANAL */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
               <Shield className="h-5 w-5 text-[#4C6C54]" />
-              <span>5. Canal de Atendimento e Encarregado de Dados (DPO)</span>
+              <span>9. Canal de Atendimento e Encarregado de Dados (DPO)</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
               Caso tenha dúvidas sobre esta política, deseje atualizar suas informações ou exercer qualquer direito relativo aos seus dados, entre em contato diretamente pelo canal oficial:

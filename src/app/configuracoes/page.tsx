@@ -90,9 +90,23 @@ function ConteudoConfiguracoes() {
     nome: "Plano Trimestral",
     valor: "R$ 531,90",
     periodicidade: "Cobrado a cada 3 meses",
-    asaasId: "sub_88294",
-    status: "ATIVO"
+    asaasId: "",
+    status: "ATIVO",
+    proximaCobranca: "",
+    parcelas: 1,
+    renovacaoAutomatica: false,
+    cartao: "",
+    forma: "",
   });
+
+  // Data real da renovação (quando existe); senão, estimativa pelo tipo do plano
+  const dataRenovacaoExibida = () => {
+    if (planoUsuario.proximaCobranca) {
+      const [a, m, d] = planoUsuario.proximaCobranca.split("-").map(Number);
+      return new Date(a, m - 1, d).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+    }
+    return obterDataRenovacao(planoUsuario.tipo);
+  };
 
   // Cálculo de data de renovação dinâmica com base no plano atual
   const obterDataRenovacao = (tipoPlano: string) => {
@@ -158,13 +172,24 @@ function ConteudoConfiguracoes() {
               periodicidadePlano = "Cobrado anualmente";
             }
 
+            const parcelasPlano = Number(data.profile.parcelas) > 1 ? Number(data.profile.parcelas) : 1;
+            if (parcelasPlano > 1) {
+              periodicidadePlano = `Pago em ${parcelasPlano}x no cartão • renova a cada ${planoTipo === "anual" ? "12" : planoTipo === "mensal" ? "1" : "3"} meses`;
+            }
+            const cartaoFinal = data.cartao?.ultimos4 ? `${data.cartao.bandeira || "Cartão"} final ${data.cartao.ultimos4}` : "";
+
             setPlanoUsuario({
               tipo: planoTipo,
               nome: nomePlano,
               valor: valorPlano,
               periodicidade: periodicidadePlano,
-              asaasId: data.profile.asaas_subscription_id || "sub_88294",
-              status: data.profile.status_assinatura || "ATIVO"
+              asaasId: data.profile.asaas_installment_id || data.profile.asaas_subscription_id || "",
+              status: data.profile.status_assinatura || "ATIVO",
+              proximaCobranca: data.profile.proxima_cobranca || "",
+              parcelas: parcelasPlano,
+              renovacaoAutomatica: Boolean(data.profile.renovacao_automatica),
+              cartao: cartaoFinal,
+              forma: data.faturas?.[0]?.forma_pagamento || "",
             });
           }
           if (data.faturas && data.faturas.length > 0) {
@@ -297,13 +322,23 @@ function ConteudoConfiguracoes() {
     dispararToast(`Download do recibo oficial da fatura (${fatId}) iniciado em PDF!`);
   };
 
-  const handleConfirmarCancelamento = () => {
+  const handleConfirmarCancelamento = async () => {
     setCancelando(true);
-    setTimeout(() => {
-      setCancelando(false);
+    try {
+      const res = await fetch("/api/asaas/cancel", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
       setModalCancelamento(false);
-      dispararToast(`Solicitação registrada. Sua assinatura permanecerá ativa até o fim da vigência (${obterDataRenovacao(planoUsuario.tipo)}).`);
-    }, 1200);
+      if (!res.ok || !data.success) {
+        dispararToast(data.message || "Não foi possível cancelar agora. Tente novamente.");
+        return;
+      }
+      const ate = data.acesso_ate ? new Date(data.acesso_ate).toLocaleDateString("pt-BR") : obterDataRenovacao(planoUsuario.tipo);
+      dispararToast(`Assinatura cancelada. Você mantém o acesso até ${ate}.`);
+    } catch {
+      dispararToast("Falha de conexão. Tente novamente.");
+    } finally {
+      setCancelando(false);
+    }
   };
 
   // ===========================================================================
@@ -354,13 +389,17 @@ function ConteudoConfiguracoes() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        if (res.status === 401) {
+        if (res.status === 403) {
           dispararToast(data.message || "A senha atual está incorreta.");
         } else {
           dispararToast(data.message || "Erro ao atualizar senha no servidor.");
         }
         return;
       }
+
+      // A troca de senha encerra as sessões antigas: guarda a sessão nova para continuar logada
+      if (data.token) localStorage.setItem("nutrindo_auth_token", data.token);
+      if (data.refresh_token) localStorage.setItem("nutrindo_refresh_token", data.refresh_token);
 
       setSenhaAtual("");
       setNovaSenha("");
@@ -770,8 +809,15 @@ function ConteudoConfiguracoes() {
                       <span>Próxima Renovação</span>
                     </div>
                     <p className="text-sm font-extrabold text-slate-800 capitalize">
-                      {obterDataRenovacao(planoUsuario.tipo)}
+                      {dataRenovacaoExibida()}
                     </p>
+                    {planoUsuario.renovacaoAutomatica && (
+                      <p className="text-[11px] text-slate-500 font-medium leading-snug">
+                        Renovação automática
+                        {planoUsuario.cartao ? ` no ${planoUsuario.cartao}` : ""}
+                        {planoUsuario.parcelas > 1 ? `, em ${planoUsuario.parcelas}x` : ""}. Avisamos por e-mail 7 dias antes.
+                      </p>
+                    )}
                   </div>
 
                   <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100 space-y-1">
@@ -780,8 +826,15 @@ function ConteudoConfiguracoes() {
                       <span>Forma de Pagamento</span>
                     </div>
                     <p className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <span>Cartão final 4242</span>
-                      <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono">VISA</span>
+                      <span>
+                        {planoUsuario.cartao
+                          ? planoUsuario.cartao
+                          : planoUsuario.forma === "PIX"
+                            ? "Pix"
+                            : planoUsuario.forma === "CREDIT_CARD"
+                              ? "Cartão de crédito"
+                              : "—"}
+                      </span>
                     </p>
                   </div>
 
@@ -1110,7 +1163,7 @@ function ConteudoConfiguracoes() {
                 Deseja pausar ou cancelar sua assinatura?
               </h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Você possui o <strong>{planoUsuario.nome} ativo até {obterDataRenovacao(planoUsuario.tipo)}</strong>. Caso cancele, você manterá acesso até o fim do ciclo pago, mas perderá o histórico contínuo da anamnese e suporte prioritário.
+                Você possui o <strong>{planoUsuario.nome} ativo até {dataRenovacaoExibida()}</strong>. Caso cancele, você manterá acesso até o fim do ciclo pago, mas perderá o histórico contínuo da anamnese e suporte prioritário.
               </p>
             </div>
 

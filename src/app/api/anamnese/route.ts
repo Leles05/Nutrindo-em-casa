@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
@@ -40,22 +37,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const { email, respostas, concluida = true } = body;
 
-    const emailLimpo = String(email || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, "")
-      .toLowerCase()
-      .trim();
-
-    if (!emailLimpo) {
-      return NextResponse.json(
-        { success: false, message: "E-mail é obrigatório para registrar a anamnese." },
-        { status: 400 }
-      );
-    }
+    const alvo = resolverEmailAlvo(ctx, email);
+    if (ehResposta(alvo)) return alvo;
+    const emailLimpo = alvo;
 
     // Extrai o nome real da criança preenchido na Pergunta 1
     const nomeCrianca = String(

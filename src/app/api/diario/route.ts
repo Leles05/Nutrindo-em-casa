@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
@@ -55,6 +52,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const {
       email,
@@ -65,11 +64,19 @@ export async function POST(request: Request) {
       foto = null,
     } = body;
 
-    const emailLimpo = String(email || "").toLowerCase().trim();
+    const alvo = resolverEmailAlvo(ctx, email);
+    if (ehResposta(alvo)) return alvo;
+    const emailLimpo = alvo;
     const alimentoLimpo = String(alimento || "").trim();
     const refeicaoLimpa = String(refeicao || "").trim();
     const degrauLimpo = String(degrau || "").toLowerCase().trim();
     const fotoLimpa = typeof foto === "string" && foto.startsWith("data:image/") ? foto : null;
+    if (fotoLimpa && fotoLimpa.length > 3_000_000) {
+      return NextResponse.json(
+        { success: false, message: "A foto é muito grande. Envie uma imagem de até 2 MB." },
+        { status: 413 }
+      );
+    }
 
     if (!emailLimpo || !alimentoLimpo || !refeicaoLimpa || !degrauLimpo) {
       return NextResponse.json(

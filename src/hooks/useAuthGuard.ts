@@ -139,7 +139,9 @@ export function useAuthGuard(): AuthState {
     setStatusAssinatura(statusSalvo);
     setDiasRestantes(dias);
 
-    const expirado = dias <= 0 || statusSalvo === "EXPIRADO" || statusSalvo === "INADIMPLENTE";
+    const expirado =
+      dias <= 0 ||
+      ["EXPIRADO", "INADIMPLENTE", "AGUARDANDO_PAGAMENTO", "CANCELADO"].includes(statusSalvo);
     const aviso = !expirado && dias <= 5 && dias > 0;
 
     setPlanoExpirado(expirado);
@@ -199,12 +201,41 @@ export function useAuthGuard(): AuthState {
       }
     }, 200);
 
+    // Confirma NO SERVIDOR a sessão, o papel e a situação da assinatura (o localStorage pode ser alterado pelo usuário)
+    let cancelado = false;
+    (async () => {
+      try {
+        const me = await fetch("/api/auth/me");
+        if (cancelado) return;
+        if (me.status === 401) {
+          encerrarSessao();
+          return;
+        }
+        if (!me.ok) return;
+        const dadosMe = await me.json();
+        const papelReal = dadosMe.role === "nutri" ? "nutri" : "cliente";
+        if (localStorage.getItem("nutrindo_user_role") !== papelReal) {
+          localStorage.setItem("nutrindo_user_role", papelReal);
+          window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
+        }
+        if (papelReal === "cliente") {
+          const conf = await fetch("/api/configuracoes").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+          const statusReal = String(conf?.profile?.status_assinatura || "").toUpperCase();
+          if (!cancelado && statusReal && localStorage.getItem("nutrindo_status_assinatura") !== statusReal) {
+            localStorage.setItem("nutrindo_status_assinatura", statusReal);
+            window.dispatchEvent(new Event("nutrindo_assinatura_alterada"));
+          }
+        }
+      } catch {}
+    })();
+
     // Permite que o Simulador de Vigência e outras abas atualizem o estado ao vivo
     const handleAtualizacao = () => checarSessao();
     window.addEventListener("nutrindo_assinatura_alterada", handleAtualizacao);
     window.addEventListener("storage", handleAtualizacao);
 
     return () => {
+      cancelado = true;
       clearTimeout(timerSeguranca);
       window.removeEventListener("nutrindo_assinatura_alterada", handleAtualizacao);
       window.removeEventListener("storage", handleAtualizacao);

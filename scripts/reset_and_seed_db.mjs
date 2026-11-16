@@ -47,6 +47,15 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 async function main() {
+  // TRAVA DE SEGURANÇA: este script APAGA TODAS AS TABELAS e usuários. Nunca rode contra produção.
+  if (process.env.CONFIRMO_APAGAR_TUDO !== "SIM") {
+    console.error("❌ Este script apaga TODOS os dados. Para continuar defina CONFIRMO_APAGAR_TUDO=SIM.");
+    process.exit(1);
+  }
+  if (!process.env.SEED_NUTRI_PASSWORD || !process.env.SEED_LUCAS_PASSWORD) {
+    console.error("❌ Defina SEED_NUTRI_PASSWORD e SEED_LUCAS_PASSWORD (as senhas não ficam mais no código).");
+    process.exit(1);
+  }
   console.log("==================================================================");
   console.log("🧹 LIMPEZA TOTAL DE PRODUÇÃO & PREPARAÇÃO DE CONTAS");
   console.log("==================================================================");
@@ -111,7 +120,7 @@ async function main() {
   console.log("==================================================================");
 
   const emailNutri = "metodonutrindoemcasa@gmail.com";
-  const senhaNutri = "25012507La*";
+  const senhaNutri = process.env.SEED_NUTRI_PASSWORD;
 
   const { data: nutriAuth, error: nutriAuthErr } = await supabase.auth.admin.createUser({
     email: emailNutri,
@@ -119,9 +128,10 @@ async function main() {
     email_confirm: true,
     user_metadata: {
       name: "Dra. Laís Leles",
-      role: "nutri",
       tour_oculto: false,
     },
+    // Papel em app_metadata: só o servidor/admin consegue gravar (user_metadata é editável pelo próprio usuário)
+    app_metadata: { role: "nutri" },
   });
 
   let finalNutriId = nutriAuth?.user?.id;
@@ -132,6 +142,7 @@ async function main() {
     if (u) {
       finalNutriId = u.id;
       await supabase.auth.admin.updateUserById(u.id, {
+        app_metadata: { ...(u.app_metadata || {}), role: "nutri" },
         password: senhaNutri,
         email_confirm: true,
         user_metadata: {
@@ -173,7 +184,7 @@ async function main() {
   console.log("==================================================================");
 
   const emailLucas = "lucaslimaleles@gmail.com";
-  const senhaLucas = "12345678a";
+  const senhaLucas = process.env.SEED_LUCAS_PASSWORD;
 
   const { data: lucasAuth, error: lucasAuthErr } = await supabase.auth.admin.createUser({
     email: emailLucas,
@@ -394,11 +405,9 @@ async function main() {
   console.log("==================================================================");
   console.log("👩‍⚕️ NUTRICIONISTA OFICIAL:");
   console.log("   E-mail: metodonutrindoemcasa@gmail.com");
-  console.log("   Senha:  25012507La*");
   console.log("   Role:   nutri (tour_oculto: false)");
   console.log("\n👶 PACIENTE PÓS-ANAMNESE (PRONTO PARA AGENDAR 1ª CONSULTA):");
   console.log("   E-mail: lucaslimaleles@gmail.com");
-  console.log("   Senha:  12345678a");
   console.log("   Filho:  Joãozinho (3 anos) • Plano Trimestral Ativo (1 fatura paga de R$ 239,70)");
   console.log("   Anamnese: CONCLUÍDA (56 perguntas respondidas, _tour_oculto: false)");
   console.log("   Consulta: NÃO AGENDADA (zero agendamentos, zero devolutivas)");

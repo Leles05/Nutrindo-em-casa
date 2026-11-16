@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { acessoNegado, ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
+import { lerMateriaisAulas, soRespostasRapidas } from "@/lib/cursosDb";
 import { extrairAnexo, serializarComAnexo } from "@/app/api/chat/route";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
     const userEmailParam = searchParams.get("user_email")?.trim().toLowerCase();
     const tipoParam = searchParams.get("tipo")?.trim().toLowerCase();
+
+    // Painel geral, banco de respostas e materiais: somente a nutricionista.
+    // Dados de UM paciente: o próprio paciente (só o seu e-mail) ou a nutricionista.
+    if (!userEmailParam || tipoParam) {
+      if (ctx.role !== "nutri") return acessoNegado();
+    } else {
+      const alvoPermitido = resolverEmailAlvo(ctx, userEmailParam);
+      if (ehResposta(alvoPermitido)) return alvoPermitido;
+    }
 
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -21,18 +34,9 @@ export async function GET(request: Request) {
             .select("*")
             .order("created_at", { ascending: false });
           if (data) {
-            respostasRapidas = data;
-            materiaisAulas = data
-              .filter((r: any) => r.categoria === "CURSO_MATERIAL_AULA")
-              .map((r: any) => {
-                try {
-                  return JSON.parse(r.texto);
-                } catch {
-                  return null;
-                }
-              })
-              .filter(Boolean);
+            respostasRapidas = soRespostasRapidas(data);
           }
+          materiaisAulas = await lerMateriaisAulas(supabaseAdmin);
         } catch (err) {
           console.warn("Aviso ao buscar respostas rápidas:", err);
         }
@@ -96,24 +100,7 @@ export async function GET(request: Request) {
               .order("nome_crianca", { ascending: true }),
           ]);
 
-          let materiaisAulas: any[] = [];
-          try {
-            const { data: respData } = await supabaseAdmin
-              .from("respostas_rapidas_nutri")
-              .select("*")
-              .eq("categoria", "CURSO_MATERIAL_AULA");
-            if (respData) {
-              materiaisAulas = respData
-                .map((r: any) => {
-                  try {
-                    return JSON.parse(r.texto);
-                  } catch {
-                    return null;
-                  }
-                })
-                .filter(Boolean);
-            }
-          } catch {}
+          const materiaisAulas = await lerMateriaisAulas(supabaseAdmin);
 
           if (dRes.data) devolutivas = dRes.data;
           if (pRes.data) prescricao = pRes.data;
@@ -121,7 +108,7 @@ export async function GET(request: Request) {
           if (profRes.data) profile = profRes.data;
           if (anamRes.data) anamnese = anamRes.data;
           if (diaRes.data) diario = diaRes.data;
-          if (pacientesRes.data) listaPacientes = pacientesRes.data;
+          if (pacientesRes.data && ctx.role === "nutri") listaPacientes = pacientesRes.data;
 
           return NextResponse.json({
             success: true,
@@ -216,7 +203,7 @@ export async function GET(request: Request) {
         if (agRes.data) agendamentos = agRes.data.filter((a: any) => !ehNutri(a.user_email));
         if (devRes.data) devolutivas = devRes.data.filter((d: any) => !ehNutri(d.user_email));
         if (presRes.data) prescricoes = presRes.data.filter((p: any) => !ehNutri(p.user_email));
-        if (respRes.data) respostasRapidas = respRes.data;
+        if (respRes.data) respostasRapidas = soRespostasRapidas(respRes.data);
       } catch (dbErr) {
         console.warn("Aviso ao buscar dados no Supabase para painel da nutri:", dbErr);
       }
@@ -293,16 +280,7 @@ export async function GET(request: Request) {
       };
     });
 
-    const materiaisAulas = respostasRapidas
-      .filter((r: any) => r.categoria === "CURSO_MATERIAL_AULA")
-      .map((r: any) => {
-        try {
-          return JSON.parse(r.texto);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const materiaisAulas = isSupabaseConfigured() ? await lerMateriaisAulas(supabaseAdmin) : [];
 
     return NextResponse.json({
       success: true,
@@ -327,8 +305,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const { action } = body;
+
+    // Único ato do paciente neste endpoint é enviar o próprio check-in; o resto é exclusivo da nutricionista
+    if (action !== "salvar_checkin" && ctx.role !== "nutri") return acessoNegado();
 
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -408,23 +391,20 @@ export async function POST(request: Request) {
 
       if (isSupabaseConfigured()) {
         try {
-          // Remove registro anterior desta aula para evitar duplicatas
-          await supabaseAdmin
-            .from("respostas_rapidas_nutri")
-            .delete()
-            .eq("categoria", "CURSO_MATERIAL_AULA")
-            .ilike("titulo", `${chaveTitulo}%`);
-
+          // Um registro por aula (atualiza ou cria) — sem apagar antes
           const { data, error } = await supabaseAdmin
-            .from("respostas_rapidas_nutri")
-            .insert([
+            .from("materiais_aulas")
+            .upsert(
               {
-                categoria: "CURSO_MATERIAL_AULA",
-                titulo: `${chaveTitulo} ${dadosAula.titulo || `Aula ${aulaIdNum}`}`,
-                texto: JSON.stringify(dadosAula),
-                created_at: new Date().toISOString(),
+                aula_id: aulaIdNum,
+                titulo: dadosAula.titulo,
+                descricao: dadosAula.descricao,
+                video_url: dadosAula.video_url,
+                material_anexo: dadosAula.material_anexo,
+                atualizado_em: dadosAula.atualizado_em,
               },
-            ])
+              { onConflict: "aula_id" }
+            )
             .select()
             .single();
 
@@ -551,7 +531,9 @@ export async function POST(request: Request) {
     // Ação 5: Salvar Check-in de 4 Semanas enviado pelos Pais
     if (action === "salvar_checkin") {
       const { user_email, novosAlimentos, refeicoesFamilia, medidasRecentes, duvidasConsulta } = body;
-      const emailLimpo = String(user_email || "").trim().toLowerCase();
+      const alvoCheckin = resolverEmailAlvo(ctx, user_email);
+      if (ehResposta(alvoCheckin)) return alvoCheckin;
+      const emailLimpo = alvoCheckin;
 
       if (!emailLimpo) {
         return NextResponse.json(

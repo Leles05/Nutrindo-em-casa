@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { ehResposta, exigirNutri, exigirUsuario } from "@/lib/auth";
+import { statusEfetivo } from "@/lib/assinatura";
 
 export const dynamic = "force-dynamic";
 
@@ -90,8 +92,25 @@ export const ESTRUTURA_CURSO_PADRAO: ModuloCurso[] = [
 ];
 
 // GET /api/cursos - Retorna a árvore completa de módulos e aulas
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Conteúdo pago: só assinante ATIVO (ou a nutricionista) acessa as aulas
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
+    if (ctx.role !== "nutri" && isSupabaseConfigured()) {
+      const { data: perfil } = await getSupabaseAdmin()
+        .from("profiles")
+        .select("status_assinatura, acesso_ate, proxima_cobranca, renovacao_automatica")
+        .eq("email", ctx.email)
+        .maybeSingle();
+      if (statusEfetivo(perfil) !== "ATIVO") {
+        return NextResponse.json(
+          { success: false, message: "Assinatura inativa. Regularize para acessar as aulas." },
+          { status: 403 }
+        );
+      }
+    }
+
     if (!isSupabaseConfigured()) {
       return NextResponse.json({
         success: true,
@@ -100,14 +119,9 @@ export async function GET() {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
-    const { data, error } = await supabaseAdmin
-      .from("respostas_rapidas_nutri")
-      .select("*")
-      .eq("categoria", "ESTRUTURA_CURSO")
-      .eq("titulo", "ESTRUTURA_MODULOS_AULAS")
-      .maybeSingle();
+    const { data, error } = await supabaseAdmin.from("curso_estrutura").select("modulos").eq("id", 1).maybeSingle();
 
-    if (error || !data || !data.texto) {
+    if (error || !data || !data.modulos) {
       return NextResponse.json({
         success: true,
         modulos: ESTRUTURA_CURSO_PADRAO,
@@ -116,7 +130,7 @@ export async function GET() {
 
     let modulos: ModuloCurso[] = [];
     try {
-      modulos = typeof data.texto === "string" ? JSON.parse(data.texto) : data.texto;
+      modulos = typeof data.modulos === "string" ? JSON.parse(data.modulos) : data.modulos;
     } catch {
       modulos = ESTRUTURA_CURSO_PADRAO;
     }
@@ -141,6 +155,8 @@ export async function GET() {
 // POST /api/cursos - Salva a estrutura de módulos e aulas gerenciada pela Nutri
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirNutri(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const { modulos } = body;
 
@@ -161,23 +177,10 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // Remove registro anterior para garantir consistência única
-    await supabaseAdmin
-      .from("respostas_rapidas_nutri")
-      .delete()
-      .eq("categoria", "ESTRUTURA_CURSO")
-      .eq("titulo", "ESTRUTURA_MODULOS_AULAS");
-
+    // Registro único (id=1): upsert, sem apagar antes
     const { error: insertErr } = await supabaseAdmin
-      .from("respostas_rapidas_nutri")
-      .insert([
-        {
-          categoria: "ESTRUTURA_CURSO",
-          titulo: "ESTRUTURA_MODULOS_AULAS",
-          texto: JSON.stringify(modulos),
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      .from("curso_estrutura")
+      .upsert({ id: 1, modulos, updated_at: new Date().toISOString() }, { onConflict: "id" });
 
     if (insertErr) {
       console.error("Erro ao salvar estrutura de cursos no Supabase:", insertErr);

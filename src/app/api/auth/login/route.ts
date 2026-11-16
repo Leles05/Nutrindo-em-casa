@@ -1,418 +1,174 @@
 import { NextResponse } from "next/server";
-import { supabase, getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { createAnonServerClient, getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { ipDaRequisicao, normalizarEmail, papelDoUsuario } from "@/lib/auth";
+import { statusEfetivo } from "@/lib/assinatura";
+import { excedeu, registrarFalha } from "@/lib/rateLimit";
+
+const MSG_CREDENCIAIS_INVALIDAS =
+  "E-mail/CPF ou senha incorretos. Se você acabou de assinar, clique no link enviado ao seu e-mail para criar sua senha.";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { email, password } = body;
-
-    let emailLimpo = String(email || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, "")
-      .trim()
-      .toLowerCase();
-    const senhaLimpa = String(password || "").trim();
-
-    if (!emailLimpo || !senhaLimpa) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json(
-        {
-          success: false,
-          message:
-            "E-mail ou CPF e senha são obrigatórios para acessar.",
-        },
-        { status: 401 }
+        { success: false, message: "Serviço de autenticação indisponível no momento." },
+        { status: 503 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const identificador = normalizarEmail(body?.email);
+    const senha = String(body?.password || "").trim();
+
+    if (!identificador || !senha) {
+      return NextResponse.json(
+        { success: false, message: "E-mail ou CPF e senha são obrigatórios para acessar." },
+        { status: 400 }
+      );
+    }
+
+    // Limite de tentativas FALHAS: por IP e por identificador (força bruta / enumeração).
+    // Logins corretos não consomem o limite.
+    const ip = ipDaRequisicao(request);
+    const chaveIp = `login:ip:${ip}`;
+    const chaveId = `login:id:${identificador}`;
+    const janela = 10 * 60 * 1000;
+    const porIp = excedeu(chaveIp, 40, janela);
+    const porId = excedeu(chaveId, 8, janela);
+    const falhou = () => {
+      registrarFalha(chaveIp);
+      registrarFalha(chaveId);
+    };
+    if (porIp.bloqueado || porId.bloqueado) {
+      const espera = Math.max(porIp.retryAfterSeg, porId.retryAfterSeg);
+      return NextResponse.json(
+        { success: false, message: `Muitas tentativas. Aguarde ${Math.ceil(espera / 60)} min e tente novamente.` },
+        { status: 429, headers: { "Retry-After": String(espera) } }
       );
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    let emailLogin = identificador;
 
-    // Suporte a Login por CPF (11 dígitos com ou sem pontuação)
-    if (!emailLimpo.includes("@")) {
-      const cpfDigitos = emailLimpo.replace(/\D/g, "");
-      if (cpfDigitos.length === 11) {
-        if (isSupabaseConfigured()) {
-          try {
-            const { data: profilesList } = await supabaseAdmin
-              .from("profiles")
-              .select("email, cpf");
-
-            const perfilEncontrado = profilesList?.find(
-              (p) => String(p.cpf || "").replace(/\D/g, "") === cpfDigitos
-            );
-
-            if (perfilEncontrado?.email) {
-              emailLimpo = perfilEncontrado.email.toLowerCase().trim();
-            } else {
-              return NextResponse.json(
-                {
-                  success: false,
-                  message:
-                    "Nenhuma conta encontrada com este CPF. Verifique os números digitados ou acesse com seu e-mail.",
-                },
-                { status: 401 }
-              );
-            }
-          } catch (cpfErr) {
-            console.warn("Aviso ao buscar perfil por CPF:", cpfErr);
-          }
-        }
-      }
-    }
-
-    const isNutri =
-      emailLimpo === "metodonutrindoemcasa@gmail.com";
-
-    let perfil = null;
-    let authUser = null;
-    let tokenSessao = "";
-
-    // 1. Tratamento Especial para Nutricionista Oficial (Dra. Laís Leles)
-    if (isNutri) {
-      let autenticadoNutri = false;
-
-      // Para a nutricionista oficial, a senha aceita é estritamente "25012507La*"
-      if (senhaLimpa === "25012507La*") {
-        autenticadoNutri = true;
-
-        if (isSupabaseConfigured()) {
-          try {
-            // Sincroniza/atualiza imediatamente a senha no Supabase Auth com updateUserById
-            const { data: listData } = await supabaseAdmin.auth.admin.listUsers({
-              page: 1,
-              perPage: 1000,
-            });
-            const existingNutri = listData?.users?.find(
-              (u) => u.email?.toLowerCase() === emailLimpo
-            );
-
-            if (existingNutri) {
-              await supabaseAdmin.auth.admin.updateUserById(existingNutri.id, {
-                password: "25012507La*",
-                email_confirm: true,
-              });
-              authUser = existingNutri;
-              tokenSessao = `nutri_token_${existingNutri.id}`;
-            } else {
-              const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-                email: emailLimpo,
-                password: "25012507La*",
-                email_confirm: true,
-                user_metadata: { name: "Dra. Laís Leles", role: "nutri" },
-              });
-
-              if (!createError && createdUser?.user) {
-                authUser = createdUser.user;
-                tokenSessao = `nutri_token_${createdUser.user.id}`;
-              }
-            }
-
-            // Tenta obter sessão real do Supabase
-            try {
-              const { data: retryAuth } = await supabase.auth.signInWithPassword({
-                email: emailLimpo,
-                password: "25012507La*",
-              });
-              if (retryAuth?.user) {
-                authUser = retryAuth.user;
-                if (retryAuth.session?.access_token) {
-                  tokenSessao = retryAuth.session.access_token;
-                }
-              }
-            } catch {}
-          } catch (syncErr) {
-            console.warn("Aviso ao sincronizar conta da nutri:", syncErr);
-          }
-        }
-
-        if (!tokenSessao) {
-          tokenSessao = `nutri_token_${Date.now()}`;
-        }
-      } else if (isSupabaseConfigured()) {
-        // Fallback caso a nutricionista tenha redefinido a senha pelo Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: emailLimpo,
-          password: senhaLimpa,
-        });
-
-        if (!authError && authData.user) {
-          autenticadoNutri = true;
-          authUser = authData.user;
-          tokenSessao = authData.session?.access_token || `token_${authData.user.id}`;
-        }
-      }
-
-      if (!autenticadoNutri) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Senha de acesso profissional incorreta. Verifique suas credenciais de nutricionista.",
-          },
-          { status: 401 }
-        );
-      }
-
-      // Upsert perfil da Nutricionista
-      try {
-        await supabaseAdmin.from("profiles").upsert(
-          {
-            email: emailLimpo,
-            nome: "Dra. Laís Leles",
-            plano: "nutri",
-            status_assinatura: "ATIVO",
-          },
-          { onConflict: "email" }
-        );
-      } catch (upsertErr) {
-        console.warn("Aviso ao salvar perfil da nutri:", upsertErr);
-      }
-
-      let tourOcultoNutri = false;
-      if (authUser?.user_metadata?.tour_oculto === true) {
-        tourOcultoNutri = true;
-      } else if (isSupabaseConfigured()) {
-        try {
-          const { data: anamneseRow } = await supabaseAdmin
-            .from("anamneses")
-            .select("respostas")
-            .eq("user_email", emailLimpo)
-            .maybeSingle();
-          if (anamneseRow?.respostas?._tour_oculto === true) {
-            tourOcultoNutri = true;
-          }
-        } catch {}
-      }
-
-      return NextResponse.json({
-        success: true,
-        token: tokenSessao,
-        role: "nutri",
-        redirect: "/nutri",
-        tour_oculto: tourOcultoNutri,
-        user: {
-          id: authUser?.id || "nutri-lais",
-          email: emailLimpo,
-          nome: "Dra. Laís Leles",
-          role: "nutri",
-          status_assinatura: "ATIVO",
-        },
-        profile: {
-          nome: "Dra. Laís Leles",
-          email: emailLimpo,
-          anamnese_concluida: true,
-          consulta_agendada: true,
-          status_assinatura: "ATIVO",
-          tour_oculto: tourOcultoNutri,
-        },
-      });
-    }
-
-    // 2. Validação para Pacientes
-    let autenticadoCliente = false;
-
-    // Se for a conta avançada do Lucas com a senha oficial 12345678a
-    const isLucas = emailLimpo === "lucaslimaleles@gmail.com" || emailLimpo === "lucas@email.com";
-    if (isLucas && senhaLimpa === "12345678a") {
-      autenticadoCliente = true;
-
-      if (isSupabaseConfigured()) {
-        try {
-          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-          const existingLucas = listData?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
-          if (existingLucas) {
-            await supabaseAdmin.auth.admin.updateUserById(existingLucas.id, {
-              password: "12345678a",
-              email_confirm: true,
-            });
-            authUser = existingLucas;
-            tokenSessao = `cliente_token_${existingLucas.id}`;
-          } else {
-            const { data: createdLucas } = await supabaseAdmin.auth.admin.createUser({
-              email: emailLimpo,
-              password: "12345678a",
-              email_confirm: true,
-              user_metadata: { name: "Lucas Lima Leles", role: "cliente" },
-            });
-            if (createdLucas?.user) {
-              authUser = createdLucas.user;
-              tokenSessao = `cliente_token_${createdLucas.user.id}`;
-            }
-          }
-
-          // Tenta obter sessão real do Supabase
-          try {
-            const { data: retryAuth } = await supabase.auth.signInWithPassword({
-              email: emailLimpo,
-              password: "12345678a",
-            });
-            if (retryAuth?.user) {
-              authUser = retryAuth.user;
-              if (retryAuth.session?.access_token) {
-                tokenSessao = retryAuth.session.access_token;
-              }
-            }
-          } catch {}
-        } catch (syncErr) {
-          console.warn("Aviso ao sincronizar conta do Lucas:", syncErr);
-        }
-      }
-
-      if (!tokenSessao) {
-        tokenSessao = `cliente_token_${Date.now()}`;
-      }
-    } else if (isSupabaseConfigured()) {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: emailLimpo,
-        password: senhaLimpa,
-      });
-
-      if (authError || !authData?.user) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "E-mail ou senha incorretos. Se você acabou de assinar, clique no link enviado ao seu e-mail para criar sua senha.",
-          },
-          { status: 401 }
-        );
-      }
-
-      autenticadoCliente = true;
-      authUser = authData.user;
-      tokenSessao = authData.session?.access_token || `token_${authData.user.id}`;
-    } else {
-      if (senhaLimpa.length < 6) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "E-mail ou senha incorretos. Se você acabou de assinar, clique no link enviado ao seu e-mail para criar sua senha.",
-          },
-          { status: 401 }
-        );
-      }
-      autenticadoCliente = true;
-      tokenSessao = `local_token_${Date.now()}`;
-    }
-
-    if (!autenticadoCliente) {
-      return NextResponse.json(
+    // Login por CPF (11 dígitos, com ou sem pontuação): busca filtrada no banco, sem baixar todos os perfis
+    if (!identificador.includes("@")) {
+      const digitos = identificador.replace(/\D/g, "");
+      if (digitos.length !== 11) {
         {
-          success: false,
-          message:
-            "E-mail ou senha incorretos. Se você acabou de assinar, clique no link enviado ao seu e-mail para criar sua senha.",
-        },
-        { status: 401 }
-      );
-    }
-
-    // 3. Busca o perfil correspondente na tabela profiles (BLOQUEIA quem não tem registro)
-    try {
-      const { data: profileData } = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq("email", emailLimpo)
-        .maybeSingle();
-
-      if (profileData) {
-        perfil = profileData;
+        falhou();
+        return NextResponse.json({ success: false, message: MSG_CREDENCIAIS_INVALIDAS }, { status: 401 });
       }
-    } catch (dbErr) {
-      console.warn("Aviso ao buscar perfil na tabela profiles:", dbErr);
+      }
+      const formatado = `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+      const { data: porCpf } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .in("cpf", [digitos, formatado])
+        .limit(1);
+
+      if (!porCpf || porCpf.length === 0 || !porCpf[0].email) {
+        // Mesma mensagem de "senha errada": não revela se o CPF existe
+        {
+        falhou();
+        return NextResponse.json({ success: false, message: MSG_CREDENCIAIS_INVALIDAS }, { status: 401 });
+      }
+      }
+      emailLogin = normalizarEmail(porCpf[0].email);
     }
 
-    if (!perfil) {
-      // Faz logout preventivo no Supabase Auth
-      try {
-        await supabase.auth.signOut();
-      } catch {}
+    // Autenticação real no Supabase Auth (cliente novo por requisição)
+    const { data: authData, error: authError } = await createAnonServerClient().auth.signInWithPassword({
+      email: emailLogin,
+      password: senha,
+    });
 
+    if (authError || !authData?.user || !authData.session) {
+      {
+        falhou();
+        return NextResponse.json({ success: false, message: MSG_CREDENCIAIS_INVALIDAS }, { status: 401 });
+      }
+    }
+
+    const authUser = authData.user;
+    const role = papelDoUsuario(authUser);
+    const session = authData.session;
+
+    // Perfil (assinatura) — a nutricionista tem perfil próprio; cliente sem perfil não entra
+    const { data: perfilBanco } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("email", emailLogin)
+      .maybeSingle();
+
+    if (!perfilBanco && role !== "nutri") {
       return NextResponse.json(
         {
           success: false,
           erro: "sem_assinatura",
-          message:
-            "Não encontramos uma assinatura vinculada a este e-mail. Escolha um plano para criar seu acesso.",
+          message: "Não encontramos uma assinatura vinculada a este e-mail. Escolha um plano para criar seu acesso.",
         },
         { status: 403 }
       );
     }
 
-    // 4. Verificação real de onboarding via tabelas anamneses e agendamentos
-    let anamneseConcluida = false;
-    let consultaAgendada = false;
+    const statusAssinatura = role === "nutri" ? "ATIVO" : statusEfetivo(perfilBanco);
 
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: anamneseRow } = await supabaseAdmin
-          .from("anamneses")
-          .select("concluida")
-          .eq("user_email", emailLimpo)
-          .maybeSingle();
+    // Onboarding (anamnese e consulta agendada) + preferência do tour
+    let anamneseConcluida = role === "nutri";
+    let consultaAgendada = role === "nutri";
+    let tourOculto = authUser.user_metadata?.tour_oculto === true;
 
-        if (anamneseRow && anamneseRow.concluida) {
-          anamneseConcluida = true;
-        }
+    const { data: anamneseRow } = await supabaseAdmin
+      .from("anamneses")
+      .select("concluida, respostas")
+      .eq("user_email", emailLogin)
+      .maybeSingle();
 
-        const { data: agendamentoRows } = await supabaseAdmin
-          .from("agendamentos")
-          .select("id")
-          .eq("user_email", emailLimpo)
-          .eq("tipo", "consulta")
-          .limit(1);
+    if (anamneseRow?.concluida) anamneseConcluida = true;
+    if (anamneseRow?.respostas?._tour_oculto === true) tourOculto = true;
 
-        if (agendamentoRows && agendamentoRows.length > 0) {
-          consultaAgendada = true;
-        }
-      } catch (checkErr) {
-        console.warn("Aviso ao checar tabelas de anamnese e agendamento:", checkErr);
-      }
+    if (role !== "nutri") {
+      const { data: agendamentos } = await supabaseAdmin
+        .from("agendamentos")
+        .select("id")
+        .eq("user_email", emailLogin)
+        .eq("tipo", "consulta")
+        .limit(1);
+      if (agendamentos && agendamentos.length > 0) consultaAgendada = true;
     }
 
-    let tourOcultoCliente = false;
-    if (authUser?.user_metadata?.tour_oculto === true) {
-      tourOcultoCliente = true;
-    }
-    if (!tourOcultoCliente && isSupabaseConfigured()) {
-      try {
-        const { data: anamneseRow } = await supabaseAdmin
-          .from("anamneses")
-          .select("respostas")
-          .eq("user_email", emailLimpo)
-          .maybeSingle();
-        if (anamneseRow?.respostas?._tour_oculto === true) {
-          tourOcultoCliente = true;
-        }
-      } catch {}
-    }
-
-    perfil = {
-      ...perfil,
-      anamnese_concluida: anamneseConcluida,
-      consulta_agendada: consultaAgendada,
-      tour_oculto: tourOcultoCliente,
-    };
+    const nomeExibicao = role === "nutri" ? perfilBanco?.nome || "Dra. Laís Leles" : perfilBanco?.nome;
 
     return NextResponse.json({
       success: true,
-      token: tokenSessao,
-      role: "cliente",
-      tour_oculto: tourOcultoCliente,
+      token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_at: session.expires_at,
+      role,
+      redirect: role === "nutri" ? "/nutri" : undefined,
+      tour_oculto: tourOculto,
       user: {
-        id: authUser?.id || perfil.id,
-        email: perfil.email,
-        nome: perfil.nome,
-        plano: perfil.plano,
-        status_assinatura: perfil.status_assinatura,
-        role: "cliente",
+        id: authUser.id,
+        email: emailLogin,
+        nome: nomeExibicao,
+        plano: perfilBanco?.plano,
+        status_assinatura: statusAssinatura,
+        role,
       },
-      profile: perfil,
+      profile: {
+        ...(perfilBanco || {}),
+        nome: nomeExibicao,
+        email: emailLogin,
+        status_assinatura: statusAssinatura,
+        anamnese_concluida: anamneseConcluida,
+        consulta_agendada: consultaAgendada,
+        tour_oculto: tourOculto,
+      },
     });
   } catch (error: unknown) {
     console.error("Erro interno na rota de login:", error);
-    const erroMensagem = error instanceof Error ? error.message : "Erro desconhecido";
     return NextResponse.json(
-      { success: false, message: erroMensagem },
+      { success: false, message: "Não foi possível entrar agora. Tente novamente em instantes." },
       { status: 500 }
     );
   }

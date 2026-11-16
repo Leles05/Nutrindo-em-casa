@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { PARCELAS_PERMITIDAS } from "@/lib/planos";
+import { TERMOS_VERSAO } from "@/lib/termos";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
   QrCode, ArrowLeft, Sparkles, AlertCircle, ChevronRight,
@@ -11,7 +13,7 @@ import {
 } from "lucide-react";
 
 type TipoPlano = "mensal" | "trimestral" | "anual";
-type MetodoPagamento = "pix" | "credito" | "debito";
+type MetodoPagamento = "pix" | "credito";
 
 interface DetalhesPlano {
   id: TipoPlano;
@@ -30,6 +32,8 @@ interface DetalhesPlano {
 }
 
 interface ErrosCartao {
+  cep?: string;
+  numeroEnd?: string;
   numero?: string;
   nome?: string;
   validade?: string;
@@ -84,17 +88,13 @@ function ConteudoCheckout() {
   const [cartaoValidade, setCartaoValidade] = useState("");
   const [cartaoCvv, setCartaoCvv] = useState("");
   const [cartaoCpf, setCartaoCpf] = useState("");
+  const [cartaoCep, setCartaoCep] = useState("");
+  const [cartaoNumeroEnd, setCartaoNumeroEnd] = useState("");
   const [parcelas, setParcelas] = useState(ehUpgrade ? "12" : "1");
 
   // Estado de erros individuais campo a campo
   const [errosCartao, setErrosCartao] = useState<ErrosCartao>({});
 
-  // Estado dos campos de Débito (iniciados totalmente vazios por padrão)
-  const [debitoNumero, setDebitoNumero] = useState("");
-  const [debitoNome, setDebitoNome] = useState("");
-  const [debitoValidade, setDebitoValidade] = useState("");
-  const [debitoCvv, setDebitoCvv] = useState("");
-  const [debitoCpf, setDebitoCpf] = useState("");
 
   // Pré-preenche apenas quando for explicitamente rota de upgrade (?origem=upgrade)
   useEffect(() => {
@@ -125,6 +125,9 @@ function ConteudoCheckout() {
   // Loading, ID de Transação e Modal de Sucesso
   const [processando, setProcessando] = useState(false);
   const [idAssinaturaGerada, setIdAssinaturaGerada] = useState("");
+  const [parcelasCompradas, setParcelasCompradas] = useState(1);
+  const [aceiteCompra, setAceiteCompra] = useState(false);
+  const [proximaCobrancaInfo, setProximaCobrancaInfo] = useState("");
   const [modalSucesso, setModalSucesso] = useState(false);
   const [emailEnviado, setEmailEnviado] = useState(false);
   const [erroForm, setErroForm] = useState("");
@@ -280,8 +283,8 @@ function ConteudoCheckout() {
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/\s+/g, "")
         .trim()
-        .toLowerCase() || (ehUpgrade ? "lucas@email.com" : "cliente@nutrindoemcasa.com.br");
-      const nomeEnvio = clienteNome.trim() || cartaoNome || (ehUpgrade ? "Lucas Lima" : "Cliente Nutrindo");
+        .toLowerCase();
+      const nomeEnvio = clienteNome.trim() || cartaoNome;
 
       // Limpa quaisquer flags antigas de onboarding para conta nova
       if (typeof window !== "undefined") {
@@ -298,11 +301,13 @@ function ConteudoCheckout() {
         body: JSON.stringify({
           nome: nomeEnvio,
           email: emailEnvio,
-          cpf: clienteCpf || cartaoCpf || "89296740541",
-          celular: clienteCelular || "11988887777",
+          cpf: clienteCpf || cartaoCpf,
+          celular: clienteCelular,
           billingType: "PIX",
+          aceiteTermos: true,
+          versaoTermos: TERMOS_VERSAO,
           plano: planoSelecionado,
-          valor: valorTotalFinal,
+          origem: ehUpgrade ? "upgrade" : undefined,
           cupom: cupomAplicado?.codigo,
         })
       });
@@ -411,30 +416,23 @@ function ConteudoCheckout() {
     return "Cartão 💳";
   };
 
-  // Opções de parcelamento dinâmicas baseadas no total final
+  // Parcelamento no cartão: mesmas quantidades aceitas pelo servidor (PARCELAS_PERMITIDAS), sempre sem juros
   const getOpcoesParcelamento = () => {
-    const total = valorTotalFinal;
-    if (planoSelecionado === "mensal") {
-      return [
-        { parcelas: 1, valorParcela: total, texto: `1x de R$ ${total.toFixed(2).replace(".", ",")} à vista` }
-      ];
-    }
-    if (planoSelecionado === "trimestral") {
-      return [
-        { parcelas: 1, valorParcela: total, texto: `1x de R$ ${total.toFixed(2).replace(".", ",")} à vista (sem juros)` },
-        { parcelas: 2, valorParcela: total / 2, texto: `2x de R$ ${(total / 2).toFixed(2).replace(".", ",")} sem juros` },
-        { parcelas: 3, valorParcela: total / 3, texto: `3x de R$ ${(total / 3).toFixed(2).replace(".", ",")} sem juros` }
-      ];
-    }
-    // Anual: parcelamento facilitado em até 12x
-    return [
-      { parcelas: 1, valorParcela: total, texto: `1x de R$ ${total.toFixed(2).replace(".", ",")} à vista (sem juros)` },
-      { parcelas: 3, valorParcela: total / 3, texto: `3x de R$ ${(total / 3).toFixed(2).replace(".", ",")} sem juros` },
-      { parcelas: 6, valorParcela: total / 6, texto: `6x de R$ ${(total / 6).toFixed(2).replace(".", ",")} sem juros` },
-      { parcelas: 10, valorParcela: total / 10, texto: `10x de R$ ${(total / 10).toFixed(2).replace(".", ",")} sem juros` },
-      { parcelas: 12, valorParcela: total / 12, texto: `12x de R$ ${(total / 12).toFixed(2).replace(".", ",")} sem juros` }
-    ];
+    const brl = (v: number) => v.toFixed(2).replace(".", ",");
+    return PARCELAS_PERMITIDAS[planoSelecionado]
+      .filter((n) => n === 1 || valorTotalFinal / n >= 5)
+      .map((n) => ({
+        parcelas: n,
+        valorParcela: valorTotalFinal / n,
+        texto: n === 1 ? `1x de R$ ${brl(valorTotalFinal)} à vista` : `${n}x de R$ ${brl(valorTotalFinal / n)} sem juros`,
+      }));
   };
+
+  // Se trocar de plano/cupom e a quantidade escolhida deixar de existir, volta para à vista
+  useEffect(() => {
+    const validas = PARCELAS_PERMITIDAS[planoSelecionado].filter((n) => n === 1 || valorTotalFinal / n >= 5);
+    if (!validas.includes(Number(parcelas))) setParcelas("1");
+  }, [planoSelecionado, valorTotalFinal, parcelas]);
 
   // =========================================================================
   // VALIDAÇÃO LOCAL E DESTAQUE CAMPO A CAMPO
@@ -496,6 +494,14 @@ function ConteudoCheckout() {
       novosErros.cpf = "Informe o CPF do titular.";
     } else if (cpfLimpo.length !== 11 || /^(\d)\1{10}$/.test(cpfLimpo)) {
       novosErros.cpf = "CPF inválido. Digite os 11 dígitos.";
+    }
+
+    // 6. Endereço de cobrança do titular (exigido pelo Asaas/antifraude)
+    if (cartaoCep.replace(/\D/g, "").length !== 8) {
+      novosErros.cep = "Informe o CEP com 8 dígitos.";
+    }
+    if (!cartaoNumeroEnd.trim()) {
+      novosErros.numeroEnd = "Informe o número do endereço.";
     }
 
     setErrosCartao(novosErros);
@@ -560,6 +566,10 @@ function ConteudoCheckout() {
       setErroForm("Por favor, informe seu CPF.");
       return;
     }
+    if (!aceiteCompra) {
+      setErroForm("Para continuar, marque que leu e aceita os Termos de Uso e a Política de Privacidade, incluindo a renovação automática.");
+      return;
+    }
 
     // Fluxo do PIX
     if (metodoPagamento === "pix") {
@@ -609,10 +619,13 @@ function ConteudoCheckout() {
             nome: nomeEnvio,
             email: emailEnvio,
             cpf: clienteCpf || cartaoCpf,
-            celular: clienteCelular || "11988887777",
+            celular: clienteCelular,
             billingType: "CREDIT_CARD",
+            aceiteTermos: true,
+            versaoTermos: TERMOS_VERSAO,
             plano: planoSelecionado,
-            valor: valorTotalFinal,
+            origem: ehUpgrade ? "upgrade" : undefined,
+            parcelas: Number(parcelas) || 1,
             cupom: cupomAplicado?.codigo,
             cartao: {
               holderName: cartaoNome,
@@ -620,7 +633,9 @@ function ConteudoCheckout() {
               expiryMonth: expMonth,
               expiryYear: expYear,
               ccv: cartaoCvv,
-              cpf: cartaoCpf || clienteCpf
+              cpf: cartaoCpf || clienteCpf,
+              cep: cartaoCep,
+              numeroEndereco: cartaoNumeroEnd,
             }
           })
         });
@@ -642,6 +657,8 @@ function ConteudoCheckout() {
         }
 
         setIdAssinaturaGerada(data.subscriptionId);
+        setParcelasCompradas(Number(data.parcelas) || 1);
+        setProximaCobrancaInfo(data.proximaCobranca || "");
         if (data.emailEnviado) {
           setEmailEnviado(true);
         }
@@ -655,22 +672,7 @@ function ConteudoCheckout() {
       return;
     }
 
-    // Fluxo de Débito
-    if (metodoPagamento === "debito") {
-      if (debitoNumero.replace(/\s/g, "").length < 15) {
-        setErroForm("Por favor, digite um número de cartão de débito válido.");
-        return;
-      }
-      if (!debitoNome.trim()) {
-        setErroForm("Informe o nome do titular.");
-        return;
-      }
-      setProcessando(true);
-      setTimeout(() => {
-        setProcessando(false);
-        setModalSucesso(true);
-      }, 1400);
-    }
+    setErroForm("Forma de pagamento indisponível. Escolha Pix ou Cartão de Crédito.");
   };
 
   return (
@@ -1124,7 +1126,7 @@ function ConteudoCheckout() {
             </div>
 
             {/* SELETOR DE ABAS */}
-            <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 rounded-2xl">
+            <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl">
               <button
                 type="button"
                 onClick={() => setMetodoPagamento("credito")}
@@ -1150,18 +1152,6 @@ function ConteudoCheckout() {
                 <span className="text-[10px] bg-emerald-100 text-emerald-700 font-extrabold px-1.5 py-0.5 rounded hidden sm:inline">
                   Instantâneo
                 </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMetodoPagamento("debito")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${metodoPagamento === "debito"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-                  }`}
-              >
-                <CreditCard className="h-4 w-4 text-slate-400" />
-                <span>Débito</span>
               </button>
             </div>
 
@@ -1337,6 +1327,42 @@ function ConteudoCheckout() {
                   )}
                 </div>
 
+                {/* 4.1 ENDEREÇO DE COBRANÇA (CEP + NÚMERO) */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">CEP do Titular</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      placeholder="00000-000"
+                      value={cartaoCep}
+                      onChange={(e) => {
+                        const d = e.target.value.replace(/\D/g, "").slice(0, 8);
+                        setCartaoCep(d.length > 5 ? d.slice(0, 5) + "-" + d.slice(5) : d);
+                        if (errosCartao.cep) setErrosCartao((prev) => ({ ...prev, cep: undefined }));
+                      }}
+                      className={getInputClass(!!errosCartao.cep)}
+                    />
+                    {errosCartao.cep && <span className="text-xs text-red-500 font-medium mt-1 block">{errosCartao.cep}</span>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Número</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="123"
+                      value={cartaoNumeroEnd}
+                      onChange={(e) => {
+                        setCartaoNumeroEnd(e.target.value.slice(0, 10));
+                        if (errosCartao.numeroEnd) setErrosCartao((prev) => ({ ...prev, numeroEnd: undefined }));
+                      }}
+                      className={getInputClass(!!errosCartao.numeroEnd)}
+                    />
+                    {errosCartao.numeroEnd && <span className="text-xs text-red-500 font-medium mt-1 block">{errosCartao.numeroEnd}</span>}
+                  </div>
+                </div>
+
                 {/* 5. OPÇÕES DE PARCELAMENTO */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
@@ -1353,6 +1379,13 @@ function ConteudoCheckout() {
                       </option>
                     ))}
                   </select>
+                  {Number(parcelas) > 1 && (
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-2">
+                      O valor total é cobrado de uma vez no cartão e aparece parcelado na sua fatura. <strong>Renovação automática:</strong> ao
+                      fim do período, uma nova cobrança é feita no mesmo cartão, com aviso por e-mail 7 dias antes. Você pode cancelar a
+                      qualquer momento em Configurações.
+                    </p>
+                  )}
                 </div>
               </form>
             )}
@@ -1501,131 +1534,14 @@ function ConteudoCheckout() {
                       </div>
                     </div>
 
-                    {/* BOTÃO DE CONFIRMAÇÃO IMEDIATA SANDBOX */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const emailDestino = (clienteEmail || localStorage.getItem("nutrindo_user_email") || "").trim().toLowerCase();
-                        window.location.href = `/criar-senha?email=${encodeURIComponent(emailDestino)}`;
-                      }}
-                      className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
-                    >
-                      <CheckCircle2 className="h-4 w-4 text-emerald-200" />
-                      <span>✅ Já realizei o pagamento PIX → Criar Minha Senha e Acessar</span>
-                    </button>
+                    {/* O acesso é liberado automaticamente quando o Asaas confirma o pagamento */}
+                    <div className="w-full p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold leading-relaxed mt-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 inline mr-1.5 -mt-0.5" />
+                      Assim que o pagamento do Pix for confirmado (costuma levar poucos segundos), enviaremos para o seu e-mail o link para criar sua senha e acessar a plataforma. Confira também o spam.
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-
-            {/* ABA 3: CARTÃO DE DÉBITO */}
-            {metodoPagamento === "debito" && (
-              <form
-                onSubmit={handleFinalizarAssinatura}
-                autoComplete="off"
-                noValidate
-                className="space-y-4 animate-in fade-in duration-200"
-              >
-                <div className="p-3.5 bg-blue-50 border border-blue-200/80 rounded-2xl text-xs text-blue-900 font-medium flex items-start gap-2.5">
-                  <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                  <p>
-                    Para pagamentos em débito, você será redirecionado para a autenticação 3D Secure ou app do seu banco para autorização biométrica imediata.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Número do Cartão de Débito
-                  </label>
-                  <input
-                    id="f_num_deb"
-                    name="f_num_deb"
-                    type="text"
-                    autoComplete="new-password"
-                    data-form-type="other"
-                    data-lpignore="true"
-                    placeholder="0000 0000 0000 0000"
-                    value={debitoNumero}
-                    onChange={(e) => handleNumeroCartao(e.target.value, setDebitoNumero)}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    Nome Impresso no Cartão
-                  </label>
-                  <input
-                    id="f_nom_deb"
-                    name="f_nom_deb"
-                    type="text"
-                    autoComplete="new-password"
-                    data-form-type="other"
-                    data-lpignore="true"
-                    placeholder="Como impresso no cartão"
-                    value={debitoNome}
-                    onChange={(e) => setDebitoNome(e.target.value.toUpperCase())}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                      Validade (MM/AA)
-                    </label>
-                    <input
-                      id="f_val_deb"
-                      name="f_val_deb"
-                      type="text"
-                      autoComplete="new-password"
-                      data-form-type="other"
-                      data-lpignore="true"
-                      placeholder="12/28"
-                      value={debitoValidade}
-                      onChange={(e) => handleValidade(e.target.value, setDebitoValidade)}
-                      className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                      CVV / Código
-                    </label>
-                    <input
-                      id="f_sec_deb"
-                      name="f_sec_deb"
-                      type="password"
-                      autoComplete="new-password"
-                      data-form-type="other"
-                      data-lpignore="true"
-                      maxLength={4}
-                      placeholder="123"
-                      value={debitoCvv}
-                      onChange={(e) => handleCvv(e.target.value, setDebitoCvv)}
-                      className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    CPF do Titular
-                  </label>
-                  <input
-                    id="f_doc_deb"
-                    name="f_doc_deb"
-                    type="text"
-                    autoComplete="new-password"
-                    data-form-type="other"
-                    data-lpignore="true"
-                    placeholder="000.000.000-00"
-                    value={debitoCpf}
-                    onChange={(e) => handleCpf(e.target.value, setDebitoCpf)}
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all"
-                  />
-                </div>
-              </form>
             )}
           </div>
 
@@ -1782,16 +1698,35 @@ function ConteudoCheckout() {
                       {ehUpgrade && planoSelecionado === "trimestral"
                         ? "✓ Plano Vigente (Você já possui)"
                         : metodoPagamento === "pix" && pixDados
-                          ? "✅ Já Paguei via PIX → Acessar"
+                          ? "Aguardando o pagamento do Pix..."
                           : "Concluir Assinatura Segura"}
                     </span>
                   </>
                 )}
               </button>
 
-              <p className="text-[11px] text-center text-slate-400 font-medium">
-                Ao prosseguir, você concorda com nossos Termos de Serviço e Política de Privacidade.
-              </p>
+              <label className="flex items-start gap-2.5 text-[11px] text-slate-600 leading-relaxed cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={aceiteCompra}
+                  onChange={(e) => {
+                    setAceiteCompra(e.target.checked);
+                    if (e.target.checked) setErroForm("");
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#4C6C54] cursor-pointer"
+                />
+                <span>
+                  Li e aceito os{" "}
+                  <Link href="/termos" target="_blank" className="text-[#4C6C54] font-bold underline">
+                    Termos de Uso
+                  </Link>{" "}
+                  e a{" "}
+                  <Link href="/privacidade" target="_blank" className="text-[#4C6C54] font-bold underline">
+                    Política de Privacidade
+                  </Link>
+                  , inclusive a <strong>renovação automática</strong> da assinatura ao fim de cada período (no cartão, com aviso por e-mail 7 dias antes). Posso cancelar quando quiser.
+                </span>
+              </label>
             </div>
 
             {/* SELOS DE CONFIANÇA E GARANTIA */}
@@ -1880,6 +1815,18 @@ function ConteudoCheckout() {
                 <span className="text-slate-500">Forma de Pagamento:</span>
                 <strong className="text-slate-800 uppercase">{metodoPagamento}</strong>
               </div>
+              {parcelasCompradas > 1 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Parcelamento:</span>
+                  <strong className="text-slate-800">{parcelasCompradas}x sem juros</strong>
+                </div>
+              )}
+              {proximaCobrancaInfo && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Próxima renovação:</span>
+                  <strong className="text-slate-800">{proximaCobrancaInfo.split("-").reverse().join("/")}</strong>
+                </div>
+              )}
               {idAssinaturaGerada && (
                 <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
                   <span className="text-slate-500">ID da Assinatura Asaas:</span>
@@ -1894,40 +1841,20 @@ function ConteudoCheckout() {
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-left space-y-1.5">
               <p className="text-xs text-[#4C6C54] font-bold flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-[#4C6C54]" />
-                <span>Instruções enviadas para seu e-mail</span>
+                <span>Falta só criar a sua senha</span>
               </p>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Enviamos um link para o seu e-mail para você definir sua senha de acesso. Após criar sua senha, faça login para iniciar sua Anamnese.
+                Em instantes você receberá no e-mail informado o link para criar sua senha de acesso (confira também o spam). Depois de criar a senha, faça login para iniciar sua Anamnese. Se o e-mail não chegar em alguns minutos, use &quot;Esqueci minha senha&quot; na tela de login.
               </p>
             </div>
 
-            {/* BOTÃO PRINCIPAL DESTACADO: DEFINIR SENHA AGORA */}
+            {/* BOTÃO PRINCIPAL: IR PARA O LOGIN (a senha é criada pelo link enviado ao e-mail) */}
             <button
               type="button"
               onClick={() => {
                 const emailSanitizado = clienteEmail
                   .normalize("NFD")
-                  .replace(/[\u0300-\u036f]/g, "")
-                  .replace(/\s+/g, "")
-                  .trim()
-                  .toLowerCase();
-                router.push(
-                  `/criar-senha${emailSanitizado ? `?email=${encodeURIComponent(emailSanitizado)}` : ""}`
-                );
-              }}
-              className="w-full py-4 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-center"
-            >
-              <span>Definir Minha Senha Agora →</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
-
-            {/* BOTÃO SECUNDÁRIO: IR DIRETO PARA LOGIN */}
-            <button
-              type="button"
-              onClick={() => {
-                const emailSanitizado = clienteEmail
-                  .normalize("NFD")
-                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/[̀-ͯ]/g, "")
                   .replace(/\s+/g, "")
                   .trim()
                   .toLowerCase();
@@ -1935,10 +1862,13 @@ function ConteudoCheckout() {
                   `/login${emailSanitizado ? `?email=${encodeURIComponent(emailSanitizado)}` : ""}`
                 );
               }}
-              className="w-full py-2.5 px-4 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors text-center cursor-pointer block"
+              className="w-full py-4 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-center"
             >
-              Já defini minha senha (Ir para Login)
+              <span>Ir para o Login →</span>
+              <ChevronRight className="h-4 w-4" />
             </button>
+
+
           </div>
         </div>
       )}

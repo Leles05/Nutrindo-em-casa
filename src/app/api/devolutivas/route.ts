@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     if (!isSupabaseConfigured()) {
       return NextResponse.json({ success: true, devolutivas: [], profile: null });
@@ -19,40 +16,19 @@ export async function GET(request: Request) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    const emails = [email];
-    if (email === "lucas@email.com" || email === "lucaslimaleles@gmail.com" || email.includes("lucas")) {
-      emails.push("lucas@email.com", "lucaslimaleles@gmail.com");
-    }
-    const uniqueEmails = Array.from(new Set(emails));
-
-    const orDevFilter = uniqueEmails.map((e) => `user_email.ilike.${e}`).join(",");
-    const orProfFilter = uniqueEmails.map((e) => `email.ilike.${e}`).join(",");
-
-    let [devRes, profRes] = await Promise.all([
+    // Consultas exatas por e-mail (sem filtros montados por texto e sem busca parcial)
+    const [devRes, profRes] = await Promise.all([
       supabaseAdmin
         .from("devolutivas_semanais")
         .select("*")
-        .or(orDevFilter)
+        .eq("user_email", email)
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("profiles")
         .select("nome, nome_crianca, idade_crianca")
-        .or(orProfFilter)
-        .limit(1)
+        .eq("email", email)
         .maybeSingle(),
     ]);
-
-    // Fallback de segurança se nada foi encontrado: tentar ilike parcial
-    if (!devRes.data || devRes.data.length === 0) {
-      const fbDev = await supabaseAdmin
-        .from("devolutivas_semanais")
-        .select("*")
-        .ilike("user_email", `%${email}%`)
-        .order("created_at", { ascending: false });
-      if (fbDev.data && fbDev.data.length > 0) {
-        devRes = fbDev;
-      }
-    }
 
     if (devRes.error) {
       console.warn("Aviso ao buscar devolutivas:", devRes.error);
@@ -74,8 +50,11 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
+
     const body = await request.json();
-    const { id, metas_semana, email } = body;
+    const { id, metas_semana } = body;
 
     if (!id || !metas_semana || !Array.isArray(metas_semana)) {
       return NextResponse.json(
@@ -89,6 +68,20 @@ export async function PATCH(request: Request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+
+    // Só o dono da devolutiva (ou a nutricionista) pode alterar as metas
+    const { data: existente } = await supabaseAdmin
+      .from("devolutivas_semanais")
+      .select("id, user_email")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!existente) {
+      return NextResponse.json({ success: false, message: "Orientação não encontrada." }, { status: 404 });
+    }
+    if (ctx.role !== "nutri" && String(existente.user_email).toLowerCase() !== ctx.email) {
+      return NextResponse.json({ success: false, message: "Sem permissão." }, { status: 403 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from("devolutivas_semanais")

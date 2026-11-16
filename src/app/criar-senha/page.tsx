@@ -152,58 +152,40 @@ function ConteudoCriarSenha() {
     setCarregando(true);
 
     try {
-      let emailAlvo = email
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "")
-        .trim()
-        .toLowerCase();
-
-      if (!emailAlvo && isSupabaseConfigured()) {
-        try {
-          const { data: uData } = await supabase.auth.getUser();
-          if (uData?.user?.email) {
-            emailAlvo = uData.user.email.toLowerCase();
-          }
-        } catch {}
+      // A senha só pode ser definida por quem tem uma sessão válida criada pelo link do e-mail
+      // (convite/recuperação). O servidor confere o token; nenhum e-mail é aceito do formulário.
+      if (!isSupabaseConfigured()) {
+        setErro("Serviço indisponível no momento. Tente novamente em instantes.");
+        return;
+      }
+      const { data: sessaoData } = await supabase.auth.getSession();
+      const tokenSessao = sessaoData?.session?.access_token;
+      if (!tokenSessao) {
+        setErro("Este link expirou ou já foi usado. Peça um novo link em \"Esqueci minha senha\".");
+        return;
       }
 
-      if (!emailAlvo && typeof window !== "undefined") {
-        emailAlvo = (localStorage.getItem("nutrindo_user_email") || "").toLowerCase();
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenSessao}` },
+        body: JSON.stringify({ novaSenha }),
+      });
+      const resultado = await res.json().catch(() => ({}));
+      if (!res.ok || !resultado?.success) {
+        setErro(resultado?.message || "Não foi possível definir a senha. Solicite um novo link.");
+        return;
       }
 
-      // 1. Atualização via cliente do Supabase Auth (se houver sessão ativa)
-      if (isSupabaseConfigured()) {
-        try {
-          const { error: authError } = await supabase.auth.updateUser({
-            password: novaSenha,
-          });
-          if (authError) {
-            console.warn("Aviso updateUser Supabase Auth:", authError);
-          }
-        } catch (updateErr) {
-          console.warn("Aviso updateUser catch:", updateErr);
-        }
-      }
+      const emailAlvo = sessaoData.session?.user?.email || email;
+      // Encerra a sessão temporária do link: o acesso passa a exigir e-mail e senha
+      await supabase.auth.signOut().catch(() => {});
+      localStorage.removeItem("nutrindo_auth_token");
 
-      // 2. Atualização via API de retaguarda (para garantir que a senha seja persistida no banco)
-      if (emailAlvo) {
-        try {
-          await fetch("/api/auth/update-password", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: emailAlvo, password: novaSenha }),
-          });
-        } catch (apiErr) {
-          console.warn("Aviso na chamada /api/auth/update-password:", apiErr);
-        }
-      }
-
-      // 3. Redirecionamento com mensagem de confirmação para o Login
+      // Redirecionamento com mensagem de confirmação para o Login
       router.push(`/login?email=${encodeURIComponent(emailAlvo)}&senhaCriada=true`);
     } catch (err: unknown) {
-      console.warn("Erro ao definir senha (redirecionando para login):", err);
-      router.push("/login?senhaCriada=true");
+      console.warn("Erro ao definir senha:", err);
+      setErro("Não foi possível definir a senha agora. Tente novamente.");
     } finally {
       setCarregando(false);
     }

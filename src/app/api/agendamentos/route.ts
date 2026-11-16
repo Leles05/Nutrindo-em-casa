@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -73,6 +70,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const {
       email,
@@ -85,7 +84,9 @@ export async function POST(request: Request) {
       link = "https://meet.google.com",
     } = body;
 
-    const emailLimpo = String(email || "").toLowerCase().trim();
+    const alvo = resolverEmailAlvo(ctx, email);
+    if (ehResposta(alvo)) return alvo;
+    const emailLimpo = alvo;
     const tituloLimpo = String(
       titulo || (tipo === "consulta" ? "1ª Consulta Nutricional Pediátrica de Acolhimento" : "Meta Clínica")
     ).trim();

@@ -1,29 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { createAnonServerClient, getSupabaseAdmin } from "@/lib/supabase";
 import { salvarTokenGoogle } from "@/lib/googleTokens";
+import { igualConstante, normalizarEmail, papelDoUsuario } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const urlObj = new URL(req.url);
+  const origin = urlObj.origin;
   const code = urlObj.searchParams.get("code");
   const errorParam = urlObj.searchParams.get("error");
-  const rawState = urlObj.searchParams.get("state");
-  const stateRedirect = rawState ? decodeURIComponent(rawState) : null;
-  const origin = urlObj.origin;
+  const rawState = urlObj.searchParams.get("state") || "";
 
-  if (errorParam || !code) {
-    return NextResponse.redirect(`${origin}/login?erro=google_cancelado`);
+  const semCookie = (res: NextResponse) => {
+    res.cookies.set("g_oauth_nonce", "", { path: "/api/auth/google", maxAge: 0 });
+    return res;
+  };
+  const voltarLogin = (query: string) => semCookie(NextResponse.redirect(`${origin}/login?${query}`));
+
+  if (errorParam || !code) return voltarLogin("erro=google_cancelado");
+
+  // Anti-CSRF: o state devolvido pelo Google precisa conter o nonce do cookie desta sessão
+  let returnTo = "";
+  try {
+    const estado = JSON.parse(Buffer.from(rawState, "base64url").toString("utf8"));
+    const nonceCookie = req.cookies.get("g_oauth_nonce")?.value || "";
+    if (!nonceCookie || typeof estado?.n !== "string" || !(await igualConstante(estado.n, nonceCookie))) {
+      return voltarLogin("error=falha_google_oauth");
+    }
+    returnTo = typeof estado.r === "string" && /^\/(?![/\\])/.test(estado.r) ? estado.r : "";
+  } catch {
+    return voltarLogin("error=falha_google_oauth");
   }
 
   const googleClientId = process.env.GOOGLE_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = `${origin}/api/auth/google/callback`;
-
-  if (!googleClientId || !googleClientSecret) {
-    return NextResponse.redirect(`${origin}/login?erro=google_nao_configurado`);
-  }
+  if (!googleClientId || !googleClientSecret) return voltarLogin("erro=google_nao_configurado");
 
   try {
-    // 1. Troca o código de autorização pelo token de acesso
+    // 1. Troca o código pelo token de acesso do Google
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -31,122 +44,82 @@ export async function GET(req: NextRequest) {
         code,
         client_id: googleClientId,
         client_secret: googleClientSecret,
-        redirect_uri: redirectUri,
+        redirect_uri: `${origin}/api/auth/google/callback`,
         grant_type: "authorization_code",
       }),
     });
-
     if (!tokenResponse.ok) {
-      console.error("Erro na resposta de token do Google:", await tokenResponse.text());
-      return NextResponse.redirect(`${origin}/login?error=falha_google_oauth`);
+      console.error("Erro na resposta de token do Google:", tokenResponse.status);
+      return voltarLogin("error=falha_google_oauth");
     }
-
     const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-    const idToken = tokenData.id_token || `google_${Date.now()}`;
+    const accessToken: string | undefined = tokenData.access_token;
+    if (!accessToken) return voltarLogin("error=falha_google_oauth");
 
-    // 2. Obtém perfil do usuário no Google
+    // 2. Perfil do usuário no Google — o e-mail precisa estar VERIFICADO pelo Google
     const userinfoResponse = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    if (!userinfoResponse.ok) {
-      return NextResponse.redirect(`${origin}/login?error=falha_google_perfil`);
-    }
+    if (!userinfoResponse.ok) return voltarLogin("error=falha_google_perfil");
 
     const userData = await userinfoResponse.json();
-    const email = String(userData.email || "").toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.redirect(`${origin}/login?error=email_nao_fornecido`);
+    const email = normalizarEmail(userData.email);
+    if (!email) return voltarLogin("error=email_nao_fornecido");
+    if (userData.email_verified !== true && userData.email_verified !== "true") {
+      return voltarLogin("error=falha_google_oauth");
     }
 
-    if (accessToken) {
-      salvarTokenGoogle(email, accessToken, tokenData.refresh_token);
-    }
+    salvarTokenGoogle(email, accessToken, tokenData.refresh_token);
 
-    // Helper para gerar resposta de redirect com cookie de token do calendário
-    const criarRedirectComCookie = (targetUrl: string) => {
-      const res = NextResponse.redirect(targetUrl);
-      if (accessToken) {
-        res.cookies.set("google_calendar_token", accessToken, {
-          path: "/",
-          maxAge: 3600 * 24, // 24 horas
-          sameSite: "lax",
-          httpOnly: false, // Disponível para API e clientside
-        });
-      }
-      return res;
+    const comCookieCalendario = (res: NextResponse) => {
+      res.cookies.set("google_calendar_token", accessToken, {
+        path: "/",
+        maxAge: 3600,
+        sameSite: "lax",
+        secure: origin.startsWith("https:"),
+        httpOnly: false, // a tela do calendário só checa a PRESENÇA do cookie
+      });
+      return semCookie(res);
     };
 
-    // Se a autenticação foi disparada diretamente para sincronizar o calendário em uma tela interna
-    if (stateRedirect && stateRedirect.startsWith("/")) {
-      return criarRedirectComCookie(`${origin}${stateRedirect}`);
-    }
+    // Conexão do Google Agenda feita dentro do sistema (usuário já logado): volta para a tela de origem
+    if (returnTo) return comCookieCalendario(NextResponse.redirect(`${origin}${returnTo}`));
 
-    // 3. Caso especial: Nutricionista Oficial
-    if (email === "metodonutrindoemcasa@gmail.com") {
-      return criarRedirectComCookie(
-        `${origin}/login?oauth=nutri&email=${encodeURIComponent(email)}&token=${encodeURIComponent(idToken)}&calendar_token=${encodeURIComponent(accessToken || "")}`
-      );
-    }
-
-    // 4. Valida se o usuário possui perfil e assinatura ativa em public.profiles
+    // 3. Só entra quem já tem perfil (assinatura) — sem cadastro automático
     const supabaseAdmin = getSupabaseAdmin();
-    if (supabaseAdmin) {
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .ilike("email", email)
-        .maybeSingle();
+    const { data: profile } = await supabaseAdmin.from("profiles").select("status_assinatura, plano").eq("email", email).maybeSingle();
+    if (!profile) return voltarLogin(`erro=sem_assinatura&email=${encodeURIComponent(email)}`);
 
-      if (!profile) {
-        return NextResponse.redirect(`${origin}/login?erro=sem_assinatura&email=${encodeURIComponent(email)}`);
-      }
-
-      const status = (profile.status_assinatura || "").toUpperCase();
-      if (status !== "ATIVO" && status !== "ACTIVE" && status !== "PAGO") {
-        return NextResponse.redirect(`${origin}/login?erro=sem_assinatura&email=${encodeURIComponent(email)}`);
-      }
-
-      // Se o usuário ainda não existir no Supabase Auth, cria automaticamente com email_confirm: true
-      let authToken = idToken;
-      try {
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const existingAuthUser = listData?.users?.find(
-          (u) => u.email?.toLowerCase() === email.toLowerCase()
-        );
-
-        if (!existingAuthUser) {
-          const { data: createdUser } = await supabaseAdmin.auth.admin.createUser({
-            email,
-            email_confirm: true,
-            user_metadata: {
-              name: profile.nome || userData.name || "Responsável",
-              role: "cliente",
-            },
-          });
-          if (createdUser?.user) {
-            authToken = `token_${createdUser.user.id}`;
-          }
-        } else {
-          authToken = `token_${existingAuthUser.id}`;
-        }
-      } catch (authCreateErr) {
-        console.warn("Aviso ao garantir usuário no Supabase Auth:", authCreateErr);
-      }
-
-      return criarRedirectComCookie(
-        `${origin}/login?oauth=cliente&email=${encodeURIComponent(email)}&token=${encodeURIComponent(authToken)}&calendar_token=${encodeURIComponent(accessToken || "")}`
-      );
+    // 4. Cria uma sessão REAL do Supabase para este e-mail (link mágico gerado no servidor, resgatado aqui)
+    const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({ type: "magiclink", email });
+    const tokenHash = link?.properties?.hashed_token;
+    if (linkErr || !tokenHash) {
+      console.error("Falha ao gerar sessão para login Google:", linkErr?.message);
+      return voltarLogin("error=falha_google_oauth");
+    }
+    const { data: sessao, error: otpErr } = await createAnonServerClient().auth.verifyOtp({
+      token_hash: tokenHash,
+      type: "magiclink",
+    });
+    if (otpErr || !sessao?.session || !sessao.user) {
+      console.error("Falha ao validar sessão para login Google:", otpErr?.message);
+      return voltarLogin("error=falha_google_oauth");
     }
 
-    // Se o supabaseAdmin não estiver disponível, redireciona cliente
-    return criarRedirectComCookie(
-      `${origin}/login?oauth=cliente&email=${encodeURIComponent(email)}&token=${encodeURIComponent(idToken)}&calendar_token=${encodeURIComponent(accessToken || "")}`
-    );
+    const role = papelDoUsuario(sessao.user);
+    const status = String(profile.status_assinatura || "").toUpperCase();
+    if (role !== "nutri" && status !== "ATIVO" && status !== "ACTIVE" && status !== "PAGO") {
+      return voltarLogin(`erro=sem_assinatura&email=${encodeURIComponent(email)}`);
+    }
+
+    // Tokens no FRAGMENTO (#): não vão para logs de servidor nem para o cabeçalho Referer
+    const fragmento = new URLSearchParams({
+      access_token: sessao.session.access_token,
+      refresh_token: sessao.session.refresh_token,
+    }).toString();
+    return comCookieCalendario(NextResponse.redirect(`${origin}/login?oauth=${role}#${fragmento}`));
   } catch (err) {
     console.error("Erro no callback do Google OAuth:", err);
-    return NextResponse.redirect(`${origin}/login?error=falha_google_oauth`);
+    return voltarLogin("error=falha_google_oauth");
   }
 }

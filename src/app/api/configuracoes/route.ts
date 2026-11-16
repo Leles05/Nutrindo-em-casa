@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { cpfEhValido, ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
+import { statusEfetivo } from "@/lib/assinatura";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -38,8 +36,9 @@ export async function GET(request: Request) {
     }
 
     // 3. Resolve status de onboarding e preferência de tour diretamente da fonte da verdade
-    let anamneseConcluida = email === "metodonutrindoemcasa@gmail.com";
-    let consultaAgendada = email === "metodonutrindoemcasa@gmail.com";
+    const alvoEhNutri = email === ctx.email && ctx.role === "nutri";
+    let anamneseConcluida = alvoEhNutri;
+    let consultaAgendada = alvoEhNutri;
     let tourOculto = false;
 
     let avatarUrl: string | null = (profile as any)?.avatar_url || null;
@@ -84,8 +83,7 @@ export async function GET(request: Request) {
     // Se ainda não encontrou tour_oculto ou avatar_url, verifica no user_metadata do Supabase Auth
     if ((!tourOculto || !avatarUrl) && isSupabaseConfigured()) {
       try {
-        const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === email);
+        const authUser = email === ctx.email ? ctx.user : null;
         if (authUser?.user_metadata?.tour_oculto === true) {
           tourOculto = true;
         }
@@ -100,6 +98,7 @@ export async function GET(request: Request) {
     const profileComFlags = profile
       ? {
           ...profile,
+          status_assinatura: statusEfetivo(profile),
           avatar_url: avatarUrl,
           anamnese_concluida: anamneseConcluida,
           consulta_agendada: consultaAgendada,
@@ -107,8 +106,20 @@ export async function GET(request: Request) {
         }
       : null;
 
+    // Cartão usado na compra (somente final e bandeira; o token nunca sai do servidor)
+    let cartao: { ultimos4: string | null; bandeira: string | null } | null = null;
+    if (profile) {
+      const { data: cs } = await supabaseAdmin
+        .from("cartoes_salvos")
+        .select("ultimos4, bandeira")
+        .eq("user_email", email)
+        .maybeSingle();
+      if (cs) cartao = cs as { ultimos4: string | null; bandeira: string | null };
+    }
+
     return NextResponse.json({
       success: true,
+      cartao,
       tour_oculto: tourOculto,
       avatar_url: avatarUrl,
       profile: profileComFlags,
@@ -126,6 +137,8 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
     const {
       email,
@@ -138,20 +151,14 @@ export async function PUT(request: Request) {
       alimentos_conforto,
       principais_recusas,
       notificacoes_email,
-      novaSenha,
       aulas_concluidas,
       tour_oculto,
       avatar_url,
     } = body;
 
-    const emailLimpo = String(email || "").toLowerCase().trim();
-
-    if (!emailLimpo) {
-      return NextResponse.json(
-        { success: false, message: "E-mail é obrigatório para atualizar configurações." },
-        { status: 400 }
-      );
-    }
+    const alvo = resolverEmailAlvo(ctx, email);
+    if (ehResposta(alvo)) return alvo;
+    const emailLimpo = alvo;
 
     const supabaseAdmin = getSupabaseAdmin();
     const finalNomeCrianca = nome_crianca !== undefined ? nome_crianca : crianca_nome;
@@ -160,7 +167,18 @@ export async function PUT(request: Request) {
     const updatePayload: Record<string, unknown> = {};
     if (nome !== undefined && nome !== null && String(nome).trim() !== "") updatePayload.nome = String(nome).trim();
     if (telefone !== undefined && telefone !== null && String(telefone).trim() !== "") updatePayload.telefone = String(telefone).trim();
-    if (cpf !== undefined && cpf !== null && String(cpf).trim() !== "") updatePayload.cpf = String(cpf).trim();
+    if (cpf !== undefined && cpf !== null && String(cpf).trim() !== "") {
+      const cpfDigitos = String(cpf).replace(/\D/g, "");
+      if (!cpfEhValido(cpfDigitos)) {
+        return NextResponse.json({ success: false, message: "CPF inválido." }, { status: 400 });
+      }
+      // CPF é usado para login: não pode pertencer a outra conta
+      const { data: outro } = await supabaseAdmin.from("profiles").select("email").eq("cpf", cpfDigitos).neq("email", emailLimpo).limit(1);
+      if (outro && outro.length > 0) {
+        return NextResponse.json({ success: false, message: "Este CPF já está vinculado a outra conta." }, { status: 409 });
+      }
+      updatePayload.cpf = cpfDigitos;
+    }
     if (finalNomeCrianca !== undefined && finalNomeCrianca !== null && String(finalNomeCrianca).trim() !== "") {
       updatePayload.nome_crianca = String(finalNomeCrianca).trim();
     }
@@ -231,8 +249,7 @@ export async function PUT(request: Request) {
 
       if (isSupabaseConfigured()) {
         try {
-          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-          const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
+          const authUser = emailLimpo === ctx.email ? ctx.user : null;
           if (authUser) {
             await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
               user_metadata: {
@@ -279,8 +296,7 @@ export async function PUT(request: Request) {
 
       if (isSupabaseConfigured()) {
         try {
-          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-          const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
+          const authUser = emailLimpo === ctx.email ? ctx.user : null;
           if (authUser) {
             await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
               user_metadata: {
@@ -312,34 +328,11 @@ export async function PUT(request: Request) {
       }
     }
 
-    // 2. Se nova senha foi informada, atualiza no Supabase Auth caso configurado
-    let senhaAtualizada = false;
-    if (novaSenha && isSupabaseConfigured()) {
-      try {
-        // Localiza usuário por e-mail no Auth Admin
-        const { data: usersList } = await supabaseAdmin.auth.admin.listUsers();
-        const authUser = usersList?.users?.find((u) => u.email?.toLowerCase() === emailLimpo);
-
-        if (authUser) {
-          const { error: pwdErr } = await supabaseAdmin.auth.admin.updateUserById(
-            authUser.id,
-            { password: String(novaSenha) }
-          );
-          if (!pwdErr) {
-            senhaAtualizada = true;
-          }
-        }
-      } catch (authPwdErr) {
-        console.warn("Aviso ao atualizar senha no Supabase Auth:", authPwdErr);
-      }
-    }
-
     return NextResponse.json({
       success: true,
       message: "Configurações atualizadas com sucesso.",
       tour_oculto: tour_oculto !== undefined ? Boolean(tour_oculto) : undefined,
       profile: profileAtualizado,
-      senhaAtualizada,
     });
   } catch (error: unknown) {
     console.error("Erro interno ao atualizar configurações:", error);

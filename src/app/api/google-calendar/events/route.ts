@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { obterOuRenovarTokenGoogle } from "@/lib/googleTokens";
+import { ehResposta, exigirUsuario } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   try {
+    // Exige sessão do sistema. O Authorization é a sessão do SISTEMA; o token do Google vem só do cookie/memória do próprio usuário.
+    const ctx = await exigirUsuario(req);
+    if (ehResposta(ctx)) return ctx;
     const cookieToken = req.cookies.get("google_calendar_token")?.value;
-    const authHeader = req.headers.get("authorization");
-    const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-    const queryToken = req.nextUrl.searchParams.get("token");
-    const queryEmail = req.nextUrl.searchParams.get("email");
+    const headerToken = null;
+    const queryToken = null;
+    const queryEmail = ctx.email;
     const queryMonth = req.nextUrl.searchParams.get("month");
     const queryYear = req.nextUrl.searchParams.get("year");
     const queryTimeMin = req.nextUrl.searchParams.get("timeMin");
@@ -159,6 +162,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await exigirUsuario(req);
+    if (ehResposta(ctx)) return ctx;
     const body = await req.json();
     const {
       titulo,
@@ -169,18 +174,12 @@ export async function POST(req: NextRequest) {
       descricao,
       detalhes,
       duracaoMinutos = 50,
-      email,
-      token: bodyToken,
     } = body;
+    const email = ctx.email;
+    const bodyToken = null;
 
     const cookieToken = req.cookies.get("google_calendar_token")?.value;
-    const authHeader = req.headers.get("authorization");
-    const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-    const token =
-      cookieToken ||
-      headerToken ||
-      bodyToken ||
-      (email ? await obterOuRenovarTokenGoogle(email) : null);
+    const token = cookieToken || (await obterOuRenovarTokenGoogle(email));
 
     if (!token) {
       return NextResponse.json({

@@ -56,12 +56,14 @@ function ConteudoLogin() {
     if (typeof window !== "undefined") {
       const hash = window.location.hash || "";
       const search = window.location.search || "";
+      const ehRetornoGoogle = search.includes("oauth=");
       if (
-        hash.includes("type=invite") ||
-        hash.includes("type=recovery") ||
-        hash.includes("access_token=") ||
-        search.includes("type=invite") ||
-        search.includes("type=recovery")
+        !ehRetornoGoogle &&
+        (hash.includes("type=invite") ||
+          hash.includes("type=recovery") ||
+          hash.includes("access_token=") ||
+          search.includes("type=invite") ||
+          search.includes("type=recovery"))
       ) {
         window.location.href = `/criar-senha${search}${hash}`;
         return;
@@ -99,183 +101,91 @@ function ConteudoLogin() {
       }
     }
 
-    const oauthParam = searchParams.get("oauth");
-    const tokenParam = searchParams.get("token");
+    // Conclui o login a partir de um token de sessão real do Supabase (Google / sessão existente).
+    // O papel (nutri/cliente) e a assinatura vêm SEMPRE do servidor, nunca de constantes do navegador.
+    const concluirLoginComToken = async (token: string, refreshToken: string, tourOcultoMeta = false) => {
+      const headers = { Authorization: `Bearer ${token}` };
+      try {
+        const me = await fetch("/api/auth/me", { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        if (!me?.email) {
+          setErro("Não foi possível validar sua sessão. Entre com e-mail e senha.");
+          return;
+        }
+        const conf = await fetch("/api/configuracoes", { headers }).then((r) => r.json()).catch(() => null);
+        const ehNutri = me.role === "nutri";
 
-    // Tratamento direto do callback OAuth redirecionado pela rota /auth/callback
-    if (oauthParam === "nutri") {
-      const emailNutri = (emailParam || "metodonutrindoemcasa@gmail.com").toLowerCase();
-      const tokenNutri = tokenParam || `nutri_${Date.now()}`;
-      if (typeof window !== "undefined") {
+        if (!ehNutri && !conf?.profile) {
+          limparCacheSessaoAnterior();
+          await supabase.auth.signOut().catch(() => {});
+          setSemAssinatura(true);
+          return;
+        }
+
         limparCacheSessaoAnterior();
-        localStorage.setItem("nutrindo_user_email", emailNutri);
-        localStorage.setItem("nutrindo_auth_token", tokenNutri);
-        localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
-        localStorage.setItem("nutrindo_user_role", "nutri");
-        localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
-        localStorage.setItem("nutrindo_dias_restantes", "999");
-      }
-      fetch(`/api/configuracoes?email=${encodeURIComponent(emailNutri)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
-            salvarTourOculto("nutrindo_tour_nutri_visto");
-          } else {
-            reativarTour("nutrindo_tour_nutri_visto");
-          }
+        localStorage.setItem("nutrindo_user_email", me.email);
+        localStorage.setItem("nutrindo_auth_token", token);
+        if (refreshToken) localStorage.setItem("nutrindo_refresh_token", refreshToken);
+        localStorage.setItem("nutrindo_user_role", ehNutri ? "nutri" : "cliente");
+        localStorage.setItem("nutrindo_status_assinatura", ehNutri ? "ATIVO" : conf?.profile?.status_assinatura || "ATIVO");
+        localStorage.setItem("nutrindo_user_nome", ehNutri ? "Dra. Laís Leles" : conf?.profile?.nome || "Responsável");
+
+        const tourOculto = conf?.tour_oculto === true || conf?.profile?.tour_oculto === true || tourOcultoMeta;
+        const chaveTour = ehNutri ? "nutrindo_tour_nutri_visto" : "nutrindo_tour_paciente_visto";
+        if (tourOculto) salvarTourOculto(chaveTour);
+        else reativarTour(chaveTour);
+
+        if (ehNutri) {
+          localStorage.setItem("nutrindo_dias_restantes", "999");
           router.replace("/nutri");
-        })
-        .catch(() => router.replace("/nutri"));
-      return;
-    }
+          return;
+        }
 
-    if (oauthParam === "cliente" && emailParam) {
-      const emailCliente = emailParam.toLowerCase();
-      const tokenCliente = tokenParam || `cliente_${Date.now()}`;
-      if (typeof window !== "undefined") {
-        limparCacheSessaoAnterior();
-        localStorage.setItem("nutrindo_user_email", emailCliente);
-        localStorage.setItem("nutrindo_auth_token", tokenCliente);
-        localStorage.setItem("nutrindo_user_role", "cliente");
-        localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
-        localStorage.setItem("nutrindo_dias_restantes", "90");
+        const nomeCrianca = conf?.profile?.nome_crianca;
+        if (nomeCrianca) {
+          localStorage.setItem("nutrindo_crianca_nome", nomeCrianca);
+          localStorage.setItem("nutrindo_nome_crianca", nomeCrianca);
+        }
+
+        const anamneseConcluida = Boolean(conf?.profile?.anamnese_concluida);
+        const consultaAgendada = Boolean(conf?.profile?.consulta_agendada);
+        if (anamneseConcluida) {
+          localStorage.setItem("anamnese_concluida", "true");
+          localStorage.setItem("nutrindo_anamnese_concluida", "true");
+        }
+        if (consultaAgendada) {
+          localStorage.setItem("consulta_agendada", "true");
+          localStorage.setItem("nutrindo_consulta_agendada", "true");
+        }
+
+        if (!anamneseConcluida) router.replace("/anamnese");
+        else if (!consultaAgendada) router.replace("/dashboard/calendario?onboarding=consulta");
+        else router.replace("/dashboard");
+      } catch {
+        setErro("Não foi possível concluir o login. Tente novamente.");
       }
-      fetch(`/api/configuracoes?email=${encodeURIComponent(emailCliente)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (!data?.profile) {
-            if (typeof window !== "undefined") {
-              limparCacheSessaoAnterior();
-            }
-            setSemAssinatura(true);
-            return;
-          }
-          const nome = data?.profile?.nome || "Responsável";
-          if (typeof window !== "undefined") {
-            localStorage.setItem("nutrindo_user_nome", nome);
-            const nomeCrianca = data?.profile?.nome_crianca || (emailCliente.includes("lucas") ? "Joãozinho" : "");
-            if (nomeCrianca) {
-              localStorage.setItem("nutrindo_crianca_nome", nomeCrianca);
-              localStorage.setItem("nutrindo_nome_crianca", nomeCrianca);
-            }
-            if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
-              salvarTourOculto("nutrindo_tour_paciente_visto");
-            } else {
-              reativarTour("nutrindo_tour_paciente_visto");
-            }
-          }
-          const anamneseConcluida = Boolean(data?.profile?.anamnese_concluida);
-          const consultaAgendada = Boolean(data?.profile?.consulta_agendada);
+    };
 
-          if (anamneseConcluida) {
-            localStorage.setItem("anamnese_concluida", "true");
-            localStorage.setItem("nutrindo_anamnese_concluida", "true");
-          } else {
-            localStorage.removeItem("anamnese_concluida");
-            localStorage.removeItem("nutrindo_anamnese_concluida");
-          }
-
-          if (consultaAgendada) {
-            localStorage.setItem("consulta_agendada", "true");
-            localStorage.setItem("nutrindo_consulta_agendada", "true");
-          } else {
-            localStorage.removeItem("consulta_agendada");
-            localStorage.removeItem("nutrindo_consulta_agendada");
-          }
-
-          if (!anamneseConcluida) {
-            router.replace("/anamnese");
-          } else if (!consultaAgendada) {
-            router.replace("/dashboard/calendario?onboarding=consulta");
-          } else {
-            router.replace("/dashboard");
-          }
-        })
-        .catch(() => router.replace("/dashboard"));
-      return;
+    // Retorno do login com Google: tokens reais do Supabase chegam no FRAGMENTO da URL (#), que não vai para logs.
+    const oauthParam = searchParams.get("oauth");
+    if (typeof window !== "undefined" && oauthParam) {
+      const frag = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessOauth = frag.get("access_token");
+      if (accessOauth) {
+        window.history.replaceState(null, "", "/login");
+        void concluirLoginComToken(accessOauth, frag.get("refresh_token") || "");
+        return;
+      }
     }
 
-    // Trata retorno de autenticação OAuth (Google) via cliente Supabase
+    // Sessão Supabase já existente neste navegador (ex.: acabou de criar a senha pelo link do e-mail)
     if (isSupabaseConfigured()) {
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session?.user?.email) {
-          const userEmail = session.user.email.toLowerCase();
-          const authToken = session.access_token || `token_${session.user.id}`;
-          const isNutri = userEmail === "metodonutrindoemcasa@gmail.com";
-
-          if (isNutri) {
-            if (typeof window !== "undefined") {
-              limparCacheSessaoAnterior();
-              localStorage.setItem("nutrindo_user_email", userEmail);
-              localStorage.setItem("nutrindo_auth_token", authToken);
-              localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
-              localStorage.setItem("nutrindo_user_role", "nutri");
-              localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
-              localStorage.setItem("nutrindo_dias_restantes", "999");
-            }
-            try {
-              const confNutri = await fetch(`/api/configuracoes?email=${encodeURIComponent(userEmail)}`).then((r) => r.json()).catch(() => null);
-              if (confNutri?.tour_oculto || confNutri?.profile?.tour_oculto || session.user.user_metadata?.tour_oculto) {
-                salvarTourOculto("nutrindo_tour_nutri_visto");
-              }
-            } catch {}
-            router.replace("/nutri");
-            return;
-          }
-
-          // Valida se o paciente possui perfil com assinatura ativa no banco
-          try {
-            const res = await fetch(`/api/configuracoes?email=${encodeURIComponent(userEmail)}`);
-            const data = await res.json();
-
-            if (!data?.profile) {
-              if (typeof window !== "undefined") {
-                limparCacheSessaoAnterior();
-              }
-              await supabase.auth.signOut().catch(() => {});
-              setSemAssinatura(true);
-              return;
-            }
-
-            if (typeof window !== "undefined") {
-              limparCacheSessaoAnterior();
-              localStorage.setItem("nutrindo_user_email", userEmail);
-              localStorage.setItem("nutrindo_auth_token", authToken);
-              localStorage.setItem("nutrindo_user_role", "cliente");
-              localStorage.setItem("nutrindo_status_assinatura", data?.profile?.status_assinatura || "ATIVO");
-              localStorage.setItem(
-                "nutrindo_user_nome",
-                data?.profile?.nome || session.user.user_metadata?.full_name || "Responsável"
-              );
-              if (data?.tour_oculto === true || data?.profile?.tour_oculto === true) {
-                salvarTourOculto("nutrindo_tour_paciente_visto");
-              } else {
-                reativarTour("nutrindo_tour_paciente_visto");
-              }
-            }
-
-            const anamneseConcluida = Boolean(data?.profile?.anamnese_concluida);
-            const consultaAgendada = Boolean(data?.profile?.consulta_agendada);
-
-            if (anamneseConcluida) {
-              localStorage.setItem("anamnese_concluida", "true");
-              localStorage.setItem("nutrindo_anamnese_concluida", "true");
-            }
-            if (consultaAgendada) {
-              localStorage.setItem("consulta_agendada", "true");
-              localStorage.setItem("nutrindo_consulta_agendada", "true");
-            }
-
-            if (!anamneseConcluida) {
-              router.replace("/anamnese");
-            } else if (!consultaAgendada) {
-              router.replace("/dashboard/calendario?onboarding=consulta");
-            } else {
-              router.replace("/dashboard");
-            }
-          } catch {
-            router.replace("/dashboard");
-          }
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.access_token) {
+          void concluirLoginComToken(
+            session.access_token,
+            session.refresh_token || "",
+            session.user?.user_metadata?.tour_oculto === true
+          );
         }
       });
     }
@@ -321,7 +231,8 @@ function ConteudoLogin() {
         if (typeof window !== "undefined") {
           limparCacheSessaoAnterior();
           localStorage.setItem("nutrindo_user_email", data.user?.email || emailLimpo);
-          localStorage.setItem("nutrindo_auth_token", data.token || `nutri_${Date.now()}`);
+          localStorage.setItem("nutrindo_auth_token", data.token);
+          if (data.refresh_token) localStorage.setItem("nutrindo_refresh_token", data.refresh_token);
           localStorage.setItem("nutrindo_user_nome", "Dra. Laís Leles");
           localStorage.setItem("nutrindo_user_role", "nutri");
           localStorage.setItem("nutrindo_status_assinatura", "ATIVO");
@@ -341,9 +252,11 @@ function ConteudoLogin() {
       if (typeof window !== "undefined") {
         limparCacheSessaoAnterior();
         localStorage.setItem("nutrindo_user_email", data.user?.email || emailLimpo);
-        localStorage.setItem("nutrindo_auth_token", data.token || `auth_${Date.now()}`);
+        localStorage.setItem("nutrindo_auth_token", data.token);
+        if (data.refresh_token) localStorage.setItem("nutrindo_refresh_token", data.refresh_token);
         localStorage.setItem("nutrindo_user_nome", data.user?.nome || "Responsável");
         localStorage.setItem("nutrindo_user_role", "cliente");
+        localStorage.setItem("nutrindo_status_assinatura", data.user?.status_assinatura || "ATIVO");
 
         const nomeCrianca = data.profile?.nome_crianca || (emailLimpo.includes("lucas") ? "Joãozinho" : "");
         if (nomeCrianca) {
@@ -436,28 +349,8 @@ function ConteudoLogin() {
         throw new Error("Provedor OAuth Google não configurado no Supabase.");
       }
     } catch (err: unknown) {
-      console.warn("Aviso no login social com Google - acionando fallback inteligente:", err);
-      
-      // Fallback Inteligente para Ambiente Local / Apresentação
-      setFeedbackSocial({
-        tipo: "google",
-        mensagem: "Conectado com sucesso via Google! Redirecionando para a sua jornada...",
-      });
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem("nutrindo_user_email", "lucas@email.com");
-        localStorage.setItem("nutrindo_user_nome", "Lucas Lima (Google)");
-        localStorage.setItem("nutrindo_auth_token", `social_google_${Date.now()}`);
-        localStorage.setItem("nutrindo_user_role", "cliente");
-        localStorage.setItem("anamnese_concluida", "true");
-        localStorage.setItem("nutrindo_anamnese_concluida", "true");
-        localStorage.setItem("consulta_agendada", "true");
-        localStorage.setItem("nutrindo_consulta_agendada", "true");
-      }
-
-      setTimeout(() => {
-        router.replace("/dashboard");
-      }, 900);
+      console.warn("Falha no login social com Google:", err);
+      setErro("Não foi possível entrar com o Google agora. Use seu e-mail e senha.");
     } finally {
       setProvedorCarregando(null);
     }

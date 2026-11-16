@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 
 export function extrairAnexo(textoRaw?: string | null) {
   if (!textoRaw || typeof textoRaw !== "string") {
@@ -25,15 +26,11 @@ export function serializarComAnexo(texto: string, anexo?: any) {
 
 export async function GET(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email")?.toLowerCase().trim();
-
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: "E-mail não fornecido." },
-        { status: 400 }
-      );
-    }
+    const email = resolverEmailAlvo(ctx, searchParams.get("email"));
+    if (ehResposta(email)) return email;
 
     const supabaseAdmin = getSupabaseAdmin();
     // Busca usando .ilike('user_email', email) ordenado por created_at ASC
@@ -77,10 +74,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await exigirUsuario(request);
+    if (ehResposta(ctx)) return ctx;
     const body = await request.json();
-    const { email, texto, horario, remetente, anexo } = body;
+    const { email, texto, horario, anexo } = body;
 
-    const emailLimpo = String(email || "").toLowerCase().trim();
+    const alvo = resolverEmailAlvo(ctx, email);
+    if (ehResposta(alvo)) return alvo;
+    const emailLimpo = alvo;
     const textoLimpo = String(texto || "").trim();
 
     if (!emailLimpo || (!textoLimpo && !anexo)) {
@@ -94,7 +95,8 @@ export async function POST(request: Request) {
       horario ||
       new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-    const remetenteValido = remetente === "nutri" ? "nutri" : "usuario";
+    // O remetente vem do papel verificado no servidor: paciente nunca consegue se passar pela nutricionista
+    const remetenteValido = ctx.role === "nutri" ? "nutri" : "usuario";
     const textoFinal = serializarComAnexo(textoLimpo, anexo);
 
     const supabaseAdmin = getSupabaseAdmin();

@@ -210,6 +210,7 @@ export default function PaginaPrivacidade() {
               Caso tenha dúvidas sobre esta política, deseje atualizar suas informações ou exercer qualquer direito relativo aos seus dados, entre em contato diretamente pelo canal oficial:
             </p>
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs sm:text-sm text-slate-700 space-y-1">
+              <p><strong>Controladora dos dados:</strong> LAIS VIEIRA DE LIMA LELES LTDA (nome fantasia: Nutricionista Laís Leles) — CNPJ 65.024.114/0001-17</p>
               <p><strong>Encarregada de Proteção de Dados:</strong> Dra. Laís Leles (CRN-8 18878)</p>
               <p><strong>E-mail Direto:</strong> metodonutrindoemcasa@gmail.com</p>
               <p><strong>Suporte ao Aluno:</strong> contato@nutrindoemcasa.com.br</p>

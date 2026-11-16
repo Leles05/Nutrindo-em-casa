@@ -75,8 +75,11 @@ async function atualizarFatura(
   status: string
 ) {
   if (!payment?.id) return;
-  const { data: existente } = await admin.from("faturas").select("id").eq("asaas_payment_id", payment.id).maybeSingle();
+  const { data: existente } = await admin.from("faturas").select("id, status").eq("asaas_payment_id", payment.id).maybeSingle();
   if (existente) {
+    // Os avisos do Asaas podem chegar fora de ordem (ex.: "cobrança criada" depois de "pagamento confirmado").
+    // Uma fatura já paga nunca volta para "Pendente" por causa de um aviso atrasado.
+    if (existente.status === "Pago" && status === "Pendente") return;
     await admin
       .from("faturas")
       .update({ status, valor: payment.value, forma_pagamento: payment.billingType })

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Versão vigente dos Termos de Uso e da Política de Privacidade.
  * AO ALTERAR O TEXTO DOS TERMOS, SUBA ESTA VERSÃO: todos os clientes voltam a ver a janela de aceite.
  */
-export const TERMOS_VERSAO = "3.0";
+export const TERMOS_VERSAO = "3.1";
 export const TERMOS_DATA = "Novembro de 2026";
 
 export interface DadosAceite {

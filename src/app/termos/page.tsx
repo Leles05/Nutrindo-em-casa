@@ -96,7 +96,8 @@ const SECOES: Secao[] = [
     ],
     itens: [
       "O agendamento da 1ª consulta fica disponível após o envio da anamnese, e as consultas de retorno seguem o intervalo previsto no seu plano;",
-      "É possível reagendar sem custo com antecedência mínima de 24 horas, pelo calendário da plataforma ou pelo suporte;",
+      "Os horários mostrados na plataforma acompanham a agenda da Dra. Laís. Ao marcar, você recebe um convite do Google Agenda, com o link da sala do Google Meet, no e-mail da sua conta;",
+      "É possível reagendar sem custo, com antecedência mínima de 24 horas, solicitando pelo e-mail contato@nutrindoemcasa.com.br;",
       "Há tolerância de 15 minutos de atraso. É indispensável a participação de ao menos um dos responsáveis pela alimentação da criança.",
     ],
   },

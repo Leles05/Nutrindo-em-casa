@@ -453,6 +453,21 @@ function ConteudoCalendario() {
     );
   }, [novoTipo, eventos, novaData, novoHorario]);
 
+  // Próximas datas com horário livre na agenda da Dra. Laís (já descontando a agenda dela no Google)
+  const proximasDatasLivres = useMemo(() => {
+    const minima = temConsultaAgendadaOuRealizada ? dataMinimaRetornoISO : dataMinimaConsultaISO;
+    if (!minima) return [] as Array<{ data: string; livres: string[] }>;
+    const [a, m, d] = minima.split("-").map(Number);
+    const resultado: Array<{ data: string; livres: string[] }> = [];
+    for (let i = 0; i < 90 && resultado.length < 6; i++) {
+      const dt = new Date(a, m - 1, d + i);
+      const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      const livres = slotsDraLais.filter((s) => !isHorarioOcupado(iso, s));
+      if (livres.length > 0) resultado.push({ data: iso, livres });
+    }
+    return resultado;
+  }, [temConsultaAgendadaOuRealizada, dataMinimaRetornoISO, dataMinimaConsultaISO, slotsDraLais, isHorarioOcupado]);
+
   const abrirModalNovoEvento = (tipoInicial: "consulta" | "meta" = "meta") => {
     setErroData("");
     setNovoTipo(tipoInicial);
@@ -1231,8 +1246,49 @@ function ConteudoCalendario() {
               {novoTipo === "consulta" ? (
                 <div className="space-y-3">
                   <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
+                      Próximas datas disponíveis na agenda da Dra. Laís
+                    </label>
+                    {proximasDatasLivres.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {proximasDatasLivres.map(({ data, livres }) => {
+                          const [, mm, dd] = data.split("-");
+                          const dia = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(`${data}T12:00:00`).getDay()];
+                          const ativa = novaData === data;
+                          return (
+                            <button
+                              key={data}
+                              type="button"
+                              onClick={() => {
+                                setNovaData(data);
+                                setNovoHorario(livres[0]);
+                                if (erroData) setErroData("");
+                              }}
+                              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${ativa
+                                  ? "bg-[#2A546D] text-white border-[#2A546D]"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-[#2A546D]"
+                                }`}
+                              title={`${livres.length} horário(s) livre(s)`}
+                            >
+                              {dia} {dd}/{mm}
+                              <span className={`ml-1.5 text-[10px] font-semibold ${ativa ? "text-sky-100" : "text-slate-400"}`}>
+                                {livres.length} livre{livres.length > 1 ? "s" : ""}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">Nenhuma data livre nos próximos meses. Fale com a Dra. Laís pelo chat.</p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      Os horários acompanham a agenda real da Dra. Laís: o que ela já tem marcado não aparece como opção.
+                    </p>
+                  </div>
+
+                  <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Data da Consulta
+                      Ou escolha outra data
                     </label>
                     <input
                       type="date"

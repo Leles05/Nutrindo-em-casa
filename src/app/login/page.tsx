@@ -47,6 +47,9 @@ function ConteudoLogin() {
   const [provedorCarregando, setProvedorCarregando] = useState<string | null>(null);
   const [erro, setErro] = useState("");
   const [semAssinatura, setSemAssinatura] = useState(false);
+  const [emailSemAssinatura, setEmailSemAssinatura] = useState("");
+  const [avisoGoogle, setAvisoGoogle] = useState<{ tipo: "info" | "erro"; titulo: string; texto: string } | null>(null);
+  const [concluindoGoogle, setConcluindoGoogle] = useState(false);
   const [senhaCriadaSucesso, setSenhaCriadaSucesso] = useState(false);
   const [rascunhoSalvoSucesso, setRascunhoSalvoSucesso] = useState(false);
 
@@ -89,14 +92,60 @@ function ConteudoLogin() {
       setEmail(emailParam);
     }
 
+    if (erroParam === "sem_assinatura" && emailParam) setEmailSemAssinatura(emailParam);
+
     if (typeof window !== "undefined") {
-      // Trata retorno de erro do provedor OAuth (ex: Unsupported provider)
+      // Retorno do Google com problema: cada código vira uma explicação clara e uma ação
+      const bruto = searchParams.get("error") || searchParams.get("erro") || "";
+      const codigo = bruto === "sem_assinatura" ? "" : bruto; // "sem_assinatura" tem cartão próprio
       const hash = window.location.hash;
-      const errorParam = searchParams.get("error") || searchParams.get("error_description");
-      if (hash.includes("error") || errorParam) {
-        setErro(
-          "O login social com Google não está ativo ou foi cancelado. Por favor, acesse utilizando seu e-mail e a senha cadastrada na assinatura."
-        );
+      const MENSAGENS: Record<string, { tipo: "info" | "erro"; titulo: string; texto: string }> = {
+        google_cancelado: {
+          tipo: "info",
+          titulo: "Login com Google cancelado",
+          texto: "Tudo bem! Quando quiser, é só tentar de novo, ou entre com seu e-mail e senha.",
+        },
+        google_nao_configurado: {
+          tipo: "erro",
+          titulo: "Login com Google indisponível",
+          texto: "No momento não conseguimos entrar pelo Google. Use seu e-mail e senha.",
+        },
+        falha_google_oauth: {
+          tipo: "erro",
+          titulo: "Não foi possível entrar com o Google",
+          texto: "O Google não confirmou o seu acesso. Tente novamente; se continuar, entre com e-mail e senha.",
+        },
+        falha_google_perfil: {
+          tipo: "erro",
+          titulo: "Não conseguimos ler seus dados do Google",
+          texto: "Tente novamente ou entre com seu e-mail e senha.",
+        },
+        email_nao_fornecido: {
+          tipo: "erro",
+          titulo: "O Google não informou seu e-mail",
+          texto: "Precisamos do e-mail da conta para localizar a sua assinatura. Tente outra conta Google ou use e-mail e senha.",
+        },
+        falha_oauth: {
+          tipo: "erro",
+          titulo: "Não foi possível concluir o acesso",
+          texto: "Tente novamente ou entre com seu e-mail e senha.",
+        },
+        sessao_expirada: {
+          tipo: "info",
+          titulo: "Sua sessão expirou",
+          texto: "Por segurança, entre novamente para continuar.",
+        },
+        access_denied: {
+          tipo: "info",
+          titulo: "Login com Google cancelado",
+          texto: "Você não autorizou o acesso. Tudo bem! Tente de novo quando quiser ou use e-mail e senha.",
+        },
+      };
+      const msg = MENSAGENS[codigo] || (codigo || hash.includes("error")
+        ? { tipo: "erro" as const, titulo: "Não foi possível entrar com o Google", texto: "Tente novamente ou entre com seu e-mail e senha." }
+        : null);
+      if (msg) {
+        setAvisoGoogle(msg);
         window.history.replaceState(null, "", "/login");
       }
     }
@@ -108,6 +157,7 @@ function ConteudoLogin() {
       try {
         const me = await fetch("/api/auth/me", { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
         if (!me?.email) {
+          setConcluindoGoogle(false);
           setErro("Não foi possível validar sua sessão. Entre com e-mail e senha.");
           return;
         }
@@ -117,6 +167,8 @@ function ConteudoLogin() {
         if (!ehNutri && !conf?.profile) {
           limparCacheSessaoAnterior();
           await supabase.auth.signOut().catch(() => {});
+          setConcluindoGoogle(false);
+          setEmailSemAssinatura(me.email);
           setSemAssinatura(true);
           return;
         }
@@ -161,6 +213,7 @@ function ConteudoLogin() {
         else if (!consultaAgendada) router.replace("/dashboard/calendario?onboarding=consulta");
         else router.replace("/dashboard");
       } catch {
+        setConcluindoGoogle(false);
         setErro("Não foi possível concluir o login. Tente novamente.");
       }
     };
@@ -172,6 +225,7 @@ function ConteudoLogin() {
       const accessOauth = frag.get("access_token");
       if (accessOauth) {
         window.history.replaceState(null, "", "/login");
+        setConcluindoGoogle(true);
         void concluirLoginComToken(accessOauth, frag.get("refresh_token") || "");
         return;
       }
@@ -358,6 +412,20 @@ function ConteudoLogin() {
 
   return (
     <div className="min-h-screen w-full bg-[#F0EAE1] text-slate-800 font-sans flex flex-col justify-between p-4 sm:p-6 select-none relative">
+      {concluindoGoogle && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[150] bg-[#F0EAE1]/95 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6 text-center"
+        >
+          <Loader2 className="h-9 w-9 animate-spin text-[#4C6C54]" />
+          <div className="space-y-1">
+            <p className="text-base font-extrabold text-slate-800">Concluindo seu acesso com o Google...</p>
+            <p className="text-xs text-slate-500">Estamos conferindo a sua assinatura. Só um instante.</p>
+          </div>
+        </div>
+      )}
+
       {/* BOTÃO VOLTAR PARA O INÍCIO */}
       <div className="max-w-md w-full mx-auto pt-2 sm:pt-4">
         <Link
@@ -402,7 +470,13 @@ function ConteudoLogin() {
                 <div className="space-y-1">
                   <h4 className="font-extrabold text-amber-950 text-xs sm:text-sm">Assinatura Não Encontrada</h4>
                   <p className="text-slate-700 leading-relaxed text-[11px] sm:text-xs">
-                    Não encontramos uma assinatura vinculada a este e-mail. Escolha um plano para criar seu acesso e iniciar o acompanhamento nutricional do seu pequeno.
+                    {emailSemAssinatura ? (
+                      <>
+                        Não encontramos uma assinatura para <strong>{emailSemAssinatura}</strong>. Se você assinou com outro e-mail, entre com aquela conta Google. Se ainda não assinou, escolha um plano para criar seu acesso.
+                      </>
+                    ) : (
+                      "Não encontramos uma assinatura vinculada a este e-mail. Escolha um plano para criar seu acesso e iniciar o acompanhamento nutricional do seu pequeno."
+                    )}
                   </p>
                 </div>
               </div>
@@ -432,10 +506,18 @@ function ConteudoLogin() {
           )}
 
           {/* FEEDBACK DE LOGIN SOCIAL (FALLBACK INTELIGENTE) */}
-          {feedbackSocial && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs text-emerald-900 font-bold flex items-center gap-2.5 animate-in fade-in duration-200">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>{feedbackSocial.mensagem}</span>
+          {avisoGoogle && (
+            <div
+              role="alert"
+              className={`p-3.5 rounded-2xl text-xs flex items-start gap-2.5 animate-in fade-in duration-200 border ${
+                avisoGoogle.tipo === "erro" ? "bg-rose-50 border-rose-200 text-rose-900" : "bg-sky-50 border-sky-200 text-sky-900"
+              }`}
+            >
+              <AlertCircle className={`h-4 w-4 shrink-0 mt-0.5 ${avisoGoogle.tipo === "erro" ? "text-rose-500" : "text-sky-600"}`} />
+              <div className="space-y-0.5">
+                <p className="font-extrabold">{avisoGoogle.titulo}</p>
+                <p className="font-medium leading-relaxed">{avisoGoogle.texto}</p>
+              </div>
             </div>
           )}
 
@@ -470,8 +552,13 @@ function ConteudoLogin() {
                 </svg>
               </div>
             )}
-            <span className="text-slate-800 tracking-tight">Continuar com Google</span>
+            <span className="text-slate-800 tracking-tight">
+              {provedorCarregando === "google" ? "Abrindo o Google..." : "Continuar com o Google"}
+            </span>
           </button>
+          <p className="text-[11px] text-slate-400 text-center leading-snug -mt-2">
+            Usamos só o seu nome e e-mail para entrar. Não pedimos acesso à sua agenda.
+          </p>
 
           {/* DIVISOR */}
           <div className="flex items-center gap-3">

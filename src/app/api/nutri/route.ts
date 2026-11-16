@@ -3,6 +3,8 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 import { acessoNegado, ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
 import { lerMateriaisAulas, soRespostasRapidas } from "@/lib/cursosDb";
 import { extrairAnexo, serializarComAnexo } from "@/app/api/chat/route";
+import { atualizarEvento, garantirMeetNoEvento } from "@/lib/googleAgenda";
+import { sincronizarConsultaComGoogle } from "@/lib/agendaSync";
 
 export async function GET(request: Request) {
   try {
@@ -453,21 +455,33 @@ export async function POST(request: Request) {
         .select()
         .single();
 
-      if (error) {
-        console.warn("Aviso ao criar agendamento pela nutri:", error);
+      if (error || !novoAgendamento) {
+        if (error?.code === "23505") {
+          return NextResponse.json(
+            { success: false, message: "Já existe uma consulta marcada neste dia e horário." },
+            { status: 409 }
+          );
+        }
+        console.error("Erro ao criar agendamento pela nutri:", error);
+        return NextResponse.json(
+          { success: false, message: "Não foi possível criar o agendamento. Tente novamente." },
+          { status: 500 }
+        );
+      }
+
+      // Consulta criada pela nutri também entra no Google Agenda dela (com Meet e convite ao paciente)
+      let sincronizadoGoogle = false;
+      if ((tipo || "meta") === "consulta") {
+        const sync = await sincronizarConsultaComGoogle(novoAgendamento);
+        sincronizadoGoogle = sync.sincronizado;
+        if (sync.meetLink) novoAgendamento.link = sync.meetLink;
       }
 
       return NextResponse.json({
         success: true,
         message: "Agendamento prescrito com sucesso.",
-        agendamento: novoAgendamento || {
-          id: Date.now().toString(),
-          user_email: emailLimpo,
-          titulo: tituloLimpo,
-          tipo: tipo || "meta",
-          data,
-          horario,
-        },
+        sincronizadoGoogle,
+        agendamento: novoAgendamento,
       });
     }
 
@@ -600,12 +614,26 @@ export async function POST(request: Request) {
         );
       }
 
+      if (!/^https:\/\/[^\s]+$/i.test(linkLimpo)) {
+        return NextResponse.json(
+          { success: false, message: "Informe um link completo começando com https://" },
+          { status: 400 }
+        );
+      }
+
+      let googleAtualizado = false;
       if (isSupabaseConfigured()) {
         try {
-          await supabaseAdmin
+          const { data: atualizado } = await supabaseAdmin
             .from("agendamentos")
             .update({ link: linkLimpo })
-            .eq("id", agendamento_id);
+            .eq("id", agendamento_id)
+            .select("google_event_id")
+            .maybeSingle();
+          // mantém o evento do Google Agenda (e o convite do paciente) com o mesmo link
+          if (atualizado?.google_event_id) {
+            googleAtualizado = await atualizarEvento(atualizado.google_event_id, { link: linkLimpo });
+          }
         } catch (dbErr) {
           console.warn("Aviso ao atualizar link do meet:", dbErr);
         }
@@ -615,7 +643,44 @@ export async function POST(request: Request) {
         success: true,
         message: "Link da sala do Google Meet atualizado com sucesso! 🔗",
         link: linkLimpo,
+        googleAtualizado,
       });
+    }
+
+    // Ação 6b: Gerar sala REAL do Google Meet para a consulta (usa o evento na agenda Google da nutri)
+    if (action === "gerar_meet_google") {
+      const { agendamento_id } = body;
+      if (!agendamento_id) {
+        return NextResponse.json({ success: false, message: "ID do agendamento é obrigatório." }, { status: 400 });
+      }
+      const { data: ag } = await supabaseAdmin
+        .from("agendamentos")
+        .select("id, user_email, titulo, tipo, data, horario, link, google_event_id")
+        .eq("id", agendamento_id)
+        .maybeSingle();
+      if (!ag) return NextResponse.json({ success: false, message: "Agendamento não encontrado." }, { status: 404 });
+
+      if (!ag.google_event_id) await sincronizarConsultaComGoogle(ag);
+      const { data: atual } = await supabaseAdmin
+        .from("agendamentos")
+        .select("google_event_id")
+        .eq("id", agendamento_id)
+        .maybeSingle();
+      if (!atual?.google_event_id) {
+        return NextResponse.json(
+          { success: false, message: "Conecte o Google Agenda da Dra. Laís para gerar uma sala real do Meet." },
+          { status: 409 }
+        );
+      }
+      const meet = await garantirMeetNoEvento(atual.google_event_id);
+      if (!meet) {
+        return NextResponse.json(
+          { success: false, message: "Não foi possível gerar a sala agora. Tente novamente em instantes." },
+          { status: 502 }
+        );
+      }
+      await supabaseAdmin.from("agendamentos").update({ link: meet }).eq("id", agendamento_id);
+      return NextResponse.json({ success: true, message: "Sala do Google Meet criada! 🔗", link: meet });
     }
 
     // Ação 7: Concluir Consulta & Liberar Retorno de 4 Semanas

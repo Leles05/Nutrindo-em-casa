@@ -429,11 +429,7 @@ function ConteudoCalendario() {
     );
     if (ocupadoLocal) return true;
 
-    // 3. Simulação visual de ocupação de slots em dias específicos para demonstrar realismo da agenda
-    const diaNum = parseInt(dataStr.split("-")[2] || "0", 10);
-    if (diaNum % 2 === 0 && slotStr === "10:30") return true;
-    if (diaNum % 3 === 0 && slotStr === "15:30") return true;
-
+    // (a ocupação real vem do servidor: consultas já marcadas + compromissos da nutri no Google Agenda)
     return false;
   }, [temConsultaAgendadaOuRealizada, dataMinimaRetornoISO, dataMinimaConsultaISO, horariosOcupadosNutri, eventos]);
 

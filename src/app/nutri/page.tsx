@@ -20,6 +20,7 @@ import { abrirGoogleCalendar } from "@/lib/googleCalendar";
 import { concatenarTexto, mesclarListas, type ProtocoloClinico } from "@/data/sugestoesClinicas";
 import BancoRespostasRapidas, { BotaoSalvarRespostaRapida } from "@/components/nutri/BancoRespostasRapidas";
 import AssistentePreAnalise from "@/components/nutri/AssistentePreAnalise";
+import AgendaGoogleStatus from "@/components/nutri/AgendaGoogleStatus";
 import ProntuarioAnamnese56, { obterSecoesProntuario } from "@/components/nutri/ProntuarioAnamnese56";
 import { imprimirAnamneseCompleta } from "@/lib/pdfTimbrado";
 import { type ModuloCurso, type AulaCurso, ESTRUTURA_CURSO_PADRAO } from "@/app/api/cursos/route";
@@ -1035,6 +1036,13 @@ export default function PortalNutricionista() {
     }
   }, []);
 
+  // Voltando da tela de autorização do Google (/nutri?agenda=...): abre direto a aba da agenda
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("agenda")) {
+      setAbaAtiva("consultas");
+    }
+  }, []);
+
   // Handler para Salvar Anotações Clínicas
   const handleSalvarAnotacoes = async () => {
     if (!anamneseModalAberta) return;
@@ -1095,14 +1103,29 @@ export default function PortalNutricionista() {
     }
   };
 
-  // Gerador rápido de sala do Google Meet
-  const handleGerarLinkMeet = (agendamentoId: string | number) => {
-    const sufixo1 = Math.random().toString(36).substring(2, 5);
-    const sufixo2 = Math.random().toString(36).substring(2, 6);
-    const sufixo3 = Math.random().toString(36).substring(2, 5);
-    const linkGerado = `https://meet.google.com/${sufixo1}-${sufixo2}-${sufixo3}`;
-    setLinksMeetEditados((prev) => ({ ...prev, [agendamentoId]: linkGerado }));
-    handleSalvarLinkMeet(agendamentoId, linkGerado);
+  // Cria uma sala REAL do Google Meet (no evento da consulta, na agenda Google da Dra. Laís)
+  const handleGerarLinkMeet = async (agendamentoId: string | number) => {
+    setSalvandoLinkMeet(agendamentoId);
+    try {
+      const res = await fetch("/api/nutri", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "gerar_meet_google", agendamento_id: agendamentoId }),
+      });
+      const data = await res.json();
+      if (data.success && data.link) {
+        setLinksMeetEditados((prev) => ({ ...prev, [agendamentoId]: data.link }));
+        setAgendamentos((prev) => prev.map((a) => (a.id === agendamentoId ? { ...a, link: data.link } : a)));
+        dispararToast("Sala do Google Meet criada! 🔗");
+      } else {
+        dispararToast(data.message || "Não foi possível criar a sala agora.");
+      }
+    } catch (err) {
+      console.warn("Aviso ao gerar sala do Meet:", err);
+      dispararToast("Erro ao conectar com servidor.");
+    } finally {
+      setSalvandoLinkMeet(null);
+    }
   };
 
   // Handler para Concluir Consulta & Liberar Retorno de 4 Semanas
@@ -1788,10 +1811,7 @@ export default function PortalNutricionista() {
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h2 className="text-base font-extrabold text-slate-900">Agenda Clínica da Dra. Laís</h2>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200/80 rounded-full text-[11px] font-extrabold text-emerald-800 shadow-2xs">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    ✅ Sincronizado com Google Calendar (Dra. Laís)
-                  </span>
+                  <AgendaGoogleStatus onMudou={carregarDadosClinicos} />
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
                   Consultas marcadas com +7 dias de antecedência, devolutivas e metas prescritas

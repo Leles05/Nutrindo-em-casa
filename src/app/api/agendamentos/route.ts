@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 import { ehResposta, exigirUsuario, resolverEmailAlvo } from "@/lib/auth";
+import { HORARIOS_CONSULTA, horariosOcupadosNoGoogle } from "@/lib/googleAgenda";
+import { horarioLivreNoGoogle, sincronizarConsultaComGoogle } from "@/lib/agendaSync";
+
+export const maxDuration = 30;
 
 export async function GET(request: Request) {
   try {
@@ -33,10 +37,12 @@ export async function GET(request: Request) {
       console.warn("Aviso ao buscar ocupação geral da nutricionista:", erroGeral);
     }
 
-    const horariosOcupadosNutri = (todasConsultas || []).map((c) => ({
-      data: c.data,
-      horario: c.horario,
-    }));
+    // Ocupação = consultas já marcadas na plataforma + compromissos da Dra. Laís no Google Agenda dela
+    const ocupadosGoogle = await horariosOcupadosNoGoogle().catch(() => []);
+    const horariosOcupadosNutri = [
+      ...(todasConsultas || []).map((c) => ({ data: c.data, horario: c.horario })),
+      ...ocupadosGoogle.map((o) => ({ data: o.data, horario: o.horario })),
+    ];
 
     const listaAgendamentos = agendamentosUsuario || [];
 
@@ -167,7 +173,24 @@ export async function POST(request: Request) {
             message:
               "Este horário já está reservado na agenda da Dra. Laís. Por favor, escolha outro horário disponível.",
           },
+          { status: 409 }
+        );
+      }
+
+      // REGRA 3: o horário precisa ser um dos oferecidos e estar livre no Google Agenda da Dra. Laís
+      if (!(HORARIOS_CONSULTA as readonly string[]).includes(horarioLimpo)) {
+        return NextResponse.json(
+          { success: false, message: "Escolha um dos horários disponíveis na agenda." },
           { status: 400 }
+        );
+      }
+      if (!(await horarioLivreNoGoogle(dataLimpa, horarioLimpo))) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "A Dra. Laís tem outro compromisso neste horário. Por favor, escolha outro horário disponível.",
+          },
+          { status: 409 }
         );
       }
     }
@@ -190,8 +213,27 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) {
-      console.warn("Aviso ao persistir agendamento no Supabase:", error);
+    if (error || !novoAgendamento) {
+      // 23505 = índice único (data+horário): outra família reservou no mesmo instante
+      if (error?.code === "23505") {
+        return NextResponse.json(
+          { success: false, message: "Este horário acabou de ser reservado por outra pessoa. Escolha outro horário." },
+          { status: 409 }
+        );
+      }
+      console.error("Erro ao persistir agendamento no Supabase:", error);
+      return NextResponse.json(
+        { success: false, message: "Não foi possível registrar o agendamento. Tente novamente." },
+        { status: 500 }
+      );
+    }
+
+    // 1b. Consulta → cria o evento (com Meet e convite ao paciente) na agenda Google da Dra. Laís
+    let sincronizadoGoogle = false;
+    if (tipo === "consulta") {
+      const sync = await sincronizarConsultaComGoogle(novoAgendamento);
+      sincronizadoGoogle = sync.sincronizado;
+      if (sync.meetLink) novoAgendamento.link = sync.meetLink;
     }
 
     // 2. Se for consulta, marca consulta_agendada no perfil para desbloquear o onboarding
@@ -209,14 +251,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Agendamento registrado com sucesso.",
-      agendamento: novoAgendamento || {
-        id: Date.now().toString(),
-        user_email: emailLimpo,
-        titulo: tituloLimpo,
-        tipo,
-        data: dataLimpa,
-        horario: horarioLimpo,
-      },
+      sincronizadoGoogle,
+      agendamento: novoAgendamento,
     });
   } catch (error: unknown) {
     console.error("Erro interno ao criar agendamento:", error);

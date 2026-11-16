@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
   // returnTo só é aceito se for um caminho interno ("/algo"), nunca "//host" ou URL externa
   const returnToBruto = urlObj.searchParams.get("returnTo") || urlObj.searchParams.get("redirect") || "";
   const returnTo = /^\/(?![/\\])/.test(returnToBruto) ? returnToBruto : "";
+  // Permissão de AGENDA só é pedida quando a pessoa escolhe conectar a agenda (returnTo ou ?calendario=1).
+  // O login comum pede apenas nome e e-mail: telas de consentimento curtas e sem assustar as famílias.
+  const pedeAgenda = Boolean(returnTo) || urlObj.searchParams.get("calendario") === "1";
 
   if (!googleClientId || !googleClientSecret) {
     return NextResponse.json({
@@ -26,10 +29,12 @@ export async function GET(req: NextRequest) {
     client_id: googleClientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope:
-      "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events",
-    access_type: "offline",
-    prompt: "select_account",
+    scope: pedeAgenda
+      ? "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events"
+      : "openid email profile",
+    // Login: oferece a escolha de conta. Agenda: força a tela de consentimento para obter o refresh_token.
+    prompt: pedeAgenda ? "select_account consent" : "select_account",
+    ...(pedeAgenda ? { access_type: "offline" } : {}),
     state,
   });
   const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

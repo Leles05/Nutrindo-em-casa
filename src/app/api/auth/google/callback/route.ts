@@ -2,6 +2,73 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAnonServerClient, getSupabaseAdmin } from "@/lib/supabase";
 import { salvarTokenGoogle } from "@/lib/googleTokens";
 import { igualConstante, normalizarEmail, papelDoUsuario } from "@/lib/auth";
+import { lerStateNutri, salvarConexaoNutri } from "@/lib/googleAgenda";
+import { sincronizarPendentes } from "@/lib/agendaSync";
+
+const ESCOPO_EVENTOS = "https://www.googleapis.com/auth/calendar.events";
+const ESCOPO_FREEBUSY = "https://www.googleapis.com/auth/calendar.freebusy";
+
+async function conectarAgendaDaNutri(
+  req: NextRequest,
+  ctx: { code: string | null; errorParam: string | null; rawState: string; origin: string; semCookie: (r: NextResponse) => NextResponse }
+): Promise<NextResponse> {
+  const { code, errorParam, rawState, origin, semCookie } = ctx;
+  const voltar = (resultado: string) => semCookie(NextResponse.redirect(`${origin}/nutri?agenda=${resultado}`));
+
+  const estado = lerStateNutri(rawState);
+  const nonceCookie = req.cookies.get("g_oauth_nonce")?.value || "";
+  if (!estado || !nonceCookie || !(await igualConstante(estado.nonce, nonceCookie))) return voltar("erro");
+  if (errorParam || !code) return voltar("cancelado");
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return voltar("erro");
+
+  try {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: `${origin}/api/auth/google/callback`,
+        grant_type: "authorization_code",
+      }),
+    });
+    if (!tokenResponse.ok) {
+      console.error("Google Agenda (nutri): erro ao trocar o código:", tokenResponse.status);
+      return voltar("erro");
+    }
+    const tokenData = await tokenResponse.json();
+    const escopos = String(tokenData.scope || "");
+    // a nutri pode desmarcar permissões na tela do Google: sem elas a sincronização não funciona
+    if (!escopos.includes(ESCOPO_EVENTOS) || !escopos.includes(ESCOPO_FREEBUSY)) return voltar("permissao");
+    if (!tokenData.access_token || !tokenData.refresh_token) return voltar("erro");
+
+    const userinfo = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    await salvarConexaoNutri({
+      usuarioEmail: estado.usuario,
+      googleEmail: userinfo?.email ? normalizarEmail(userinfo.email) : null,
+      refreshToken: tokenData.refresh_token,
+      accessToken: tokenData.access_token,
+      expiraEmSegundos: Number(tokenData.expires_in || 3600),
+      escopos,
+    });
+
+    // consultas já marcadas antes da conexão entram na agenda dela agora
+    await sincronizarPendentes().catch((e) => console.warn("Aviso ao sincronizar pendentes:", e));
+    return voltar("conectada");
+  } catch (err) {
+    console.error("Google Agenda (nutri): erro no callback:", err);
+    return voltar("erro");
+  }
+}
 
 export async function GET(req: NextRequest) {
   const urlObj = new URL(req.url);
@@ -15,6 +82,9 @@ export async function GET(req: NextRequest) {
     return res;
   };
   const voltarLogin = (query: string) => semCookie(NextResponse.redirect(`${origin}/login?${query}`));
+
+  // Conexão do Google Agenda da NUTRICIONISTA: state assinado pelo servidor (contém um ponto "." — o do login comum não)
+  if (rawState.includes(".")) return conectarAgendaDaNutri(req, { code, errorParam, rawState, origin, semCookie });
 
   if (errorParam || !code) return voltarLogin("erro=google_cancelado");
 

@@ -89,9 +89,9 @@ export async function POST(request: Request) {
     if (!codigoLimpo) {
       return NextResponse.json({ success: false, message: "Código do cupom é obrigatório." }, { status: 400 });
     }
-    if (!Number.isInteger(percentualNum) || percentualNum < 1 || percentualNum > 90) {
+    if (!Number.isInteger(percentualNum) || percentualNum < 1 || percentualNum > 99) {
       return NextResponse.json(
-        { success: false, message: "O percentual de desconto deve ser um número inteiro entre 1% e 90%." },
+        { success: false, message: "O percentual de desconto deve ser um número inteiro entre 1% e 99%." },
         { status: 400 }
       );
     }

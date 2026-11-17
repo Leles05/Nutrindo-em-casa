@@ -18,11 +18,35 @@ export async function liberarAcessoPosPagamento(
   email: string,
   nome: string
 ): Promise<{ enviado: boolean; motivo?: string }> {
+  // Um único e-mail por compra: o checkout e os avisos do Asaas (CONFIRMED + RECEIVED) chegam quase juntos
+  // e, para quem ainda não criou a senha, o Supabase reenviaria o convite a cada chamada.
+  // A "reserva" é atômica: só quem consegue marcar o envio manda o e-mail (intervalo mínimo de 30 min).
+  let reservado = false;
+  try {
+    const limite = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data, error: reservaErr } = await admin
+      .from("profiles")
+      .update({ acesso_enviado_em: new Date().toISOString() })
+      .eq("email", email)
+      .or(`acesso_enviado_em.is.null,acesso_enviado_em.lt.${limite}`)
+      .select("email");
+    if (!reservaErr) {
+      if (!data || data.length === 0) return { enviado: false, motivo: "ja_enviado_recentemente" };
+      reservado = true;
+    }
+    // reservaErr (ex.: coluna ainda não criada): segue e envia, como antes
+  } catch {
+    /* segue e envia */
+  }
+
   const { error } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: `${urlDoSite()}/criar-senha`,
     data: { name: nome || "Responsável" },
   });
   if (!error) return { enviado: true };
+
+  // não enviou: libera a reserva para uma nova tentativa
+  if (reservado) await admin.from("profiles").update({ acesso_enviado_em: null }).eq("email", email);
 
   const msg = (error.message || "").toLowerCase();
   if (msg.includes("already") || msg.includes("registered") || error.status === 422) {

@@ -511,8 +511,8 @@ export default function PortalNutricionista() {
       setErroCupomForm("Informe o código do cupom (ex: MAES15).");
       return;
     }
-    if (isNaN(percent) || percent < 1 || percent > 90) {
-      setErroCupomForm("O percentual de desconto deve estar entre 1% e 90%.");
+    if (isNaN(percent) || percent < 1 || percent > 99) {
+      setErroCupomForm("O percentual de desconto deve estar entre 1% e 99%.");
       return;
     }
 
@@ -2549,7 +2549,7 @@ export default function PortalNutricionista() {
                     <input
                       type="number"
                       min={1}
-                      max={90}
+                      max={99}
                       value={novoCupomPercentual}
                       onChange={(e) => setNovoCupomPercentual(e.target.value)}
                       placeholder="Ex: 15"

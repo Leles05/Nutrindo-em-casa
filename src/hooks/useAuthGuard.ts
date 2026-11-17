@@ -15,7 +15,33 @@ export interface AuthState {
   avisoVencimento: boolean;
 }
 
-export function encerrarSessao() {
+/**
+ * Encerra a sessão de verdade: revoga o login no servidor (se der), apaga os dados do navegador
+ * (inclusive rascunhos de saúde) e volta ao login. `destino` permite voltar com uma mensagem na tela.
+ */
+export function encerrarSessao(destinoBruto?: unknown) {
+  // quando usada direto como onClick, o 1º argumento é o evento do clique: só aceita texto de caminho interno
+  const destino = typeof destinoBruto === "string" && /^\/(?![/\\])/.test(destinoBruto) ? destinoBruto : "/login";
+
+  if (typeof window !== "undefined") {
+    // 0. Revoga a sessão no servidor (espera no máximo 1,5 s para não travar a saída)
+    let tokenAtual = "";
+    try {
+      tokenAtual = localStorage.getItem("nutrindo_auth_token") || "";
+    } catch {}
+    const revogacao: Promise<unknown> = tokenAtual
+      ? Promise.race([
+          fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${tokenAtual}` }, keepalive: true }).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ])
+      : Promise.resolve();
+    void revogacao.finally(() => limparNavegadorEIr(destino));
+    return;
+  }
+  limparNavegadorEIr(destino);
+}
+
+function limparNavegadorEIr(destino: string) {
   if (typeof window !== "undefined") {
     // 1. Salvar antes todas as chaves que começam com nutrindo_tour_
     const tourBackup: Record<string, string> = {};
@@ -56,7 +82,7 @@ export function encerrarSessao() {
     } catch {}
   }
   if (typeof window !== "undefined") {
-    window.location.href = "/login";
+    window.location.href = destino;
   }
 }
 

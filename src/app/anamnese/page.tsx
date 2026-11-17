@@ -4,13 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  ChevronRight, ChevronLeft, Save, Paperclip, X, FileText,
+  ChevronRight, ChevronLeft, Paperclip, X, FileText,
   AlertCircle, HeartHandshake, AlertTriangle, CheckCircle2,
   Calendar, Droplets, Sparkles, Activity, LogOut, BookmarkCheck
 } from "lucide-react";
 import { validarEtapa } from "./validation";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuthGuard, encerrarSessao } from "@/hooks/useAuthGuard";
 
 export default function AnamneseWizard() {
   const { autenticado, carregando } = useAuthGuard();
@@ -27,6 +26,8 @@ export default function AnamneseWizard() {
   const hoje = new Date().toISOString().split("T")[0];
   const dataMinima = "2000-01-01";
   const [salvandoRascunho, setSalvandoRascunho] = useState(false);
+  const [modalSair, setModalSair] = useState(false);
+  const [erroSair, setErroSair] = useState("");
 
   // ==========================================
   // ESTADOS - ETAPA 1
@@ -1139,76 +1140,40 @@ export default function AnamneseWizard() {
   };
 
 
-  // Salvar rascunho parcial e sair da sessão
-  const salvarRascunhoEPreencherDepois = async () => {
+  // Salvar o que já foi respondido (na nuvem) e sair da conta, depois de confirmar no pop-up
+  const salvarESair = async () => {
+    setErroSair("");
     setSalvandoRascunho(true);
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     const emailUsuario =
       typeof window !== "undefined" ? localStorage.getItem("nutrindo_user_email") || "" : "";
-
     const rascunho = obterPayloadRespostas();
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
-      localStorage.removeItem("nutrindo_auth_token");
-      localStorage.removeItem("nutrindo_user_email");
-      localStorage.removeItem("nutrindo_user_nome");
-      localStorage.removeItem("nutrindo_user_role");
-      localStorage.removeItem("anamnese_concluida");
-      localStorage.removeItem("nutrindo_anamnese_concluida");
-      localStorage.removeItem("consulta_agendada");
-      localStorage.removeItem("nutrindo_consulta_agendada");
-    }
-
+    // Só sai depois de confirmar que o rascunho foi salvo no servidor: nada de respostas perdidas
     if (emailUsuario) {
       try {
-        await fetch("/api/anamnese", {
+        const res = await fetch("/api/anamnese", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: emailUsuario,
-            respostas: rascunho,
-            concluida: false,
-          }),
+          body: JSON.stringify({ email: emailUsuario, respostas: rascunho, concluida: false }),
         });
-      } catch (e) {
-        console.warn("Aviso ao salvar rascunho:", e);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json?.success === false) {
+          setErroSair("Não conseguimos salvar suas respostas agora. Tente de novo em instantes para não perder o que você já preencheu.");
+          setSalvandoRascunho(false);
+          return;
+        }
+      } catch {
+        setErroSair("Sem conexão com o servidor. Confira a internet e tente de novo para não perder o que você já preencheu.");
+        setSalvandoRascunho(false);
+        return;
       }
     }
 
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.signOut();
-      } catch {}
-    }
-
-    router.replace("/login?rascunhoSalvo=true");
-  };
-
-  const handleSairConta = async () => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    const rascunho = obterPayloadRespostas();
-    if (typeof window !== "undefined") {
-      localStorage.setItem("nutrindo_anamnese_rascunho", JSON.stringify(rascunho));
-      localStorage.removeItem("nutrindo_auth_token");
-      localStorage.removeItem("nutrindo_user_email");
-      localStorage.removeItem("nutrindo_user_nome");
-      localStorage.removeItem("nutrindo_user_role");
-      localStorage.removeItem("anamnese_concluida");
-      localStorage.removeItem("nutrindo_anamnese_concluida");
-      localStorage.removeItem("consulta_agendada");
-      localStorage.removeItem("nutrindo_consulta_agendada");
-    }
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.signOut();
-      } catch {}
-    }
-    router.replace("/login");
+    // Revoga o login no servidor, apaga tudo do navegador (inclusive o rascunho) e volta ao login
+    encerrarSessao("/login?rascunhoSalvo=true");
   };
 
   // Restaura rascunho salvo do localStorage ao montar (com fallback na nuvem)
@@ -1350,25 +1315,17 @@ export default function AnamneseWizard() {
 
               <button
                 type="button"
-                onClick={salvarRascunhoEPreencherDepois}
+                onClick={() => {
+                  setErroSair("");
+                  setModalSair(true);
+                }}
                 disabled={salvandoRascunho}
                 className="inline-flex items-center gap-1 sm:gap-1.5 py-1.5 px-2.5 sm:px-3 bg-emerald-50 hover:bg-emerald-100 text-[#4C6C54] border border-emerald-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                title="Salvar respostas parciais e continuar mais tarde"
+                title="Salvar o que você já respondeu e sair da conta"
               >
-                <Save className="h-3.5 w-3.5 text-[#4C6C54] shrink-0" />
-                <span className="hidden sm:inline">{salvandoRascunho ? "Salvando..." : "Salvar e Preencher Depois"}</span>
-                <span className="sm:hidden font-extrabold">{salvandoRascunho ? "Salvando..." : "Salvar"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSairConta}
-                className="inline-flex items-center gap-1 sm:gap-1.5 py-1.5 px-2.5 sm:px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
-                title="Encerrar sessão e voltar ao login"
-              >
-                <LogOut className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                <span className="hidden sm:inline">Sair da Conta</span>
-                <span className="sm:hidden font-extrabold">Sair</span>
+                <LogOut className="h-3.5 w-3.5 text-[#4C6C54] shrink-0" />
+                <span className="hidden sm:inline">Salvar e Sair da Conta</span>
+                <span className="sm:hidden font-extrabold">Salvar e sair</span>
               </button>
             </div>
           </div>
@@ -1399,6 +1356,53 @@ export default function AnamneseWizard() {
           </div>
         </div>
       </header>
+
+      {/* POP-UP: CONFIRMAR SALVAR E SAIR DA CONTA */}
+      {modalSair && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-sair"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl border border-slate-100">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-[#4C6C54] flex items-center justify-center">
+              <LogOut className="h-6 w-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 id="titulo-sair" className="text-lg font-extrabold text-slate-900">
+                Salvar e sair da conta?
+              </h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Vamos salvar tudo o que você já respondeu e encerrar o seu acesso neste aparelho. Para continuar a anamnese, é só entrar de novo com o seu e-mail e a sua senha: você retoma de onde parou.
+              </p>
+            </div>
+            {erroSair && (
+              <p role="alert" className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3">
+                {erroSair}
+              </p>
+            )}
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setModalSair(false)}
+                disabled={salvandoRascunho}
+                className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-bold cursor-pointer disabled:opacity-50"
+              >
+                Continuar preenchendo
+              </button>
+              <button
+                type="button"
+                onClick={salvarESair}
+                disabled={salvandoRascunho}
+                className="py-2.5 px-4 rounded-xl bg-[#4C6C54] hover:bg-[#3a5340] text-white text-sm font-extrabold cursor-pointer disabled:opacity-60"
+              >
+                {salvandoRascunho ? "Salvando e saindo..." : erroSair ? "Tentar novamente" : "Salvar e sair"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
 

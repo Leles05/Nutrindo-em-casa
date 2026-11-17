@@ -624,7 +624,7 @@ export default function PaginaInicialLanding() {
               Escolha o plano ideal para a sua família
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
-              Pagamentos seguros processados pelo Asaas com liberação imediata.
+              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado sem juros. Pagamentos seguros processados pelo Asaas.
             </p>
           </div>
 
@@ -783,6 +783,12 @@ export default function PaginaInicialLanding() {
             </div>
 
           </div>
+
+          <p className="text-center text-[11px] sm:text-xs text-slate-500 max-w-2xl mx-auto leading-relaxed">
+            Garantia de 7 dias com devolução integral. A assinatura renova automaticamente ao fim de cada período e você pode cancelar quando quiser. Ao assinar, você concorda com os{" "}
+            <Link href="/termos" className="font-bold text-[#4C6C54] underline underline-offset-2">Termos de Uso</Link> e a{" "}
+            <Link href="/privacidade" className="font-bold text-[#4C6C54] underline underline-offset-2">Política de Privacidade</Link>.
+          </p>
         </div>
       </section>
 
@@ -845,6 +851,10 @@ export default function PaginaInicialLanding() {
             </div>
             <span>© {new Date().getFullYear()} Nutrindo em Casa. Suporte: (41) 98492-6020</span>
           </div>
+
+          <p className="text-center text-[10px] sm:text-[11px] text-slate-400 leading-relaxed">
+            LAIS VIEIRA DE LIMA LELES LTDA • CNPJ 65.024.114/0001-17 • Rua Dom Pedro I, 1013, apto 401, Água Verde, Curitiba/PR • Responsável técnica: Dra. Laís Leles (CRN-8 18878)
+          </p>
 
         </div>
       </footer>

@@ -674,6 +674,11 @@ function ConteudoLogin() {
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
           <span>Ambiente Seguro com Criptografia SSL 256 bits</span>
         </div>
+        <p className="mt-2 text-[11px] text-slate-400">
+          Leia os{" "}
+          <Link href="/termos" className="font-bold underline underline-offset-2 hover:text-slate-600">Termos de Uso</Link> e a{" "}
+          <Link href="/privacidade" className="font-bold underline underline-offset-2 hover:text-slate-600">Política de Privacidade</Link>. O aceite é confirmado no primeiro acesso.
+        </p>
       </div>
     </div>
   );

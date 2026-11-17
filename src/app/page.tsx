@@ -785,9 +785,7 @@ export default function PaginaInicialLanding() {
           </div>
 
           <p className="text-center text-[11px] sm:text-xs text-slate-500 max-w-2xl mx-auto leading-relaxed">
-            Garantia de 7 dias com devolução integral. A assinatura renova automaticamente ao fim de cada período e você pode cancelar quando quiser. Ao assinar, você concorda com os{" "}
-            <Link href="/termos" className="font-bold text-[#4C6C54] underline underline-offset-2">Termos de Uso</Link> e a{" "}
-            <Link href="/privacidade" className="font-bold text-[#4C6C54] underline underline-offset-2">Política de Privacidade</Link>.
+            Garantia de 7 dias com devolução integral. A assinatura renova automaticamente ao fim de cada período e você pode cancelar quando quiser. Ao assinar, você concorda com os Termos de Uso e a Política de Privacidade (links no rodapé da página).
           </p>
         </div>
       </section>

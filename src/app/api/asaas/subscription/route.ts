@@ -203,7 +203,9 @@ export async function POST(request: Request) {
     const valorCobrado = calcularTotal({ plano, percentualCupom, credito });
     if (valorCobrado < VALOR_MINIMO_ASAAS) {
       await desfazer();
-      return erro("O valor final é menor que o mínimo permitido para cobrança.");
+      const minimoBR = VALOR_MINIMO_ASAAS.toFixed(2).replace(".", ",");
+      const finalBR = valorCobrado.toFixed(2).replace(".", ",");
+      return erro(`O valor final (R$ ${finalBR}) é menor que o mínimo de R$ ${minimoBR} aceito para cobrança. Use um cupom com desconto menor ou escolha outro plano.`);
     }
 
     // Parcelas: só no cartão e só nas quantidades permitidas para o plano (Pix é sempre à vista)

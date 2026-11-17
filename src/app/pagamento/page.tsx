@@ -348,6 +348,33 @@ function ConteudoCheckout() {
     setPixDados(null);
   }, [planoSelecionado]);
 
+  // Pix: consulta o servidor a cada 4 s até o pagamento ser confirmado (o webhook do Asaas marca a fatura como paga)
+  const [pixPago, setPixPago] = useState(false);
+  const paymentIdPix = pixDados?.paymentId;
+  useEffect(() => {
+    if (metodoPagamento !== "pix" || !paymentIdPix || pixPago) return;
+    let ativo = true;
+    const consultar = async () => {
+      try {
+        const res = await fetch(`/api/asaas/pagamento-status?id=${encodeURIComponent(paymentIdPix)}`, { cache: "no-store" });
+        const json = await res.json();
+        if (ativo && json?.pago) {
+          setPixPago(true);
+          setEmailEnviado(true);
+          setModalSucesso(true);
+        }
+      } catch {
+        /* tenta de novo no próximo ciclo */
+      }
+    };
+    const intervalo = setInterval(consultar, 4000);
+    void consultar();
+    return () => {
+      ativo = false;
+      clearInterval(intervalo);
+    };
+  }, [metodoPagamento, paymentIdPix, pixPago]);
+
   // Contador regressivo do Pix (15 minutos)
   useEffect(() => {
     if (metodoPagamento !== "pix") return;
@@ -1795,7 +1822,9 @@ function ConteudoCheckout() {
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
                 {metodoPagamento === "pix"
-                  ? "Sua cobrança Pix foi registrada com sucesso no Asaas. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
+                  ? pixPago
+                    ? "Pagamento do Pix confirmado! Seu acesso foi liberado."
+                    : "Sua cobrança Pix foi registrada com sucesso no Asaas. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
                   : ehUpgrade
                     ? "Sua assinatura foi atualizada para o Plano Anual no Asaas. O crédito proporcional de R$ 177,30 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
                     : `Seu acesso ao ${planoAtivo.nome} foi liberado com sucesso. Todos os recursos, anamnese e ferramentas já estão disponíveis.`}

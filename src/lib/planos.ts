@@ -14,7 +14,8 @@ export const PLANOS: Record<Plano, { ciclo: "MONTHLY" | "QUARTERLY" | "YEARLY"; 
 export const CREDITO_UPGRADE_TRIMESTRAL_PARA_ANUAL = 177.3;
 
 /** Valor mínimo de cobrança aceito pelo Asaas. */
-export const VALOR_MINIMO_ASAAS = 5.0;
+// O Asaas (conta oficial) recusa cobranças abaixo de R$ 10,00 ("não pode ser menor que R$ 10,00")
+export const VALOR_MINIMO_ASAAS = 10.0;
 
 export function ehPlano(valor: unknown): valor is Plano {
   return valor === "mensal" || valor === "trimestral" || valor === "anual";

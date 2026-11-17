@@ -25,6 +25,7 @@ import {
 import { buscarCupom, consumirCupom, devolverCupom, mensagemDoStatus, statusDoCupom } from "@/lib/cupons";
 import { liberarAcessoPosPagamento } from "@/lib/acesso";
 import { registrarAceite, TERMOS_VERSAO } from "@/lib/termos";
+import { criarTokenCompra } from "@/lib/tokenCompra";
 import { compraPaga, desfazerCompraOrfa, gravarFaturasDasParcelas, ipParaAsaas, salvarCartao } from "@/lib/parcelado";
 
 // Compras parceladas em 12x levam ~15s no Asaas: a função precisa de tempo
@@ -411,6 +412,7 @@ export async function POST(request: Request) {
         valorParcela: arredondar(valorCobrado / parcelas),
         proximaCobranca: proxima,
         pagamentoConfirmado: parceladoPago,
+        tokenAcesso: ehUpgrade ? undefined : criarTokenCompra(email, compra.data.id),
         emailEnviado,
         mensagemAcesso: emailEnviado
           ? "Enviamos para o seu e-mail o link para criar sua senha."
@@ -557,6 +559,7 @@ export async function POST(request: Request) {
       valorCobrado,
       parcelas: 1,
       pagamentoConfirmado: pagoAgora,
+      tokenAcesso: ehUpgrade ? undefined : criarTokenCompra(email, pagamentoId),
       emailEnviado,
       mensagemAcesso: emailEnviado
         ? "Enviamos para o seu e-mail o link para criar sua senha."

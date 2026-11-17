@@ -10,7 +10,7 @@ import { limitar } from "@/lib/rateLimit";
  */
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id") || "";
-  if (!/^pay_[A-Za-z0-9]{6,40}$/.test(id)) {
+  if (!/^pay_[A-Za-z0-9_-]{6,60}$/.test(id)) {
     return NextResponse.json({ success: false, message: "Pagamento inválido." }, { status: 400 });
   }
 

@@ -130,6 +130,14 @@ function ConteudoCheckout() {
   const [proximaCobrancaInfo, setProximaCobrancaInfo] = useState("");
   const [modalSucesso, setModalSucesso] = useState(false);
   const [emailEnviado, setEmailEnviado] = useState(false);
+  // Criar a senha aqui mesmo, logo após o pagamento confirmado (sem depender do link do e-mail)
+  const [tokenAcesso, setTokenAcesso] = useState("");
+  const [cartaoConfirmado, setCartaoConfirmado] = useState(false);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [novaSenha2, setNovaSenha2] = useState("");
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
+  const [criandoSenha, setCriandoSenha] = useState(false);
+  const [erroSenha, setErroSenha] = useState("");
   const [erroForm, setErroForm] = useState("");
 
   // Crédito proporcional do plano vigente
@@ -327,6 +335,7 @@ function ConteudoCheckout() {
       });
       setTempoRestantePix(899);
       setIdAssinaturaGerada(data.subscriptionId);
+      setTokenAcesso(data.tokenAcesso || "");
       if (data.emailEnviado) {
         setEmailEnviado(true);
       }
@@ -383,6 +392,59 @@ function ConteudoCheckout() {
     }, 1000);
     return () => clearInterval(intervalo);
   }, [metodoPagamento]);
+
+  const podeCriarSenhaAqui = Boolean(tokenAcesso) && !ehUpgrade && (metodoPagamento === "pix" ? pixPago : cartaoConfirmado);
+
+  const criarSenhaEEntrar = async () => {
+    setErroSenha("");
+    if (novaSenha.length < 8 || !/\d/.test(novaSenha) || !/[A-Za-zÀ-ú]/.test(novaSenha)) {
+      setErroSenha("A senha precisa ter pelo menos 8 caracteres, com letras e números.");
+      return;
+    }
+    if (novaSenha !== novaSenha2) {
+      setErroSenha("As senhas não conferem.");
+      return;
+    }
+    setCriandoSenha(true);
+    try {
+      const res = await fetch("/api/auth/criar-senha-compra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenAcesso, senha: novaSenha }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setErroSenha(json.message || "Não foi possível criar a senha agora. Use o link enviado ao seu e-mail.");
+        setCriandoSenha(false);
+        return;
+      }
+      // entra direto na plataforma, como no login
+      const emailLogin = String(json.email || clienteEmail).trim().toLowerCase();
+      const login = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailLogin, password: novaSenha }),
+      });
+      const dados = await login.json();
+      if (!login.ok || !dados.token) {
+        router.push(`/login?email=${encodeURIComponent(emailLogin)}&senha=true`);
+        return;
+      }
+      ["anamnese_concluida", "nutrindo_anamnese_concluida", "consulta_agendada", "nutrindo_consulta_agendada"].forEach((k) =>
+        localStorage.removeItem(k)
+      );
+      localStorage.setItem("nutrindo_user_email", dados.user?.email || emailLogin);
+      localStorage.setItem("nutrindo_auth_token", dados.token);
+      if (dados.refresh_token) localStorage.setItem("nutrindo_refresh_token", dados.refresh_token);
+      localStorage.setItem("nutrindo_user_nome", dados.user?.nome || clienteNome || "Responsável");
+      localStorage.setItem("nutrindo_user_role", "cliente");
+      localStorage.setItem("nutrindo_status_assinatura", dados.user?.status_assinatura || "ATIVO");
+      router.replace("/anamnese");
+    } catch {
+      setErroSenha("Não foi possível criar a senha agora. Use o link enviado ao seu e-mail.");
+      setCriandoSenha(false);
+    }
+  };
 
   const formatarTempo = (segundos: number) => {
     const min = Math.floor(segundos / 60);
@@ -684,6 +746,8 @@ function ConteudoCheckout() {
         }
 
         setIdAssinaturaGerada(data.subscriptionId);
+        setTokenAcesso(data.tokenAcesso || "");
+        setCartaoConfirmado(Boolean(data.pagamentoConfirmado));
         setParcelasCompradas(Number(data.parcelas) || 1);
         setProximaCobrancaInfo(data.proximaCobranca || "");
         if (data.emailEnviado) {
@@ -1866,7 +1930,66 @@ function ConteudoCheckout() {
               )}
             </div>
 
+            {/* CRIAR A SENHA AQUI MESMO (pagamento já confirmado) */}
+            {podeCriarSenhaAqui && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void criarSenhaEEntrar();
+                }}
+                className="p-4 bg-white rounded-2xl border-2 border-[#4C6C54]/40 text-left space-y-3"
+              >
+                <p className="text-sm font-extrabold text-[#3D5A45]">Crie sua senha e comece agora</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Seu pagamento foi confirmado. Defina uma senha para entrar direto na plataforma e iniciar a anamnese, sem precisar abrir o e-mail.
+                </p>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type={mostrarNovaSenha ? "text" : "password"}
+                      value={novaSenha}
+                      onChange={(e) => setNovaSenha(e.target.value)}
+                      placeholder="Senha (mín. 8 caracteres, letras e números)"
+                      autoComplete="new-password"
+                      className="w-full h-11 px-3 pr-16 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarNovaSenha((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-500 hover:text-slate-800 px-2 py-1 cursor-pointer"
+                    >
+                      {mostrarNovaSenha ? "Ocultar" : "Mostrar"}
+                    </button>
+                  </div>
+                  <input
+                    type={mostrarNovaSenha ? "text" : "password"}
+                    value={novaSenha2}
+                    onChange={(e) => setNovaSenha2(e.target.value)}
+                    placeholder="Repita a senha"
+                    autoComplete="new-password"
+                    className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54]"
+                  />
+                </div>
+                {erroSenha && (
+                  <p role="alert" className="text-xs font-bold text-rose-600">
+                    {erroSenha}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={criandoSenha}
+                  className="w-full py-3.5 px-5 bg-[#4C6C54] hover:bg-[#3a5340] disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {criandoSenha ? "Criando sua conta..." : "Criar senha e entrar →"}
+                </button>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Prefere pelo e-mail? Também enviamos um link para criar a senha, e ele continua valendo.
+                </p>
+              </form>
+            )}
+
             {/* AVISO DO E-MAIL E INSTRUÇÕES DE ACESSO */}
+            {!podeCriarSenhaAqui && (
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-left space-y-1.5">
               <p className="text-xs text-[#4C6C54] font-bold flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-[#4C6C54]" />
@@ -1876,8 +1999,9 @@ function ConteudoCheckout() {
                 Em instantes você receberá no e-mail informado o link para criar sua senha de acesso (confira também o spam). Depois de criar a senha, faça login para iniciar sua Anamnese. Se o e-mail não chegar em alguns minutos, use &quot;Esqueci minha senha&quot; na tela de login.
               </p>
             </div>
+            )}
 
-            {/* BOTÃO PRINCIPAL: IR PARA O LOGIN (a senha é criada pelo link enviado ao e-mail) */}
+            {/* BOTÃO: IR PARA O LOGIN (a senha também pode ser criada pelo link enviado ao e-mail) */}
             <button
               type="button"
               onClick={() => {
@@ -1891,9 +2015,13 @@ function ConteudoCheckout() {
                   `/login${emailSanitizado ? `?email=${encodeURIComponent(emailSanitizado)}` : ""}`
                 );
               }}
-              className="w-full py-4 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-center"
+              className={
+                podeCriarSenhaAqui
+                  ? "w-full py-2.5 px-5 bg-transparent text-slate-500 hover:text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer text-center underline underline-offset-2"
+                  : "w-full py-4 px-5 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-center"
+              }
             >
-              <span>Ir para o Login →</span>
+              <span>{podeCriarSenhaAqui ? "Já tenho senha: ir para o login" : "Ir para o Login →"}</span>
               <ChevronRight className="h-4 w-4" />
             </button>
 

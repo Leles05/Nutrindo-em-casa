@@ -81,6 +81,7 @@ export default function PaginaDiarioAlimentar() {
   const [novaData, setNovaData] = useState(hoje);
   const [novaRefeicao, setNovaRefeicao] = useState<"Café" | "Almoço" | "Lanche" | "Jantar">("Almoço");
   const [novoAlimento, setNovoAlimento] = useState("");
+  const [erroAlimento, setErroAlimento] = useState("");
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const [novaEtapa, setNovaEtapa] = useState("👃 Cheirou voluntariamente");
   const [novaEtapaSlug, setNovaEtapaSlug] = useState<"tolerou" | "cheirou" | "tocou" | "provou" | "comeu">("cheirou");
@@ -226,7 +227,16 @@ export default function PaginaDiarioAlimentar() {
   const adicionarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
     if (salvandoRefeicao) return;
-    if (!novoAlimento.trim()) return;
+    // Validação: o alimento não pode ficar vazio nem conter só espaços
+    if (!novoAlimento.trim()) {
+      setErroAlimento("Informe o alimento oferecido (não pode ficar em branco).");
+      return;
+    }
+    if (novoAlimento.trim().length < 2) {
+      setErroAlimento("O nome do alimento precisa ter pelo menos 2 letras.");
+      return;
+    }
+    setErroAlimento("");
 
     try {
       setSalvandoRefeicao(true);
@@ -582,12 +592,20 @@ export default function PaginaDiarioAlimentar() {
                   onChange={(e) => {
                     setNovoAlimento(e.target.value);
                     setDropdownAberto(true);
+                    if (erroAlimento) setErroAlimento("");
                   }}
                   onFocus={() => setDropdownAberto(true)}
                   placeholder="Digite o alimento (ex: Brócolis, Maçã...)"
-                  className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54] focus:bg-white"
-                  required
+                  aria-invalid={Boolean(erroAlimento)}
+                  className={`w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4C6C54] focus:bg-white ${
+                    erroAlimento ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"
+                  }`}
                 />
+                {erroAlimento && (
+                  <p role="alert" className="mt-1 text-[11px] font-bold text-red-600">
+                    {erroAlimento}
+                  </p>
+                )}
 
                 {/* DROPDOWN DE AUTOCOMPLETE CONFORME DIGITA */}
                 {dropdownAberto && sugestoesAlimentos.length > 0 && (

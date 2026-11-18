@@ -6,29 +6,6 @@ Documento vivo: descreve **como a aplicação está construída hoje**, as decis
 
 Plataforma web de acompanhamento nutricional infantil: a família faz a assinatura, preenche a anamnese, registra o diário alimentar, agenda a consulta, conversa com a nutricionista e assiste às aulas. A nutricionista usa um painel próprio.
 
-```mermaid
-flowchart LR
-    subgraph Navegador
-        UI["Páginas React (Next.js)"]
-    end
-    subgraph Vercel
-        API["Rotas de API<br/>/api/* (Node.js)"]
-        CRON["Cron diário<br/>/api/cron/renovacoes"]
-    end
-    subgraph Supabase
-        AUTH["Auth (JWT)"]
-        DB[("PostgreSQL")]
-    end
-    UI -- "fetch + Bearer token" --> API
-    API -- "service role (só servidor)" --> DB
-    API --> AUTH
-    API -- "cobranças, Pix, cartão" --> ASAAS["Asaas"]
-    ASAAS -- "webhook" --> API
-    API -- "e-mails" --> RESEND["Resend"]
-    API -- "agenda da nutricionista" --> GCAL["Google Agenda / Meet"]
-    CRON --> API
-```
-
 ## 2. Tecnologias
 
 | Camada | Tecnologia | Para quê |

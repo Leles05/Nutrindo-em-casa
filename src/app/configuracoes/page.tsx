@@ -21,7 +21,7 @@ interface FaturaMock {
   descricao: string;
   valor: string;
   status: "pago" | "pendente";
-  codigoAsaas: string;
+  codigoPagamento: string;
 }
 
 export function calcularIniciais(nome?: string, fallback = "NC"): string {
@@ -90,7 +90,7 @@ function ConteudoConfiguracoes() {
     nome: "Plano Trimestral",
     valor: "R$ 531,90",
     periodicidade: "Cobrado a cada 3 meses",
-    asaasId: "",
+    assinaturaId: "",
     status: "ATIVO",
     proximaCobranca: "",
     parcelas: 1,
@@ -183,7 +183,7 @@ function ConteudoConfiguracoes() {
               nome: nomePlano,
               valor: valorPlano,
               periodicidade: periodicidadePlano,
-              asaasId: data.profile.asaas_installment_id || data.profile.asaas_subscription_id || "",
+              assinaturaId: data.profile.gateway_assinatura_id || "",
               status: data.profile.status_assinatura || "ATIVO",
               proximaCobranca: data.profile.proxima_cobranca || "",
               parcelas: parcelasPlano,
@@ -193,13 +193,13 @@ function ConteudoConfiguracoes() {
             });
           }
           if (data.faturas && data.faturas.length > 0) {
-            const faturasFormatadas: FaturaMock[] = data.faturas.map((f: { id: string; asaas_payment_id: string; data_emissao: string; descricao: string; valor: number; status: string }) => ({
+            const faturasFormatadas: FaturaMock[] = data.faturas.map((f: { id: string; gateway_pagamento_id: string; data_emissao: string; descricao: string; valor: number; status: string }) => ({
               id: f.id,
               data: f.data_emissao ? new Date(f.data_emissao).toLocaleDateString("pt-BR") : "Recente",
               descricao: f.descricao || "Assinatura Nutrindo em Casa",
               valor: `R$ ${Number(f.valor || 0).toFixed(2).replace(".", ",")}`,
               status: f.status === "Pago" ? "pago" : "pendente",
-              codigoAsaas: f.asaas_payment_id || "pay_asaas",
+              codigoPagamento: f.gateway_pagamento_id || "",
             }));
             setListaFaturas(faturasFormatadas);
           }
@@ -325,7 +325,7 @@ function ConteudoConfiguracoes() {
   const handleConfirmarCancelamento = async () => {
     setCancelando(true);
     try {
-      const res = await fetch("/api/asaas/cancel", { method: "POST" });
+      const res = await fetch("/api/pagamentos/cancelar", { method: "POST" });
       const data = await res.json().catch(() => ({}));
       setModalCancelamento(false);
       if (!res.ok || !data.success) {
@@ -841,10 +841,10 @@ function ConteudoConfiguracoes() {
                   <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100 space-y-1">
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 font-bold uppercase">
                       <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                      <span>ID Asaas</span>
+                      <span>ID da assinatura</span>
                     </div>
                     <p className="text-sm font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded-lg border border-slate-200 inline-block">
-                      {planoUsuario.asaasId}
+                      {planoUsuario.assinaturaId}
                     </p>
                   </div>
 
@@ -879,7 +879,7 @@ function ConteudoConfiguracoes() {
                       Histórico de Faturas
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Demonstrativo fiscal e recibos oficiais das cobranças no Asaas
+                      Demonstrativo fiscal e recibos oficiais das cobranças no Mercado Pago
                     </p>
                   </div>
                   <span className="text-xs font-bold text-slate-400 hidden sm:inline">
@@ -935,7 +935,7 @@ function ConteudoConfiguracoes() {
                               {fat.status === "pago" ? (
                                 <button
                                   type="button"
-                                  onClick={() => handleDownloadFatura(fat.codigoAsaas)}
+                                  onClick={() => handleDownloadFatura(fat.codigoPagamento)}
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#4C6C54] text-slate-700 hover:text-white font-bold text-xs transition-colors cursor-pointer"
                                   title="Baixar PDF da fatura"
                                 >

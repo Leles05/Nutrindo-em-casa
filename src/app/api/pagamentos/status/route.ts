@@ -10,7 +10,7 @@ import { limitar } from "@/lib/rateLimit";
  */
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id") || "";
-  if (!/^pay_[A-Za-z0-9_-]{6,60}$/.test(id)) {
+  if (!/^[A-Za-z0-9_-]{6,60}$/.test(id)) {
     return NextResponse.json({ success: false, message: "Pagamento inválido." }, { status: 400 });
   }
 
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data } = await getSupabaseAdmin().from("faturas").select("status").eq("asaas_payment_id", id).maybeSingle();
+    const { data } = await getSupabaseAdmin().from("faturas").select("status").eq("gateway_pagamento_id", id).maybeSingle();
     return NextResponse.json(
       { success: true, pago: data?.status === "Pago" },
       { headers: { "Cache-Control": "no-store" } }

@@ -13,7 +13,7 @@ Plataforma web de acompanhamento nutricional infantil: a família faz a assinatu
 | Interface | React 19, Next.js 16 (App Router), TypeScript, Tailwind CSS 4 | Páginas, estado e estilo |
 | Servidor | Rotas de API do Next.js (Node.js) | Endpoints REST em `src/app/api` |
 | Banco e login | Supabase (PostgreSQL + Auth) | Dados e identidade (JWT) |
-| Pagamentos | Asaas | Pix, cartão (à vista e parcelado), renovação |
+| Pagamentos | Mercado Pago (integração em andamento) | Pix, cartão (à vista; parcelado na primeira compra) e assinatura recorrente |
 | E-mail | Resend | Boas-vindas e avisos de renovação |
 | Agenda | Google Calendar API | Eventos, sala do Meet e horários ocupados |
 | Hospedagem | Vercel | Deploy a cada push em `main` e cron diário |
@@ -35,7 +35,6 @@ src/
 └── lib/                    # Regras de negócio e integrações (sem tela)
     ├── auth.ts             # Valida o token no servidor, papel (nutri/cliente)
     ├── planos.ts           # Fonte única de preços e parcelas
-    ├── asaas.ts            # Cliente da API do Asaas
     ├── cupons.ts, renovacao.ts, parcelado.ts, assinatura.ts
     ├── googleAgenda.ts, agendaSync.ts   # Integração com a agenda
     ├── email.ts, termos.ts, tokenCompra.ts, rateLimit.ts
@@ -71,8 +70,7 @@ docs/                       # Documentação e evidências de cada etapa
 | `curso_estrutura`, `materiais_aulas` | Módulos, aulas e materiais |
 | `faturas` | Cobranças (Pix, cartão, parcelas) |
 | `cupons` | Código, percentual (1–99%), validade e limite de uso |
-| `cartoes_salvos` | Token do cartão (nunca o número) para a renovação |
-| `asaas_eventos` | Eventos de webhook já processados (evita duplicidade) |
+| `gateway_eventos` | Avisos do provedor de pagamento já processados (evita duplicidade) |
 | `aceites_termos` | Trilha de auditoria do aceite (versão, data, IP, navegador) |
 | `google_integracao` | Conexão com o Google da nutricionista (token só no servidor) |
 
@@ -85,8 +83,8 @@ As alterações do esquema estão em `supabase/migrations/` (aplicadas em ordem)
 | Conta | `POST /api/auth/login`, `/refresh`, `/logout`, `/forgot-password`, `/update-password`, `/criar-senha-compra`; `GET /api/auth/me`, `/google`, `/google/callback` | Público ou logado |
 | Cliente | `GET·POST /api/anamnese`, `/diario`, `/agendamentos`, `/chat`; `GET·PUT /api/configuracoes`; `GET·POST /api/termos`; `GET·PATCH /api/devolutivas`; `GET /api/cursos` | Cliente (só os próprios dados; a nutricionista também acessa) |
 | Nutricionista | `GET·POST /api/nutri`; `GET·POST·DELETE /api/nutri/google`; `POST /api/cursos`; `POST·PATCH·DELETE /api/cupons` | Nutricionista |
-| Pagamento | `POST /api/asaas/subscription`, `/cancel`; `GET /api/asaas/pagamento-status`; `GET /api/cupons?codigo=` (validar cupom) | Público (checkout) ou logado |
-| Integrações | `POST /api/asaas/webhook` (token no cabeçalho); `GET /api/cron/renovacoes` (segredo); `GET·POST /api/google-calendar/events` | Sistemas externos |
+| Pagamento | `POST /api/pagamentos/assinatura`, `/cancelar`; `GET /api/pagamentos/status`; `GET /api/cupons?codigo=` (validar cupom) | Público (checkout) ou logado |
+| Integrações | `GET /api/cron/renovacoes` (segredo); `GET·POST /api/google-calendar/events`; o aviso de pagamento do provedor entrará em `/api/pagamentos/webhook` | Sistemas externos |
 
 ## 7. Fluxos principais
 
@@ -95,9 +93,9 @@ As alterações do esquema estão em `supabase/migrations/` (aplicadas em ordem)
 ```mermaid
 sequenceDiagram
     participant F as Família (navegador)
-    participant A as API (/api/asaas/subscription)
-    participant S as Asaas
-    participant W as Webhook (/api/asaas/webhook)
+    participant A as API (/api/pagamentos/assinatura)
+    participant S as Mercado Pago
+    participant W as Aviso de pagamento (webhook)
     participant D as Supabase
     F->>A: dados + plano + cupom + aceite
     A->>A: recalcula o preço no servidor (lib/planos.ts)
@@ -112,8 +110,8 @@ sequenceDiagram
     A-->>F: pago → criar senha e entrar
 ```
 
-### 7.2 Renovação automática
-O Vercel chama `GET /api/cron/renovacoes` todo dia às 12:00 UTC. A rota exige o segredo do cron, avisa por e-mail 7 dias antes e, no vencimento, cobra de novo no cartão salvo. São 3 tentativas; sem sucesso, o acesso é suspenso. A cobrança do dia é "reservada" antes de ser feita, para nunca cobrar duas vezes.
+### 7.2 Renovação
+O Vercel chama `GET /api/cron/renovacoes` todo dia às 12:00 UTC (a rota exige o segredo do cron). Modelo definido para o Mercado Pago: **cartão à vista** renova por assinatura do próprio Mercado Pago; **Pix e compra parcelada** recebem por e-mail, 7 dias antes, o link para renovar (nada é cobrado sem a ação da pessoa). Enquanto a integração não entra no ar, a rotina só alinha o status de quem está atrasado além da carência.
 
 ### 7.3 Agendamento sincronizado com a agenda da nutricionista
 A nutricionista conecta o Google no painel. Ao marcar uma consulta, a API cria o evento com a sala do Meet e o convite para a família, e os horários que ela já tem ocupados deixam de ser oferecidos. Um índice único no banco impede duas famílias no mesmo horário.
@@ -126,8 +124,8 @@ A nutricionista conecta o Google no painel. Ao marcar uma consulta, a API cria o
 | **Supabase** (Postgres + Auth) | Login, banco e e-mail de convite prontos; plano gratuito | Prisma + PostgreSQL próprio (previsto na proposta) |
 | **Acesso ao banco só pelo servidor** | Evita regras de acesso no navegador e vazamento de dados de saúde | Consultas diretas do navegador com RLS |
 | **Preço sempre calculado no servidor** (`lib/planos.ts`) | O navegador nunca define quanto será cobrado | Enviar o valor do front |
-| **Asaas** como gateway | Pix e cartão parcelado/recorrente em um só provedor | Hotmart (previsto na proposta), Mercado Pago |
-| **Webhook idempotente** (`asaas_eventos`) | Avisos podem chegar repetidos ou fora de ordem | Processar cada aviso sem registro |
+| **Mercado Pago** como provedor de pagamento | Pix, cartão e assinatura recorrente; estorno sem perda da taxa a confirmar na prática | Asaas (usado nos testes e removido), Hotmart (previsto na proposta) |
+| **Aviso de pagamento idempotente** (`gateway_eventos`) | Avisos podem chegar repetidos ou fora de ordem | Processar cada aviso sem registro |
 | **Token JWT validado no servidor** | Sessão revogável e papéis confiáveis | Sessão por cookie (previsto na proposta) |
 | **Token do cartão em tabela separada** | Nunca guardamos número ou CVV | Guardar dados do cartão |
 | **Regras puras em `lib/` e `validation.ts`** | Podem ser testadas sem tela nem banco | Regras dentro dos componentes |
@@ -138,7 +136,7 @@ A nutricionista conecta o Google no painel. Ao marcar uma consulta, a API cria o
 | Proposta | Hoje | Por quê |
 |---|---|---|
 | Prisma + PostgreSQL | Supabase (`supabase-js`) com migrações SQL | Menos infraestrutura; login e banco no mesmo serviço |
-| Hotmart (webhook cria o usuário) | Checkout próprio com Asaas | Controle do fluxo, Pix e parcelamento |
+| Hotmart (webhook cria o usuário) | Checkout próprio com Mercado Pago | Controle do fluxo, Pix e parcelamento |
 | Sessão por cookies | JWT (Bearer) validado no servidor | Revogação de sessão e rotas de API simples |
 | Dados simulados | Dados reais com persistência | Evolução do projeto |
 

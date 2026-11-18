@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const { data: fatura } = await admin
       .from("faturas")
       .select("status, user_email")
-      .eq("asaas_payment_id", chave.paymentId)
+      .eq("gateway_pagamento_id", chave.paymentId)
       .maybeSingle();
     if (!fatura || fatura.user_email !== chave.email) return erro("Pagamento não encontrado.", 404);
     if (fatura.status !== "Pago") return erro("O pagamento ainda não foi confirmado. Aguarde alguns instantes.", 409);

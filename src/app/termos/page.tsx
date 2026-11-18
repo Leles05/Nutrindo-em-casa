@@ -52,10 +52,10 @@ const SECOES: Secao[] = [
       "Há três planos: Mensal (ciclo de 1 mês), Trimestral (3 meses) e Anual (12 meses). Os preços vigentes, em reais, são exibidos no momento da contratação e prevalecem sobre qualquer valor divulgado anteriormente.",
     ],
     itens: [
-      "Pix: pagamento à vista. A cobrança do ciclo seguinte é gerada automaticamente e enviada ao seu e-mail;",
-      "Cartão de crédito: à vista ou parcelado sem juros, nas quantidades de parcelas oferecidas para cada plano. No parcelamento, o valor total da compra é aprovado de uma só vez no limite do cartão e dividido na fatura conforme as regras da sua operadora;",
+      "Pix: pagamento à vista. Antes do fim do ciclo, enviamos ao seu e-mail a cobrança do ciclo seguinte;",
+      "Cartão de crédito: à vista ou, na primeira compra, parcelado sem juros nas quantidades oferecidas para cada plano. No parcelamento, o valor total da compra é aprovado de uma só vez no limite do cartão e dividido na fatura conforme as regras da sua operadora;",
       "Cupons de desconto são pessoais, têm validade e limite de uso, não são acumulativos e valem apenas para a compra em que foram aplicados. As renovações seguem o preço de tabela vigente do plano;",
-      "Os pagamentos são processados pelo Asaas, instituição de pagamento. O Nutrindo em Casa não armazena o número completo nem o código de segurança (CVV) do seu cartão; guardamos apenas um identificador seguro (token) fornecido pelo processador, usado exclusivamente para a renovação da sua assinatura.",
+      "Os pagamentos são processados pelo Mercado Pago, instituição de pagamento. Os dados do cartão são informados diretamente ao Mercado Pago, em campos do próprio provedor: o Nutrindo em Casa não recebe nem armazena o número do cartão nem o código de segurança (CVV).",
     ],
   },
   {
@@ -65,9 +65,9 @@ const SECOES: Secao[] = [
       "Ao final de cada ciclo, a assinatura é renovada automaticamente, pelo mesmo plano e pelo preço de tabela então vigente, para garantir a continuidade do acompanhamento.",
     ],
     itens: [
-      "Cartão de crédito: a nova cobrança é feita no mesmo cartão usado na contratação, parcelada na mesma quantidade de parcelas escolhida originalmente. Enviamos um aviso por e-mail 7 dias antes da renovação;",
-      "Pix: o Asaas gera a cobrança do novo ciclo e a envia ao seu e-mail, para pagamento até o vencimento;",
-      "Se a cobrança no cartão não for aprovada, tentamos novamente nos dias seguintes (até 3 tentativas) e avisamos por e-mail. Sem sucesso, o acesso é suspenso até a regularização, que pode ser feita com uma nova assinatura;",
+      "Cartão de crédito à vista: a nova cobrança é feita automaticamente no mesmo cartão, pelo Mercado Pago, e enviamos um aviso por e-mail 7 dias antes da renovação;",
+      "Pix e compra parcelada: 7 dias antes do fim do ciclo enviamos ao seu e-mail o link para renovar. Nada é cobrado sem que você faça o pagamento;",
+      "Se a cobrança automática no cartão não for aprovada, o Mercado Pago poderá tentar novamente nos dias seguintes e avisaremos por e-mail. Sem sucesso, o acesso é suspenso até a regularização, que pode ser feita com uma nova assinatura;",
       "Alterações de preço serão comunicadas por e-mail com antecedência mínima de 30 dias da renovação, e você poderá cancelar antes de ser cobrado(a).",
     ],
   },

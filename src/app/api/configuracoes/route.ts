@@ -106,16 +106,8 @@ export async function GET(request: Request) {
         }
       : null;
 
-    // Cartão usado na compra (somente final e bandeira; o token nunca sai do servidor)
-    let cartao: { ultimos4: string | null; bandeira: string | null } | null = null;
-    if (profile) {
-      const { data: cs } = await supabaseAdmin
-        .from("cartoes_salvos")
-        .select("ultimos4, bandeira")
-        .eq("user_email", email)
-        .maybeSingle();
-      if (cs) cartao = cs as { ultimos4: string | null; bandeira: string | null };
-    }
+    // O cartão nunca é guardado por nós (o provedor de pagamento cuida disso)
+    const cartao: { ultimos4: string | null; bandeira: string | null } | null = null;
 
     return NextResponse.json({
       success: true,

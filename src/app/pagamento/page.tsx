@@ -109,7 +109,7 @@ function ConteudoCheckout() {
     }
   }, [ehUpgrade]);
 
-  // Estado do Pix Asaas Real
+  // Estado do Pix
   const [pixCarregando, setPixCarregando] = useState(false);
   const [pixDados, setPixDados] = useState<{
     encodedImage?: string;
@@ -279,9 +279,9 @@ function ConteudoCheckout() {
     : Math.max(0, planoAtivo.precoCobradoTotal - descontoCupomValor);
 
   // =========================================================================
-  // INTEGRAÇÃO REAL COM A API DO ASAAS (PIX)
+  // PIX
   // =========================================================================
-  const gerarPixAsaas = useCallback(async () => {
+  const gerarPix = useCallback(async () => {
     setPixCarregando(true);
     setPixErro("");
 
@@ -303,7 +303,7 @@ function ConteudoCheckout() {
         localStorage.removeItem("nutrindo_anamnese_rascunho");
       }
 
-      const res = await fetch("/api/asaas/subscription", {
+      const res = await fetch("/api/pagamentos/assinatura", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -323,7 +323,7 @@ function ConteudoCheckout() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Erro ao gerar QR Code Pix no Asaas.");
+        throw new Error(data.message || "Erro ao gerar o QR Code Pix.");
       }
 
       setPixDados({
@@ -345,7 +345,7 @@ function ConteudoCheckout() {
         localStorage.setItem("nutrindo_user_nome", nomeEnvio);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao conectar com o Asaas.";
+      const msg = err instanceof Error ? err.message : "Erro ao conectar com o servidor de pagamentos.";
       setPixErro(msg);
     } finally {
       setPixCarregando(false);
@@ -357,7 +357,7 @@ function ConteudoCheckout() {
     setPixDados(null);
   }, [planoSelecionado]);
 
-  // Pix: consulta o servidor a cada 4 s até o pagamento ser confirmado (o webhook do Asaas marca a fatura como paga)
+  // Pix: consulta o servidor a cada 4 s até o pagamento ser confirmado (o aviso do provedor de pagamento marca a fatura como paga)
   const [pixPago, setPixPago] = useState(false);
   const paymentIdPix = pixDados?.paymentId;
   useEffect(() => {
@@ -365,7 +365,7 @@ function ConteudoCheckout() {
     let ativo = true;
     const consultar = async () => {
       try {
-        const res = await fetch(`/api/asaas/pagamento-status?id=${encodeURIComponent(paymentIdPix)}`, { cache: "no-store" });
+        const res = await fetch(`/api/pagamentos/status?id=${encodeURIComponent(paymentIdPix)}`, { cache: "no-store" });
         const json = await res.json();
         if (ativo && json?.pago) {
           setPixPago(true);
@@ -585,7 +585,7 @@ function ConteudoCheckout() {
       novosErros.cpf = "CPF inválido. Digite os 11 dígitos.";
     }
 
-    // 6. Endereço de cobrança do titular (exigido pelo Asaas/antifraude)
+    // 6. Endereço de cobrança do titular (exigido pelo provedor de pagamento/antifraude)
     if (cartaoCep.replace(/\D/g, "").length !== 8) {
       novosErros.cep = "Informe o CEP com 8 dígitos.";
     }
@@ -627,7 +627,7 @@ function ConteudoCheckout() {
     }`;
 
   // =========================================================================
-  // FINALIZAÇÃO DE ASSINATURA (CONEXÃO REAL ASAAS SANDBOX)
+  // FINALIZAÇÃO DE ASSINATURA
   // =========================================================================
   const handleFinalizarAssinatura = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -664,13 +664,13 @@ function ConteudoCheckout() {
     if (metodoPagamento === "pix") {
       if (!pixDados?.encodedImage) {
         setProcessando(true);
-        await gerarPixAsaas();
+        await gerarPix();
         setProcessando(false);
       }
       return;
     }
 
-    // Fluxo do Cartão de Crédito Real via Asaas
+    // Fluxo do cartão de crédito
     if (metodoPagamento === "credito") {
       // Validação local campo a campo
       const formValido = validarFormularioCartao();
@@ -701,7 +701,7 @@ function ConteudoCheckout() {
           localStorage.removeItem("nutrindo_anamnese_rascunho");
         }
 
-        const res = await fetch("/api/asaas/subscription", {
+        const res = await fetch("/api/pagamentos/assinatura", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -734,7 +734,7 @@ function ConteudoCheckout() {
         if (!res.ok || !data.success) {
           setErroForm(
             data.message ||
-            "Não foi possível autorizar o cartão no Asaas. Verifique os dados ou utilize o Pix."
+            "Não foi possível autorizar o cartão. Verifique os dados ou utilize o Pix."
           );
           setProcessando(false);
           return;
@@ -1208,11 +1208,11 @@ function ConteudoCheckout() {
                   3. Método de Pagamento
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Cobrança oficial processada de forma segura via Asaas Pagamentos.
+                  Cobrança processada de forma segura pelo Mercado Pago.
                 </p>
               </div>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3" /> Asaas Oficial
+                <ShieldCheck className="h-3 w-3" /> Mercado Pago
               </span>
             </div>
 
@@ -1253,7 +1253,7 @@ function ConteudoCheckout() {
               </div>
             )}
 
-            {/* ABA 1: CARTÃO DE CRÉDITO COM PROCESSAMENTO REAL NO ASAAS E VALIDAÇÃO LOCAL */}
+            {/* ABA 1: CARTÃO DE CRÉDITO COM VALIDAÇÃO LOCAL */}
             {metodoPagamento === "credito" && (
               <form
                 onSubmit={handleFinalizarAssinatura}
@@ -1481,7 +1481,7 @@ function ConteudoCheckout() {
               </form>
             )}
 
-            {/* ABA 2: PIX INSTANTÂNEO COM FLUXO REAL DO ASAAS */}
+            {/* ABA 2: PIX INSTANTÂNEO COM QR CODE */}
             {metodoPagamento === "pix" && (
               <div className="space-y-5 animate-in fade-in duration-200">
                 {/* ESTADO 1: ANTES DE GERAR O PIX (CARD INFORMATIVO LIMPO) */}
@@ -1496,7 +1496,7 @@ function ConteudoCheckout() {
                           Liberação Imediata via PIX
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">
-                          Pagamento instantâneo e seguro processado pelo Asaas
+                          Pagamento instantâneo e seguro processado pelo Mercado Pago
                         </p>
                       </div>
                     </div>
@@ -1532,7 +1532,7 @@ function ConteudoCheckout() {
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Gateway Asaas Pagamentos
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Mercado Pago
                       </span>
                     </div>
                   </div>
@@ -1543,10 +1543,10 @@ function ConteudoCheckout() {
                   <div className="flex flex-col items-center justify-center space-y-3 p-10 bg-slate-50 rounded-2xl border border-slate-200">
                     <Loader2 className="h-10 w-10 animate-spin text-[#4C6C54]" />
                     <span className="text-sm font-extrabold text-slate-800">
-                      Gerando seu QR Code PIX oficial no Asaas...
+                      Gerando seu QR Code Pix...
                     </span>
                     <span className="text-xs text-slate-500 font-medium">
-                      Conectando com o gateway seguro Asaas Pagamentos
+                      Conectando com o ambiente seguro de pagamento
                     </span>
                   </div>
                 )}
@@ -1570,7 +1570,7 @@ function ConteudoCheckout() {
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-md">
                         <img
                           src={pixDados.encodedImage.startsWith("data:") ? pixDados.encodedImage : `data:image/png;base64,${pixDados.encodedImage}`}
-                          alt="QR Code Pix Asaas"
+                          alt="QR Code Pix"
                           className="w-48 h-48 sm:w-52 sm:h-52 rounded-lg object-contain"
                         />
                       </div>
@@ -1580,7 +1580,7 @@ function ConteudoCheckout() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => gerarPixAsaas()}
+                          onClick={() => gerarPix()}
                           title="Atualizar QR Code"
                           className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
                         >
@@ -1625,7 +1625,7 @@ function ConteudoCheckout() {
                       </div>
                     </div>
 
-                    {/* O acesso é liberado automaticamente quando o Asaas confirma o pagamento */}
+                    {/* O acesso é liberado automaticamente quando o pagamento é confirmado */}
                     <div className="w-full p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold leading-relaxed mt-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 inline mr-1.5 -mt-0.5" />
                       Assim que o pagamento do Pix for confirmado (costuma levar poucos segundos), enviaremos para o seu e-mail o link para criar sua senha e acessar a plataforma. Confira também o spam.
@@ -1780,7 +1780,7 @@ function ConteudoCheckout() {
                 {processando ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin text-white" />
-                    <span>Processando cobrança segura no Asaas...</span>
+                    <span>Processando cobrança segura...</span>
                   </>
                 ) : (
                   <>
@@ -1841,7 +1841,7 @@ function ConteudoCheckout() {
                 <div>
                   <strong className="text-slate-800 block text-xs">Transação Criptografada SSL 256 bits</strong>
                   <span className="text-slate-500 text-[11px] leading-relaxed block">
-                    Dados blindados e processados diretamente pela infraestrutura bancária autorizada do Asaas.
+                    Dados blindados e processados diretamente pela infraestrutura de pagamento autorizada do Mercado Pago.
                   </span>
                 </div>
               </div>
@@ -1869,7 +1869,7 @@ function ConteudoCheckout() {
         </div>
       </main>
 
-      {/* MODAL DE CELEBRAÇÃO / SUCESSO ASAAS */}
+      {/* MODAL DE CELEBRAÇÃO / SUCESSO */}
       {modalSucesso && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
@@ -1879,7 +1879,7 @@ function ConteudoCheckout() {
 
             <div>
               <span className="text-xs font-extrabold uppercase text-emerald-600 tracking-wider">
-                {ehUpgrade ? "Upgrade Concluído via Asaas! 🚀" : "Assinatura Confirmada via Asaas! 🎉"}
+                {ehUpgrade ? "Upgrade Concluído! 🚀" : "Assinatura Confirmada! 🎉"}
               </span>
               <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
                 {ehUpgrade ? "Plano Anual Ativado!" : "Bem-vindo(a) ao Nutrindo em Casa!"}
@@ -1888,9 +1888,9 @@ function ConteudoCheckout() {
                 {metodoPagamento === "pix"
                   ? pixPago
                     ? "Pagamento do Pix confirmado! Seu acesso foi liberado."
-                    : "Sua cobrança Pix foi registrada com sucesso no Asaas. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
+                    : "Sua cobrança Pix foi registrada com sucesso. Assim que o pagamento for compensado, o acesso completo será liberado automaticamente."
                   : ehUpgrade
-                    ? "Sua assinatura foi atualizada para o Plano Anual no Asaas. O crédito proporcional de R$ 177,30 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
+                    ? "Sua assinatura foi atualizada para o Plano Anual. O crédito proporcional de R$ 177,30 foi aplicado e seu acompanhamento estendido até Setembro de 2027!"
                     : `Seu acesso ao ${planoAtivo.nome} foi liberado com sucesso. Todos os recursos, anamnese e ferramentas já estão disponíveis.`}
               </p>
             </div>
@@ -1922,7 +1922,7 @@ function ConteudoCheckout() {
               )}
               {idAssinaturaGerada && (
                 <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
-                  <span className="text-slate-500">ID da Assinatura Asaas:</span>
+                  <span className="text-slate-500">ID da assinatura:</span>
                   <span className="font-mono text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-bold">
                     {idAssinaturaGerada}
                   </span>

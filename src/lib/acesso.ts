@@ -18,7 +18,7 @@ export async function liberarAcessoPosPagamento(
   email: string,
   nome: string
 ): Promise<{ enviado: boolean; motivo?: string }> {
-  // Um único e-mail por compra: o checkout e os avisos do Asaas (CONFIRMED + RECEIVED) chegam quase juntos
+  // Um único e-mail por compra: o checkout e os avisos do provedor de pagamento (confirmação e recebimento) chegam quase juntos
   // e, para quem ainda não criou a senha, o Supabase reenviaria o convite a cada chamada.
   // A "reserva" é atômica: só quem consegue marcar o envio manda o e-mail (intervalo mínimo de 30 min).
   let reservado = false;

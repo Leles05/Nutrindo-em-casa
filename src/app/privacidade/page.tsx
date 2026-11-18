@@ -71,7 +71,7 @@ export default function PaginaPrivacidade() {
             </p>
             <ul className="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5 leading-relaxed">
               <li>
-                <strong>Dados dos Responsáveis:</strong> Nome completo, e-mail, telefone/WhatsApp, CPF (exigido para emissão de recibos e faturas legais) e dados de cobrança (forma de pagamento, valores e histórico de faturas) processados pelo gateway de pagamentos Asaas.
+                <strong>Dados dos Responsáveis:</strong> Nome completo, e-mail, telefone/WhatsApp, CPF (exigido para emissão de recibos e faturas legais) e dados de cobrança (forma de pagamento, valores e histórico de faturas) processados pelo Mercado Pago.
               </li>
               <li>
                 <strong>Dados Pediátricos Sensíveis da Criança:</strong> Nome da criança, idade, data de nascimento, histórico alimentar, anamnese clínica de 56 parâmetros (rotina de mastigação, tolerâncias texturais, aversões sensoriais, seletividade alimentar) e registros diários de refeições.
@@ -119,7 +119,7 @@ export default function PaginaPrivacidade() {
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="text-xs text-slate-700">Pagamentos processados pelo Asaas. Não armazenamos o número completo nem o CVV do cartão: guardamos apenas um identificador seguro (token) fornecido pelo processador.</span>
+                <span className="text-xs text-slate-700">Pagamentos processados pelo Mercado Pago. Os dados do cartão são informados diretamente ao provedor: não recebemos nem armazenamos o número completo nem o CVV do cartão.</span>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -153,7 +153,7 @@ export default function PaginaPrivacidade() {
               <span>5. Pagamentos e Cartão de Crédito</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Os dados do cartão são enviados ao Asaas apenas para autorizar a cobrança e não ficam armazenados em nossos bancos de dados. Para possibilitar a <strong>renovação automática</strong> da assinatura, o Asaas devolve um identificador seguro do cartão (token), que guardamos separadamente, com acesso restrito ao servidor, junto com a bandeira, os 4 últimos dígitos e o IP da contratação. Esse token só pode ser usado por nós para cobrar a sua assinatura e deixa de ser usado quando você cancela.
+              Os dados do cartão são informados diretamente ao Mercado Pago, em campos do próprio provedor, e não passam nem ficam armazenados em nossos servidores ou bancos de dados. A <strong>renovação automática</strong> no cartão é feita pelo Mercado Pago a partir da autorização que você dá na contratação, e deixa de acontecer quando você cancela.
             </p>
           </div>
 
@@ -167,7 +167,7 @@ export default function PaginaPrivacidade() {
               Para operar a plataforma contamos com prestadores que tratam dados em nosso nome, sob contrato e somente para as finalidades descritas aqui:
             </p>
             <ul className="text-xs sm:text-sm text-slate-600 space-y-1.5 list-disc pl-5 leading-relaxed">
-              <li><strong>Asaas:</strong> processamento de pagamentos e emissão de cobranças;</li>
+              <li><strong>Mercado Pago:</strong> processamento de pagamentos (Pix e cartão) e cobranças recorrentes;</li>
               <li><strong>Supabase:</strong> banco de dados e autenticação;</li>
               <li><strong>Vercel:</strong> hospedagem da aplicação;</li>
               <li><strong>Resend:</strong> envio de e-mails (acesso, avisos de renovação e cobrança);</li>

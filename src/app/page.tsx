@@ -624,7 +624,7 @@ export default function PaginaInicialLanding() {
               Escolha o plano ideal para a sua família
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
-              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado sem juros. Pagamentos seguros processados pelo Asaas.
+              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado sem juros. Pagamentos seguros processados pelo Mercado Pago.
             </p>
           </div>
 
@@ -845,7 +845,7 @@ export default function PaginaInicialLanding() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>Ambiente Seguro com tecnologia Asaas e Panda Video. Proteção integral de dados LGPD.</span>
+              <span>Ambiente Seguro com tecnologia Mercado Pago e Panda Video. Proteção integral de dados LGPD.</span>
             </div>
             <span>© {new Date().getFullYear()} Nutrindo em Casa. Suporte: (41) 98492-6020</span>
           </div>

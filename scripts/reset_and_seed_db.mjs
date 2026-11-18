@@ -247,14 +247,14 @@ async function main() {
   const { error: faturaErr } = await supabase.from("faturas").upsert(
     {
       user_email: emailLucas,
-      asaas_payment_id: "pay_lucas_trimestral_01",
+      gateway_pagamento_id: "pay_lucas_trimestral_01",
       descricao: "Assinatura Nutrindo em Casa - Plano Trimestral",
       valor: 239.70,
       forma_pagamento: "CREDIT_CARD",
       status: "CONFIRMED",
       data_emissao: new Date().toISOString(),
     },
-    { onConflict: "asaas_payment_id" }
+    { onConflict: "gateway_pagamento_id" }
   );
 
   if (faturaErr) {

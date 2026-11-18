@@ -13,9 +13,8 @@ export const PLANOS: Record<Plano, { ciclo: "MONTHLY" | "QUARTERLY" | "YEARLY"; 
 /** Crédito aplicado ao migrar do Trimestral para o Anual (mesmo valor exibido na tela de upgrade). */
 export const CREDITO_UPGRADE_TRIMESTRAL_PARA_ANUAL = 177.3;
 
-/** Valor mínimo de cobrança aceito pelo Asaas. */
-// O Asaas (conta oficial) recusa cobranças abaixo de R$ 10,00 ("não pode ser menor que R$ 10,00")
-export const VALOR_MINIMO_ASAAS = 10.0;
+/** Valor mínimo de cobrança. Revisar com o mínimo exigido pelo provedor de pagamento em uso. */
+export const VALOR_MINIMO_COBRANCA = 10.0;
 
 export function ehPlano(valor: unknown): valor is Plano {
   return valor === "mensal" || valor === "trimestral" || valor === "anual";
@@ -45,7 +44,7 @@ export const PARCELAS_PERMITIDAS: Record<Plano, number[]> = {
 /** Duração de cada plano em meses = intervalo até a renovação. */
 export const MESES_DO_PLANO: Record<Plano, number> = { mensal: 1, trimestral: 3, anual: 12 };
 
-/** Valor mínimo de cada parcela aceito pelo Asaas. */
+/** Valor mínimo de cada parcela. */
 export const VALOR_MINIMO_PARCELA = 5.0;
 
 /** Valida a quantidade de parcelas pedida; devolve null se não for permitida para o plano/valor. */

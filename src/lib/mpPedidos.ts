@@ -1,0 +1,93 @@
+import { randomUUID } from "crypto";
+import { mpFetch, type ConfigMP, type RespostaMP } from "@/lib/mercadopago";
+import { PLANOS, type Plano } from "@/lib/planos";
+
+export * from "@/lib/mpPayloads";
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- respostas JSON da API do Mercado Pago */
+
+/**
+ * Montagem e envio dos pedidos ao Mercado Pago (Orders API + Assinaturas).
+ * As funções "montar*" são puras (testadas em tests/mpPedidos.test.ts). O cartão NUNCA passa por aqui:
+ * o navegador troca os dados do cartão por um token (MP.js) e só o token chega ao servidor.
+ */
+
+/**
+ * Cria o pedido. Se a rede falhar no meio, repete UMA vez com a MESMA chave de idempotência:
+ * o Mercado Pago devolve o pedido já criado em vez de cobrar duas vezes.
+ */
+export async function criarPedido(cfg: ConfigMP, corpo: unknown, opcoes: { deviceId?: string } = {}): Promise<RespostaMP> {
+  const idem = randomUUID();
+  const cabecalhos: Record<string, string> = {};
+  if (opcoes.deviceId && /^[A-Za-z0-9_-]{8,200}$/.test(opcoes.deviceId)) cabecalhos["X-meli-session-id"] = opcoes.deviceId;
+  try {
+    return await mpFetch(cfg, "POST", "/v1/orders", corpo, { idempotencia: idem, cabecalhos, timeoutMs: 30_000 });
+  } catch (primeira) {
+    console.warn("Mercado Pago: falha de rede ao criar pedido, repetindo com a mesma chave:", primeira);
+    return mpFetch(cfg, "POST", "/v1/orders", corpo, { idempotencia: idem, cabecalhos, timeoutMs: 30_000 });
+  }
+}
+
+export async function cancelarPedidoMP(cfg: ConfigMP, pedidoId: string): Promise<boolean> {
+  try {
+    const r = await mpFetch(cfg, "POST", `/v1/orders/${encodeURIComponent(pedidoId)}/cancel`, undefined, { idempotencia: randomUUID() });
+    return r.ok;
+  } catch (e) {
+    console.warn("Mercado Pago: falha ao cancelar pedido:", e);
+    return false;
+  }
+}
+
+/** Cancela a assinatura no Mercado Pago. Devolve true também se ela já estava cancelada. */
+export async function cancelarAssinaturaMP(cfg: ConfigMP, assinaturaId: string): Promise<boolean> {
+  try {
+    const r = await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, { status: "cancelled" });
+    if (r.ok) return true;
+    const atual = await mpFetch(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
+    return atual.ok && String(atual.data?.status || "").toLowerCase().startsWith("cancel");
+  } catch (e) {
+    console.warn("Mercado Pago: falha ao cancelar assinatura:", e);
+    return false;
+  }
+}
+
+/**
+ * Primeira cobrança de uma assinatura. Ela aparece alguns segundos depois de criada e só ganha o resultado do
+ * pagamento (aprovado/recusado) um pouco depois: espera até o resultado existir (no máximo ~16 s) e, se não vier,
+ * devolve o que houver (o aviso do Mercado Pago conclui depois).
+ */
+export async function primeiraCobrancaDaAssinatura(cfg: ConfigMP, assinaturaId: string, tentativas = 8): Promise<any | null> {
+  let ultima: any = null;
+  for (let i = 0; i < tentativas; i++) {
+    const r = await mpFetch(cfg, "GET", `/authorized_payments/search?preapproval_id=${encodeURIComponent(assinaturaId)}`);
+    const lista = r.ok && Array.isArray(r.data?.results) ? r.data.results : [];
+    if (lista.length > 0) {
+      ultima = lista[0];
+      if (ultima?.payment?.status) return ultima;
+    }
+    await new Promise((ok) => setTimeout(ok, 2000));
+  }
+  return ultima;
+}
+
+/**
+ * Garante que as renovações futuras sejam cobradas pelo preço de TABELA: o cupom (e o crédito do upgrade)
+ * vale só para a primeira cobrança. Só altera depois de a 1ª cobrança existir, para não mexer nela.
+ */
+export async function alinharValorAssinatura(cfg: ConfigMP, assinaturaId: string, plano: Plano): Promise<boolean> {
+  try {
+    const a = await mpFetch(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
+    if (!a.ok) return false;
+    const atual = Number(a.data?.auto_recurring?.transaction_amount);
+    const tabela = PLANOS[plano].valor;
+    if (Math.abs(atual - tabela) < 0.005) return true;
+    const r = await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, {
+      auto_recurring: { transaction_amount: tabela, currency_id: "BRL" },
+    });
+    if (!r.ok) console.error("ATENÇÃO: não foi possível ajustar a assinatura para o preço de tabela", assinaturaId, r.status);
+    return r.ok;
+  } catch (e) {
+    console.error("ATENÇÃO: falha ao ajustar o valor da assinatura:", e);
+    return false;
+  }
+}

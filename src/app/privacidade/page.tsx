@@ -119,7 +119,7 @@ export default function PaginaPrivacidade() {
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="text-xs text-slate-700">Pagamentos processados pelo Mercado Pago. Os dados do cartão são informados diretamente ao provedor: não recebemos nem armazenamos o número completo nem o CVV do cartão.</span>
+                <span className="text-xs text-slate-700">Pagamentos processados pelo Mercado Pago. Os dados do cartão viram um código seguro (token) no seu navegador, pelo Mercado Pago: não recebemos nem armazenamos o número do cartão nem o CVV.</span>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -153,7 +153,7 @@ export default function PaginaPrivacidade() {
               <span>5. Pagamentos e Cartão de Crédito</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Os dados do cartão são informados diretamente ao Mercado Pago, em campos do próprio provedor, e não passam nem ficam armazenados em nossos servidores ou bancos de dados. A <strong>renovação automática</strong> no cartão é feita pelo Mercado Pago a partir da autorização que você dá na contratação, e deixa de acontecer quando você cancela.
+              Os dados do cartão são convertidos em um código seguro (token) no seu navegador, pelo script do Mercado Pago, e não passam nem ficam armazenados em nossos servidores ou bancos de dados. Durante o pagamento, o Mercado Pago coleta dados do dispositivo (como identificador e navegador) para prevenção a fraudes. A <strong>renovação automática</strong> no cartão é feita pelo Mercado Pago a partir da autorização que você dá na contratação, e deixa de acontecer quando você cancela.
             </p>
           </div>
 

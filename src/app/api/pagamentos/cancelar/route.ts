@@ -3,6 +3,8 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 import { ehResposta, exigirUsuario } from "@/lib/auth";
 import { limitar } from "@/lib/rateLimit";
 import { MESES_DO_PLANO, ehPlano } from "@/lib/planos";
+import { configMP } from "@/lib/mercadopago";
+import { cancelarAssinaturaMP, cancelarPedidoMP } from "@/lib/mpPedidos";
 
 /**
  * Cancela a PRÓPRIA renovação: o acesso continua até o fim do período já pago (acesso_ate),
@@ -30,13 +32,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Nenhuma assinatura ativa encontrada." }, { status: 404 });
     }
 
-    // Assinatura com cobrança automática no provedor: só cancelamos aqui depois que o cancelamento
-    // no provedor estiver integrado (senão a cobrança continuaria sem o cliente saber).
+    // Cobrança automática no Mercado Pago: cancela LÁ primeiro. Se não conseguir, nada muda aqui
+    // (senão o cliente acharia que cancelou e continuaria sendo cobrado).
+    const cfg = configMP();
     if (perfil.gateway_assinatura_id) {
-      return NextResponse.json(
-        { success: false, message: "O cancelamento automático está sendo configurado. Escreva para contato@nutrindoemcasa.com.br." },
-        { status: 503 }
-      );
+      if (!cfg) {
+        return NextResponse.json({ success: false, message: "Serviço de pagamento indisponível. Tente novamente em instantes." }, { status: 503 });
+      }
+      const ok = await cancelarAssinaturaMP(cfg, perfil.gateway_assinatura_id);
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, message: "Não foi possível cancelar agora. Tente novamente em instantes ou escreva para contato@nutrindoemcasa.com.br." },
+          { status: 502 }
+        );
+      }
+    }
+
+    // Link de renovação por Pix já enviado e ainda não pago: cancela para não ficar cobrança em aberto
+    if (cfg) {
+      const { data: abertas } = await admin
+        .from("faturas")
+        .select("id, gateway_pagamento_id")
+        .eq("user_email", ctx.email)
+        .eq("status", "Pendente")
+        .like("descricao", "Renovação%");
+      for (const f of abertas || []) {
+        if (f.gateway_pagamento_id && (await cancelarPedidoMP(cfg, f.gateway_pagamento_id))) {
+          await admin.from("faturas").update({ status: "Cancelado" }).eq("id", f.id);
+        }
+      }
     }
 
     // Fim do período já pago = data da última fatura paga + duração do plano

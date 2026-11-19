@@ -13,8 +13,11 @@ export const PLANOS: Record<Plano, { ciclo: "MONTHLY" | "QUARTERLY" | "YEARLY"; 
 /** Crédito aplicado ao migrar do Trimestral para o Anual (mesmo valor exibido na tela de upgrade). */
 export const CREDITO_UPGRADE_TRIMESTRAL_PARA_ANUAL = 177.3;
 
-/** Valor mínimo de cobrança. Revisar com o mínimo exigido pelo provedor de pagamento em uso. */
-export const VALOR_MINIMO_COBRANCA = 10.0;
+/**
+ * Valor mínimo de cobrança. No Mercado Pago (testado): Pix aceita centavos, cartão a partir de R$ 0,50
+ * e assinatura a partir de R$ 1,00. Usamos R$ 1,00 para valer em todas as formas de pagamento.
+ */
+export const VALOR_MINIMO_COBRANCA = 1.0;
 
 export function ehPlano(valor: unknown): valor is Plano {
   return valor === "mensal" || valor === "trimestral" || valor === "anual";

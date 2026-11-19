@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import Script from "next/script";
 import { PARCELAS_PERMITIDAS } from "@/lib/planos";
 import { TERMOS_VERSAO } from "@/lib/termos";
 import {
@@ -32,14 +33,60 @@ interface DetalhesPlano {
 }
 
 interface ErrosCartao {
-  cep?: string;
-  numeroEnd?: string;
   numero?: string;
   nome?: string;
   validade?: string;
   cvv?: string;
   cpf?: string;
 }
+
+function luhnValido(numero: string): boolean {
+  let soma = 0;
+  let dobrar = false;
+  for (let i = numero.length - 1; i >= 0; i--) {
+    let d = parseInt(numero[i], 10);
+    if (dobrar) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    soma += d;
+    dobrar = !dobrar;
+  }
+  return soma % 10 === 0;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- SDK do Mercado Pago (MP.js) não tem tipos */
+const CHAVE_PUBLICA_MP = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+
+/** Troca os dados do cartão por um TOKEN no próprio navegador: número e CVV nunca chegam ao nosso servidor. */
+async function gerarTokenDoCartao(d: { numero: string; nome: string; mes: string; ano: string; cvv: string; cpf: string }) {
+  const w = window as any;
+  if (!CHAVE_PUBLICA_MP) throw new Error("O pagamento por cartão ainda não está disponível. Use o Pix ou tente novamente mais tarde.");
+  if (!w.MercadoPago) throw new Error("O ambiente seguro de pagamento ainda está carregando. Aguarde um instante e tente de novo.");
+  const msgPadrao = "Não foi possível validar o cartão. Confira os dados (número, validade e código) e tente novamente.";
+  try {
+    const mp = new w.MercadoPago(CHAVE_PUBLICA_MP, { locale: "pt-BR" });
+    const token = await mp.createCardToken({
+      cardNumber: d.numero,
+      cardholderName: d.nome,
+      cardExpirationMonth: d.mes,
+      cardExpirationYear: d.ano,
+      securityCode: d.cvv,
+      identificationType: "CPF",
+      identificationNumber: d.cpf,
+    });
+    if (!token?.id) throw new Error(msgPadrao);
+    const metodos = await mp.getPaymentMethods({ bin: d.numero.slice(0, 8) });
+    const metodo = metodos?.results?.[0]?.id;
+    if (!metodo) throw new Error("Não foi possível identificar a bandeira do cartão. Confira o número digitado.");
+    return { token: String(token.id), metodo: String(metodo), deviceId: String(w.MP_DEVICE_SESSION_ID || "") };
+  } catch (e) {
+    // o SDK rejeita com texto ou lista de erros (não com Error): nunca mostrar isso cru ao cliente
+    console.warn("MP.js:", typeof e === "string" ? e : e instanceof Error ? e.message : "erro ao gerar o token do cartão");
+    throw e instanceof Error ? e : new Error(msgPadrao);
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function ConteudoCheckout() {
   const router = useRouter();
@@ -88,8 +135,6 @@ function ConteudoCheckout() {
   const [cartaoValidade, setCartaoValidade] = useState("");
   const [cartaoCvv, setCartaoCvv] = useState("");
   const [cartaoCpf, setCartaoCpf] = useState("");
-  const [cartaoCep, setCartaoCep] = useState("");
-  const [cartaoNumeroEnd, setCartaoNumeroEnd] = useState("");
   const [parcelas, setParcelas] = useState(ehUpgrade ? "12" : "1");
 
   // Estado de erros individuais campo a campo
@@ -529,12 +574,12 @@ function ConteudoCheckout() {
   const validarFormularioCartao = (): boolean => {
     const novosErros: ErrosCartao = {};
 
-    // 1. Número do Cartão (16 dígitos numéricos)
+    // 1. Número do Cartão (13 a 19 dígitos, com verificação do dígito final)
     const numLimpo = cartaoNumero.replace(/\D/g, "");
     if (!numLimpo) {
       novosErros.numero = "Digite o número do cartão de crédito.";
-    } else if (numLimpo.length !== 16) {
-      novosErros.numero = "O número do cartão deve conter 16 dígitos.";
+    } else if (numLimpo.length < 13 || numLimpo.length > 19 || !luhnValido(numLimpo)) {
+      novosErros.numero = "Número de cartão inválido. Confira os dígitos.";
     }
 
     // 2. Nome do Titular (pelo menos duas palavras)
@@ -583,14 +628,6 @@ function ConteudoCheckout() {
       novosErros.cpf = "Informe o CPF do titular.";
     } else if (cpfLimpo.length !== 11 || /^(\d)\1{10}$/.test(cpfLimpo)) {
       novosErros.cpf = "CPF inválido. Digite os 11 dígitos.";
-    }
-
-    // 6. Endereço de cobrança do titular (exigido pelo provedor de pagamento/antifraude)
-    if (cartaoCep.replace(/\D/g, "").length !== 8) {
-      novosErros.cep = "Informe o CEP com 8 dígitos.";
-    }
-    if (!cartaoNumeroEnd.trim()) {
-      novosErros.numeroEnd = "Informe o número do endereço.";
     }
 
     setErrosCartao(novosErros);
@@ -679,8 +716,6 @@ function ConteudoCheckout() {
       }
 
       const numLimpo = cartaoNumero.replace(/\D/g, "");
-      const [expMonth, expYear] = cartaoValidade.split("/");
-
       setProcessando(true);
 
       try {
@@ -701,6 +736,17 @@ function ConteudoCheckout() {
           localStorage.removeItem("nutrindo_anamnese_rascunho");
         }
 
+        // Dados do cartão ficam só no navegador: o servidor recebe apenas o token
+        const [mesCartao, anoCartao] = cartaoValidade.split("/");
+        const dadosCartaoSeguro = await gerarTokenDoCartao({
+          numero: numLimpo,
+          nome: cartaoNome.trim(),
+          mes: mesCartao,
+          ano: `20${anoCartao}`,
+          cvv: cartaoCvv.trim(),
+          cpf: (cartaoCpf || clienteCpf).replace(/D/g, ""),
+        });
+
         const res = await fetch("/api/pagamentos/assinatura", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -716,16 +762,7 @@ function ConteudoCheckout() {
             origem: ehUpgrade ? "upgrade" : undefined,
             parcelas: Number(parcelas) || 1,
             cupom: cupomAplicado?.codigo,
-            cartao: {
-              holderName: cartaoNome,
-              number: numLimpo,
-              expiryMonth: expMonth,
-              expiryYear: expYear,
-              ccv: cartaoCvv,
-              cpf: cartaoCpf || clienteCpf,
-              cep: cartaoCep,
-              numeroEndereco: cartaoNumeroEnd,
-            }
+            cartao: dadosCartaoSeguro,
           })
         });
 
@@ -768,6 +805,8 @@ function ConteudoCheckout() {
 
   return (
     <div className="min-h-screen bg-[#F0EAE1] text-slate-800 font-sans pb-20">
+      {/* Ambiente seguro do Mercado Pago: gera o token do cartão no navegador */}
+      <Script src="https://sdk.mercadopago.com/js/v2" strategy="afterInteractive" />
       {/* HEADER DO CHECKOUT */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -1416,42 +1455,6 @@ function ConteudoCheckout() {
                       {errosCartao.cpf}
                     </span>
                   )}
-                </div>
-
-                {/* 4.1 ENDEREÇO DE COBRANÇA (CEP + NÚMERO) */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">CEP do Titular</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                      placeholder="00000-000"
-                      value={cartaoCep}
-                      onChange={(e) => {
-                        const d = e.target.value.replace(/\D/g, "").slice(0, 8);
-                        setCartaoCep(d.length > 5 ? d.slice(0, 5) + "-" + d.slice(5) : d);
-                        if (errosCartao.cep) setErrosCartao((prev) => ({ ...prev, cep: undefined }));
-                      }}
-                      className={getInputClass(!!errosCartao.cep)}
-                    />
-                    {errosCartao.cep && <span className="text-xs text-red-500 font-medium mt-1 block">{errosCartao.cep}</span>}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Número</label>
-                    <input
-                      type="text"
-                      autoComplete="off"
-                      placeholder="123"
-                      value={cartaoNumeroEnd}
-                      onChange={(e) => {
-                        setCartaoNumeroEnd(e.target.value.slice(0, 10));
-                        if (errosCartao.numeroEnd) setErrosCartao((prev) => ({ ...prev, numeroEnd: undefined }));
-                      }}
-                      className={getInputClass(!!errosCartao.numeroEnd)}
-                    />
-                    {errosCartao.numeroEnd && <span className="text-xs text-red-500 font-medium mt-1 block">{errosCartao.numeroEnd}</span>}
-                  </div>
                 </div>
 
                 {/* 5. OPÇÕES DE PARCELAMENTO */}

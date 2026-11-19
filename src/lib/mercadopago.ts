@@ -33,9 +33,10 @@ export async function mpFetch<T = Record<string, any>>(
   metodo: "GET" | "POST" | "PUT" | "DELETE",
   caminho: string,
   corpo?: unknown,
-  opcoes: { idempotencia?: string; timeoutMs?: number } = {}
+  opcoes: { idempotencia?: string; timeoutMs?: number; cabecalhos?: Record<string, string> } = {}
 ): Promise<RespostaMP<T>> {
   const headers: Record<string, string> = {
+    ...(opcoes.cabecalhos || {}),
     Authorization: `Bearer ${cfg.token}`,
     "Content-Type": "application/json",
     accept: "application/json",

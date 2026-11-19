@@ -13,11 +13,11 @@ Plataforma web de acompanhamento nutricional infantil: a família faz a assinatu
 | Interface | React 19, Next.js 16 (App Router), TypeScript, Tailwind CSS 4 | Páginas, estado e estilo |
 | Servidor | Rotas de API do Next.js (Node.js) | Endpoints REST em `src/app/api` |
 | Banco e login | Supabase (PostgreSQL + Auth) | Dados e identidade (JWT) |
-| Pagamentos | Mercado Pago (integração em andamento) | Pix, cartão (à vista; parcelado na primeira compra) e assinatura recorrente |
+| Pagamentos | Mercado Pago (Orders API, Assinaturas e MP.js) | Pix, cartão (à vista por assinatura recorrente; parcelado na primeira compra) e estorno |
 | E-mail | Resend | Boas-vindas e avisos de renovação |
 | Agenda | Google Calendar API | Eventos, sala do Meet e horários ocupados |
 | Hospedagem | Vercel | Deploy a cada push em `main` e cron diário |
-| Testes | `node:test` (Node.js) | Regras puras de validação e cálculo (`tests/`) |
+| Testes | `node:test` (Node.js) | Regras puras de validação, cálculo, pedidos ao Mercado Pago e renovação (`tests/`) |
 
 ## 3. Organização do código
 
@@ -84,34 +84,54 @@ As alterações do esquema estão em `supabase/migrations/` (aplicadas em ordem)
 | Cliente | `GET·POST /api/anamnese`, `/diario`, `/agendamentos`, `/chat`; `GET·PUT /api/configuracoes`; `GET·POST /api/termos`; `GET·PATCH /api/devolutivas`; `GET /api/cursos` | Cliente (só os próprios dados; a nutricionista também acessa) |
 | Nutricionista | `GET·POST /api/nutri`; `GET·POST·DELETE /api/nutri/google`; `POST /api/cursos`; `POST·PATCH·DELETE /api/cupons` | Nutricionista |
 | Pagamento | `POST /api/pagamentos/assinatura`, `/cancelar`; `GET /api/pagamentos/status`; `GET /api/cupons?codigo=` (validar cupom) | Público (checkout) ou logado |
-| Integrações | `GET /api/cron/renovacoes` (segredo); `GET·POST /api/google-calendar/events`; o aviso de pagamento do provedor entrará em `/api/pagamentos/webhook` | Sistemas externos |
+| Integrações | `GET /api/cron/renovacoes` (segredo); `GET·POST /api/google-calendar/events`; `POST /api/pagamentos/webhook` (aviso do Mercado Pago, com assinatura `x-signature`) | Sistemas externos |
 
 ## 7. Fluxos principais
 
 ### 7.1 Compra com Pix ou cartão
 
+Três modelos de cobrança, escolhidos no servidor conforme a forma de pagamento:
+
+| Forma | Como é cobrado | Renovação |
+|---|---|---|
+| Pix | Pedido (Orders API) à vista, com QR Code e "copia e cola" | Link de Pix enviado por e-mail 7 dias antes do vencimento |
+| Cartão à vista | **Assinatura** do Mercado Pago (cobra na hora e a cada ciclo) | Automática, pelo Mercado Pago; aviso por e-mail 7 dias antes |
+| Cartão parcelado (primeira compra) | Pedido (Orders API) em N parcelas sem juros | Link de Pix por e-mail, como no Pix |
+
 ```mermaid
 sequenceDiagram
     participant F as Família (navegador)
+    participant M as MP.js (Mercado Pago)
     participant A as API (/api/pagamentos/assinatura)
-    participant S as Mercado Pago
-    participant W as Aviso de pagamento (webhook)
+    participant S as Mercado Pago (API)
+    participant W as Aviso (webhook)
     participant D as Supabase
-    F->>A: dados + plano + cupom + aceite
+    F->>M: dados do cartão (só no navegador)
+    M-->>F: token do cartão + bandeira
+    F->>A: dados + plano + cupom + aceite + token
     A->>A: recalcula o preço no servidor (lib/planos.ts)
-    A->>S: cria assinatura / compra parcelada
-    S-->>A: cobrança (Pix: QR Code)
-    A->>D: grava perfil e fatura
-    A-->>F: QR Code (ou confirmação)
-    S->>W: pagamento confirmado
+    A->>S: cria pedido ou assinatura (chave de idempotência)
+    S-->>A: resultado (Pix: QR Code)
+    A->>D: grava perfil, fatura e aceite
+    A-->>F: QR Code ou confirmação
+    S->>W: pagamento confirmado (x-signature)
+    W->>S: consulta o estado real do pedido
     W->>D: fatura "Pago", perfil ATIVO
     W->>F: e-mail com o link de acesso
-    F->>A: consulta pagamento-status (a cada 4 s)
+    F->>A: consulta o status (a cada 4 s)
     A-->>F: pago → criar senha e entrar
 ```
 
-### 7.2 Renovação
-O Vercel chama `GET /api/cron/renovacoes` todo dia às 12:00 UTC (a rota exige o segredo do cron). Modelo definido para o Mercado Pago: **cartão à vista** renova por assinatura do próprio Mercado Pago; **Pix e compra parcelada** recebem por e-mail, 7 dias antes, o link para renovar (nada é cobrado sem a ação da pessoa). Enquanto a integração não entra no ar, a rotina só alinha o status de quem está atrasado além da carência.
+Pontos de segurança: o número do cartão e o CVV **nunca chegam ao servidor** (só o token gerado no navegador); o valor é sempre recalculado no servidor, incluindo cupom e crédito de upgrade; o cupom e o pedido são desfeitos se qualquer etapa falhar; o cupom vale só para a primeira cobrança (a assinatura é ajustada para o preço de tabela logo depois).
+
+### 7.2 Renovação, cancelamento e avisos do Mercado Pago
+O Vercel chama `GET /api/cron/renovacoes` todo dia às 12:00 UTC (a rota exige o segredo do cron):
+
+- **Pix e parcelado:** 7 dias antes do vencimento a rotina cria um Pix de renovação (preço de tabela, validade de 12 dias) e envia o link por e-mail, uma única vez por ciclo. Quando o Pix é pago, o aviso do Mercado Pago avança o ciclo. Nada é cobrado sem a ação da pessoa.
+- **Cartão à vista:** o Mercado Pago cobra sozinho; a rotina só envia o aviso de 7 dias antes.
+- **Atraso:** além de 5 dias de carência o cadastro passa a INADIMPLENTE (o acesso já é bloqueado em tempo real por `statusEfetivo`).
+- **Cancelamento** (`POST /api/pagamentos/cancelar`): cancela a assinatura **no Mercado Pago primeiro**; se não conseguir, nada muda no site. O acesso continua até o fim do período já pago e um Pix de renovação em aberto também é cancelado.
+- **Aviso (webhook):** `/api/pagamentos/webhook` valida a assinatura `x-signature` (HMAC-SHA256, janela de 5 minutos), consulta o Mercado Pago para saber o estado real, registra o aviso em `gateway_eventos` (sem processar duas vezes) e atualiza fatura e perfil. Um aviso atrasado nunca desfaz uma fatura paga. Cobrança recusada de renovação conta falhas (3 falhas = INADIMPLENTE, com e-mail).
 
 ### 7.3 Agendamento sincronizado com a agenda da nutricionista
 A nutricionista conecta o Google no painel. Ao marcar uma consulta, a API cria o evento com a sala do Meet e o convite para a família, e os horários que ela já tem ocupados deixam de ser oferecidos. Um índice único no banco impede duas famílias no mesmo horário.
@@ -127,7 +147,7 @@ A nutricionista conecta o Google no painel. Ao marcar uma consulta, a API cria o
 | **Mercado Pago** como provedor de pagamento | Pix, cartão e assinatura recorrente; estorno sem perda da taxa a confirmar na prática | Asaas (usado nos testes e removido), Hotmart (previsto na proposta) |
 | **Aviso de pagamento idempotente** (`gateway_eventos`) | Avisos podem chegar repetidos ou fora de ordem | Processar cada aviso sem registro |
 | **Token JWT validado no servidor** | Sessão revogável e papéis confiáveis | Sessão por cookie (previsto na proposta) |
-| **Token do cartão em tabela separada** | Nunca guardamos número ou CVV | Guardar dados do cartão |
+| **Token do cartão gerado no navegador** (MP.js) | Número e CVV nunca passam pelo nosso servidor nem ficam guardados | Enviar os dados do cartão ao servidor |
 | **Regras puras em `lib/` e `validation.ts`** | Podem ser testadas sem tela nem banco | Regras dentro dos componentes |
 | **Termos com versão e aceite auditável** | Prova de consentimento (dados de saúde de crianças) | Aceite só no cadastro |
 

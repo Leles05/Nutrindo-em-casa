@@ -4,7 +4,8 @@ import { podeAtualizarFatura, statusFaturaDaCobrancaAssinatura, statusFaturaDoPe
 import { liberarAcessoPosPagamento } from "@/lib/acesso";
 import { enviarEmail, montarEmail } from "@/lib/email";
 import { urlDoSite } from "@/lib/acesso";
-import { MESES_DO_PLANO, ehPlano } from "@/lib/planos";
+import { MESES_DO_PLANO, ehPlano, hojeSP, somarMeses, type Plano } from "@/lib/planos";
+import { alinharValorAssinatura, cancelarAssinaturaMP, ehRenovacao } from "@/lib/mpPedidos";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- respostas JSON da API do Mercado Pago */
 
@@ -21,14 +22,6 @@ async function acharFatura(admin: SupabaseClient, gatewayId: string, tentativas 
   return null;
 }
 
-async function cancelarAssinaturaNoMP(cfg: ConfigMP, assinaturaId: string) {
-  try {
-    await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, { status: "cancelled" });
-  } catch (err) {
-    console.warn("Aviso ao cancelar assinatura no Mercado Pago:", err);
-  }
-}
-
 /** Aviso de ORDEM (Pix ou cartão da compra inicial). Devolve uma descrição curta do que foi feito. */
 export async function processarPedido(admin: SupabaseClient, cfg: ConfigMP, orderId: string): Promise<string> {
   const r = await mpFetch<any>(cfg, "GET", `/v1/orders/${encodeURIComponent(orderId)}`);
@@ -40,21 +33,35 @@ export async function processarPedido(admin: SupabaseClient, cfg: ConfigMP, orde
   if (!fatura) throw new Error("Fatura da ordem ainda não gravada.");
   if (!podeAtualizarFatura(fatura.status, novo)) return "ignorado: aviso atrasado";
 
+  const antes = fatura.status;
   await admin.from("faturas").update({ status: novo }).eq("id", fatura.id);
 
   const { data: perfil } = await admin
     .from("profiles")
-    .select("email, nome, status_assinatura, gateway_assinatura_id")
+    .select("email, nome, plano, proxima_cobranca, status_assinatura, gateway_assinatura_id")
     .eq("email", fatura.user_email)
     .maybeSingle();
   if (!perfil) return `fatura ${novo} (sem perfil)`;
 
   if (novo === "Pago") {
-    await admin.from("profiles").update({ status_assinatura: "ATIVO" }).eq("email", perfil.email);
+    const plano = String(perfil.plano || "").toLowerCase();
+    const atualizacao: Record<string, unknown> = { status_assinatura: "ATIVO" };
+    if (antes !== "Pago" && ehPlano(plano)) {
+      if (ehRenovacao(ordem.external_reference) && perfil.proxima_cobranca) {
+        // renovação paga (link por e-mail): avança o ciclo a partir da data de renovação, sem "deriva"
+        let proxima = somarMeses(perfil.proxima_cobranca, MESES_DO_PLANO[plano as Plano]);
+        if (proxima <= hojeSP()) proxima = somarMeses(hojeSP(), MESES_DO_PLANO[plano as Plano]);
+        Object.assign(atualizacao, { proxima_cobranca: proxima, renovacao_falhas: 0, acesso_ate: null });
+      } else if (!ehRenovacao(ordem.external_reference)) {
+        // compra inicial: o ciclo conta a partir da confirmação do pagamento
+        atualizacao.proxima_cobranca = somarMeses(hojeSP(), MESES_DO_PLANO[plano as Plano]);
+      }
+    }
+    await admin.from("profiles").update(atualizacao).eq("email", perfil.email);
     await liberarAcessoPosPagamento(admin, perfil.email, perfil.nome || "");
   } else if (novo === "Estornado") {
     await admin.from("profiles").update({ status_assinatura: "CANCELADO", renovacao_automatica: false }).eq("email", perfil.email);
-    if (perfil.gateway_assinatura_id) await cancelarAssinaturaNoMP(cfg, perfil.gateway_assinatura_id);
+    if (perfil.gateway_assinatura_id) await cancelarAssinaturaMP(cfg, perfil.gateway_assinatura_id);
   }
   return `fatura ${novo}`;
 }
@@ -76,7 +83,19 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
   const novo = statusFaturaDaCobrancaAssinatura(cobranca.payment?.status);
   const valor = Number(cobranca.transaction_amount || 0);
 
-  const { data: existente } = await admin.from("faturas").select("id, status").eq("gateway_pagamento_id", pagamentoId).maybeSingle();
+  let { data: existente } = await admin.from("faturas").select("id, status").eq("gateway_pagamento_id", pagamentoId).maybeSingle();
+  if (!existente) {
+    // o checkout pode ter gravado uma fatura provisória (a 1ª cobrança ainda não existia): adota-a trocando o id pelo real
+    const { data: provisoria } = await admin
+      .from("faturas")
+      .select("id, status")
+      .eq("gateway_pagamento_id", `assinatura_${assinaturaId}`)
+      .maybeSingle();
+    if (provisoria) {
+      await admin.from("faturas").update({ gateway_pagamento_id: pagamentoId }).eq("id", provisoria.id);
+      existente = provisoria;
+    }
+  }
   if (existente) {
     if (!podeAtualizarFatura(existente.status, novo)) return "ignorado: aviso atrasado";
     await admin.from("faturas").update({ status: novo, valor }).eq("id", existente.id);
@@ -99,8 +118,12 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
     const proxima = a.ok && a.data?.next_payment_date ? String(a.data.next_payment_date).split("T")[0] : null;
     await admin
       .from("profiles")
-      .update({ status_assinatura: "ATIVO", renovacao_falhas: 0, ...(proxima ? { proxima_cobranca: proxima } : {}) })
+      .update({ status_assinatura: "ATIVO", renovacao_falhas: 0, acesso_ate: null, ...(proxima ? { proxima_cobranca: proxima } : {}) })
       .eq("email", perfil.email);
+    // renovações futuras pelo preço de tabela (cupom e crédito do upgrade valem só na 1ª cobrança)
+    const planoPerfil = String(perfil.plano || "").toLowerCase();
+    if (ehPlano(planoPerfil)) await alinharValorAssinatura(cfg, assinaturaId, planoPerfil);
+    await liberarAcessoPosPagamento(admin, perfil.email, perfil.nome || "");
   } else if (novo === "Recusado") {
     const falhas = (perfil.renovacao_falhas || 0) + 1;
     const esgotou = falhas >= MAX_FALHAS_RENOVACAO;

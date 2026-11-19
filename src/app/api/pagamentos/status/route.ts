@@ -21,11 +21,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data } = await getSupabaseAdmin().from("faturas").select("status").eq("gateway_pagamento_id", id).maybeSingle();
-    return NextResponse.json(
-      { success: true, pago: data?.status === "Pago" },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+    const admin = getSupabaseAdmin();
+    const { data } = await admin.from("faturas").select("status").eq("gateway_pagamento_id", id).maybeSingle();
+    let pago = data?.status === "Pago";
+
+    // Fatura provisória de assinatura (1ª cobrança ainda não existia no checkout): depois do aviso o id é trocado
+    // pelo real; então olhamos a assinatura ligada ao perfil.
+    if (!data && id.startsWith("assinatura_")) {
+      const { data: perfil } = await admin.from("profiles").select("email").eq("gateway_assinatura_id", id.slice("assinatura_".length)).maybeSingle();
+      if (perfil?.email) {
+        const { count } = await admin.from("faturas").select("id", { count: "exact", head: true }).eq("user_email", perfil.email).eq("status", "Pago");
+        pago = (count || 0) > 0;
+      }
+    }
+    return NextResponse.json({ success: true, pago }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("Erro ao consultar status do pagamento:", err);
     return NextResponse.json({ success: false, message: "Não foi possível consultar agora." }, { status: 500 });

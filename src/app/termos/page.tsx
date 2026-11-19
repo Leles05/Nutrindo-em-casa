@@ -55,7 +55,7 @@ const SECOES: Secao[] = [
       "Pix: pagamento à vista. Antes do fim do ciclo, enviamos ao seu e-mail a cobrança do ciclo seguinte;",
       "Cartão de crédito: à vista ou, na primeira compra, parcelado sem juros nas quantidades oferecidas para cada plano. No parcelamento, o valor total da compra é aprovado de uma só vez no limite do cartão e dividido na fatura conforme as regras da sua operadora;",
       "Cupons de desconto são pessoais, têm validade e limite de uso, não são acumulativos e valem apenas para a compra em que foram aplicados. As renovações seguem o preço de tabela vigente do plano;",
-      "Os pagamentos são processados pelo Mercado Pago, instituição de pagamento. Os dados do cartão são informados diretamente ao Mercado Pago, em campos do próprio provedor: o Nutrindo em Casa não recebe nem armazena o número do cartão nem o código de segurança (CVV).",
+      "Os pagamentos são processados pelo Mercado Pago, instituição de pagamento. Os dados do cartão são digitados nesta página e convertidos, no seu próprio navegador, em um código seguro (token) pelo Mercado Pago: o Nutrindo em Casa não recebe nem armazena o número do cartão nem o código de segurança (CVV). Para prevenção a fraudes, o Mercado Pago coleta dados do dispositivo durante o pagamento.",
     ],
   },
   {

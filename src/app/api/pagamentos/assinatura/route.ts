@@ -8,6 +8,8 @@ import {
   cancelarAssinaturaMP,
   cancelarPedidoMP,
   criarPedido,
+  estornarPagamentoMP,
+  estornarPedidoMP,
   extrairPix,
   metodoCartaoValido,
   montarAssinatura,
@@ -69,6 +71,9 @@ function celularValido(valor: string) {
 export async function POST(request: Request) {
   let cupomConsumido: string | null = null;
   let pedidoCriadoId: string | null = null;
+  let pedidoFoiPago = false; // pedido já aprovado: para desfazer é preciso ESTORNAR, não cancelar
+  let pagamentoDaAssinatura: string | null = null; // cobrança já feita da assinatura criada
+  let travaId: string | null = null; // trava contra clique duplo (só definida por quem a adquiriu)
   let assinaturaCriadaId: string | null = null;
   const cfg = configMP();
   const admin = isSupabaseConfigured() ? getSupabaseAdmin() : null;
@@ -79,10 +84,21 @@ export async function POST(request: Request) {
       if (cupomConsumido && admin) await devolverCupom(admin, cupomConsumido);
     } catch {}
     try {
-      if (pedidoCriadoId && cfg) await cancelarPedidoMP(cfg, pedidoCriadoId);
+      if (pedidoCriadoId && cfg) {
+        if (pedidoFoiPago) await estornarPedidoMP(cfg, pedidoCriadoId);
+        else await cancelarPedidoMP(cfg, pedidoCriadoId);
+      }
     } catch {}
     try {
-      if (assinaturaCriadaId && cfg) await cancelarAssinaturaMP(cfg, assinaturaCriadaId);
+      if (assinaturaCriadaId && cfg) {
+        await cancelarAssinaturaMP(cfg, assinaturaCriadaId);
+        if (pagamentoDaAssinatura && /^\d+$/.test(pagamentoDaAssinatura)) await estornarPagamentoMP(cfg, pagamentoDaAssinatura);
+        else if (pagamentoDaAssinatura) console.error("ATENÇÃO: assinatura desfeita após cobrança; estorne manualmente:", pagamentoDaAssinatura);
+      }
+    } catch {}
+    try {
+      if (travaId && admin) await admin.from("gateway_eventos").delete().eq("id", travaId);
+      travaId = null;
     } catch {}
   };
 
@@ -194,6 +210,22 @@ export async function POST(request: Request) {
     }
     const usaAssinatura = billingType === "CREDIT_CARD" && parcelas === 1;
 
+    // Trava contra clique duplo / duas abas: só um pagamento de cartão por e-mail e plano a cada minuto.
+    // (A trava é liberada se a compra falhar; se der certo, o perfil ATIVO já impede uma segunda compra.)
+    if (billingType === "CREDIT_CARD") {
+      const id = `trava:${email}:${plano}:${Math.floor(Date.now() / 60_000)}`;
+      const { error: travaErr } = await admin.from("gateway_eventos").insert({ id, evento: "checkout", payment_id: "checkout" });
+      if (travaErr) {
+        if (travaErr.code === "23505") {
+          await desfazer(); // devolve o cupom (a trava não é nossa, então não é liberada)
+          return erro("Já estamos processando o seu pagamento. Aguarde alguns segundos antes de tentar novamente.", 409);
+        }
+        console.error("Não foi possível registrar a trava do checkout:", travaErr.message); // segue sem trava
+      } else {
+        travaId = id;
+      }
+    }
+
     const comprador = { email, nome, cpf };
     const hoje = hojeSP();
     const descricaoBase = `Assinatura Nutrindo em Casa - Plano ${PLANOS[plano].nome}`;
@@ -247,6 +279,7 @@ export async function POST(request: Request) {
         return erro("Cartão recusado pela operadora. Confira os dados ou utilize outro cartão ou o Pix.", 402);
       }
       statusFatura = statusPedido === "Pago" ? "Pago" : "Pendente";
+      pedidoFoiPago = statusPedido === "Pago";
 
       if (billingType === "PIX") {
         pix = extrairPix(r.data);
@@ -316,9 +349,10 @@ export async function POST(request: Request) {
     if (faturaErr) console.error("Falha ao salvar fatura:", faturaErr.message); // o aviso do Mercado Pago recria a fatura
 
     // Upgrade: encerra a assinatura anterior (o perfil já aponta para a nova) para não cobrar em duplicidade
-    if (ehUpgrade && assinaturaAntigaId && assinaturaAntigaId !== assinaturaId) {
-      const ok = await cancelarAssinaturaMP(cfg, assinaturaAntigaId);
-      if (!ok) console.error("ATENÇÃO: não foi possível cancelar a assinatura antiga", assinaturaAntigaId);
+    const antigaId: string | null = assinaturaAntigaId || perfilExistente?.gateway_assinatura_id || null;
+    if (antigaId && antigaId !== assinaturaId) {
+      const ok = await cancelarAssinaturaMP(cfg, antigaId);
+      if (!ok) console.error("ATENÇÃO: não foi possível cancelar a assinatura antiga", antigaId);
     }
 
     // Compra concluída: a partir daqui nada é desfeito
@@ -403,10 +437,11 @@ export async function POST(request: Request) {
         return { ...vazio, resposta: erro("Cartão recusado pela operadora. Confira os dados ou utilize outro cartão ou o Pix.", 402) };
       }
       // Renovações futuras pelo preço de tabela (cupom/crédito vale só para a 1ª cobrança)
+      if (cobranca?.payment?.id) pagamentoDaAssinatura = String(cobranca.payment.id);
       if (cobranca) await alinharValorAssinatura(cfg!, assinaturaCriadaId, plano as keyof typeof PLANOS);
       return {
         id: assinaturaCriadaId,
-        pagamentoId: String(cobranca?.payment?.id || (cobranca ? `cobranca_${cobranca.id}` : `assinatura_${assinaturaCriadaId}`)),
+        pagamentoId: String(cobranca?.payment?.id || `assinatura_${assinaturaCriadaId}`),
         pago: statusCobranca === "Pago",
       };
     }

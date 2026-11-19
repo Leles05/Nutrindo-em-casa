@@ -28,7 +28,10 @@ export async function POST(request: Request) {
       .eq("email", ctx.email)
       .maybeSingle();
 
-    if (!perfil || String(perfil.status_assinatura).toUpperCase() !== "ATIVO") {
+    const statusPerfil = String(perfil?.status_assinatura || "").toUpperCase();
+    // Quem está INADIMPLENTE mas ainda tem assinatura ativa no Mercado Pago precisa poder cancelar (senão seria cobrado sem acesso)
+    const podeCancelar = statusPerfil === "ATIVO" || (statusPerfil === "INADIMPLENTE" && !!perfil?.gateway_assinatura_id);
+    if (!perfil || !podeCancelar) {
       return NextResponse.json({ success: false, message: "Nenhuma assinatura ativa encontrada." }, { status: 404 });
     }
 

@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
 import { igualConstante } from "@/lib/auth";
 import { diasEntre, hojeSP } from "@/lib/planos";
 import { configMP } from "@/lib/mercadopago";
+import { conferirAssinatura } from "@/lib/pagamentosWebhook";
 import { DIAS_DE_CARENCIA_RENOVACAO } from "@/lib/assinatura";
 import { avisarRenovacaoCartao, DIAS_ANTES_DO_LINK, enviarLinkRenovacao, precisaAvisarCartao, precisaEnviarLink, type PerfilRenovacaoLink } from "@/lib/renovacaoLink";
 
@@ -79,6 +80,27 @@ export async function GET(request: Request) {
       }
     }
 
+    // ---- 1c) conferência das assinaturas atrasadas direto no Mercado Pago (cobre avisos perdidos) ----
+    let conferidas = 0;
+    if (cfg) {
+      const { data: atrasadasCartao } = await admin
+        .from("profiles")
+        .select("gateway_assinatura_id")
+        .eq("status_assinatura", "ATIVO")
+        .eq("renovacao_automatica", true)
+        .not("gateway_assinatura_id", "is", null)
+        .lte("proxima_cobranca", hoje)
+        .limit(50);
+      for (const a of atrasadasCartao || []) {
+        try {
+          await conferirAssinatura(admin, cfg, String(a.gateway_assinatura_id));
+          conferidas++;
+        } catch (e) {
+          console.error("Conferência da assinatura falhou:", e);
+        }
+      }
+    }
+
     // ---- 2) alinhamento de status ----
     let alinhados = 0;
     const { data: atrasados } = await admin
@@ -94,7 +116,7 @@ export async function GET(request: Request) {
         alinhados++;
       }
     }
-    return NextResponse.json({ success: true, hoje, links_enviados: enviados, links_com_falha: falhas, avisos_cartao: avisosCartao, alinhados });
+    return NextResponse.json({ success: true, hoje, links_enviados: enviados, links_com_falha: falhas, avisos_cartao: avisosCartao, assinaturas_conferidas: conferidas, alinhados });
   } catch (error) {
     console.error("Erro na rotina diária:", error);
     return NextResponse.json({ success: false, error: "Erro na rotina diária." }, { status: 500 });

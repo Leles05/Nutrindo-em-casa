@@ -28,6 +28,41 @@ export async function criarPedido(cfg: ConfigMP, corpo: unknown, opcoes: { devic
   }
 }
 
+/**
+ * Estorna um pedido JÁ PAGO. O Mercado Pago recusa estornos feitos logo após a aprovação (erro 422 transitório):
+ * espera alguns segundos e tenta de novo. Estornar de novo uma ordem já estornada é inofensivo.
+ */
+export async function estornarPedidoMP(cfg: ConfigMP, pedidoId: string, tentativas = 4): Promise<boolean> {
+  for (let i = 0; i < tentativas; i++) {
+    await new Promise((ok) => setTimeout(ok, i === 0 ? 4000 : 6000));
+    try {
+      const r = await mpFetch(cfg, "POST", `/v1/orders/${encodeURIComponent(pedidoId)}/refund`, undefined, { idempotencia: randomUUID() });
+      if (r.ok) return true;
+      console.warn("Mercado Pago: estorno do pedido ainda não aceito (tentativa", i + 1, "):", r.status, JSON.stringify(r.data?.errors || r.data || {}).slice(0, 200));
+    } catch (e) {
+      console.warn("Mercado Pago: falha de rede no estorno:", e);
+    }
+  }
+  console.error("ATENÇÃO: não foi possível estornar automaticamente o pedido", pedidoId, "— estorne manualmente no painel do Mercado Pago.");
+  return false;
+}
+
+/** Estorna um pagamento avulso (ex.: a cobrança de uma assinatura) pela API de pagamentos, com nova tentativa. */
+export async function estornarPagamentoMP(cfg: ConfigMP, pagamentoId: string, tentativas = 4): Promise<boolean> {
+  for (let i = 0; i < tentativas; i++) {
+    await new Promise((ok) => setTimeout(ok, i === 0 ? 4000 : 6000));
+    try {
+      const r = await mpFetch(cfg, "POST", `/v1/payments/${encodeURIComponent(pagamentoId)}/refunds`, {}, { idempotencia: randomUUID() });
+      if (r.ok) return true;
+      console.warn("Mercado Pago: estorno do pagamento ainda não aceito (tentativa", i + 1, "):", r.status);
+    } catch (e) {
+      console.warn("Mercado Pago: falha de rede no estorno:", e);
+    }
+  }
+  console.error("ATENÇÃO: não foi possível estornar automaticamente o pagamento", pagamentoId, "— estorne manualmente no painel do Mercado Pago.");
+  return false;
+}
+
 export async function cancelarPedidoMP(cfg: ConfigMP, pedidoId: string): Promise<boolean> {
   try {
     const r = await mpFetch(cfg, "POST", `/v1/orders/${encodeURIComponent(pedidoId)}/cancel`, undefined, { idempotencia: randomUUID() });

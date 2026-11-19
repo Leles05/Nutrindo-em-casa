@@ -12,6 +12,22 @@ import { alinharValorAssinatura, cancelarAssinaturaMP, ehRenovacao } from "@/lib
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MAX_FALHAS_RENOVACAO = 3;
 
+/**
+ * O aviso da 1ª cobrança pode chegar antes de o checkout gravar a assinatura no perfil: espera um pouco.
+ * Se continuar sem perfil e a assinatura NÃO estiver cancelada, falha de propósito (500) para o Mercado Pago
+ * reenviar o aviso depois; se já foi cancelada (ex.: trocada num upgrade), não há o que fazer.
+ */
+async function acharPerfilDaAssinatura(admin: SupabaseClient, cfg: ConfigMP, assinaturaId: string, colunas: string, tentativas = 4) {
+  for (let i = 0; i < tentativas; i++) {
+    const { data } = await admin.from("profiles").select(colunas).eq("gateway_assinatura_id", assinaturaId).maybeSingle();
+    if (data) return data as unknown as Record<string, any>;
+    if (i < tentativas - 1) await espera(2500);
+  }
+  const a = await mpFetch<any>(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
+  if (a.ok && String(a.data?.status || "").toLowerCase().startsWith("cancel")) return null;
+  throw new Error("Assinatura ainda não vinculada a um cliente.");
+}
+
 /** O aviso pode chegar antes de o checkout terminar de gravar a fatura: espera um pouco antes de desistir. */
 async function acharFatura(admin: SupabaseClient, gatewayId: string, tentativas = 6) {
   for (let i = 0; i < tentativas; i++) {
@@ -72,18 +88,29 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
   if (!r.ok) throw new Error(`Não foi possível consultar a cobrança (HTTP ${r.status}).`);
   const cobranca = r.data;
   const assinaturaId = String(cobranca.preapproval_id || "");
-  const { data: perfil } = await admin
-    .from("profiles")
-    .select("email, nome, plano, status_assinatura, renovacao_falhas")
-    .eq("gateway_assinatura_id", assinaturaId)
-    .maybeSingle();
-  if (!perfil) return "ignorado: assinatura desconhecida";
+  const perfil = await acharPerfilDaAssinatura(admin, cfg, assinaturaId, "email, nome, plano, status_assinatura, renovacao_falhas");
+  if (!perfil) return "ignorado: assinatura cancelada e sem cliente";
+  return aplicarCobrancaAssinatura(admin, cfg, perfil, assinaturaId, cobranca, `cobranca_${cobrancaId}`);
+}
 
-  const pagamentoId = String(cobranca.payment?.id || `cobranca_${cobranca.id}`);
+/**
+ * Aplica o resultado de UMA cobrança da assinatura (fatura + efeitos no perfil). Usada pelo aviso e pela conferência diária.
+ * Os efeitos no perfil (falha, estorno) só acontecem na PRIMEIRA vez que o estado da fatura muda.
+ */
+async function aplicarCobrancaAssinatura(
+  admin: SupabaseClient,
+  cfg: ConfigMP,
+  perfil: Record<string, any>,
+  assinaturaId: string,
+  cobranca: any,
+  idReserva: string
+): Promise<string> {
+  const pagamentoId = String(cobranca.payment?.id || idReserva);
   const novo = statusFaturaDaCobrancaAssinatura(cobranca.payment?.status);
   const valor = Number(cobranca.transaction_amount || 0);
 
   let { data: existente } = await admin.from("faturas").select("id, status").eq("gateway_pagamento_id", pagamentoId).maybeSingle();
+  let anterior: string | null = existente?.status ?? null;
   if (!existente) {
     // o checkout pode ter gravado uma fatura provisória (a 1ª cobrança ainda não existia): adota-a trocando o id pelo real
     const { data: provisoria } = await admin
@@ -94,8 +121,11 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
     if (provisoria) {
       await admin.from("faturas").update({ gateway_pagamento_id: pagamentoId }).eq("id", provisoria.id);
       existente = provisoria;
+      anterior = provisoria.status;
     }
   }
+  const mudou = anterior !== novo; // efeitos no perfil só na PRIMEIRA vez que o estado muda (avisos repetidos não contam em dobro)
+
   if (existente) {
     if (!podeAtualizarFatura(existente.status, novo)) return "ignorado: aviso atrasado";
     await admin.from("faturas").update({ status: novo, valor }).eq("id", existente.id);
@@ -108,7 +138,7 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
       valor,
       forma_pagamento: "CREDIT_CARD",
       status: novo,
-      data_emissao: new Date().toISOString(),
+      data_emissao: cobranca.date_created || new Date().toISOString(),
     });
   }
 
@@ -124,13 +154,18 @@ export async function processarCobrancaAssinatura(admin: SupabaseClient, cfg: Co
     const planoPerfil = String(perfil.plano || "").toLowerCase();
     if (ehPlano(planoPerfil)) await alinharValorAssinatura(cfg, assinaturaId, planoPerfil);
     await liberarAcessoPosPagamento(admin, perfil.email, perfil.nome || "");
-  } else if (novo === "Recusado") {
+  } else if (novo === "Estornado" && mudou) {
+    // cobrança devolvida (ex.: garantia de 7 dias): encerra o acesso e para de cobrar
+    await admin.from("profiles").update({ status_assinatura: "CANCELADO", renovacao_automatica: false }).eq("email", perfil.email);
+    await cancelarAssinaturaMP(cfg, assinaturaId);
+  } else if (novo === "Recusado" && mudou) {
     const falhas = (perfil.renovacao_falhas || 0) + 1;
     const esgotou = falhas >= MAX_FALHAS_RENOVACAO;
     await admin
       .from("profiles")
       .update({ renovacao_falhas: falhas, ...(esgotou ? { status_assinatura: "INADIMPLENTE" } : {}) })
       .eq("email", perfil.email);
+    perfil.renovacao_falhas = falhas;
     await enviarEmail({
       para: perfil.email,
       assunto: esgotou ? "Não conseguimos renovar sua assinatura" : "Houve um problema na renovação da sua assinatura",
@@ -170,4 +205,38 @@ export async function processarAssinatura(admin: SupabaseClient, cfg: ConfigMP, 
     return `assinatura ${status}`;
   }
   return `assinatura ${status || "sem mudança"}`;
+}
+
+/**
+ * Rede de segurança (chamada pelo cron): se um aviso do Mercado Pago se perder, o cadastro ficaria com a data de renovação
+ * antiga, sem a fatura da renovação, e o cliente seria bloqueado por engano. Aqui conferimos a assinatura direto no
+ * Mercado Pago: cada cobrança ganha a sua fatura, renovada => atualiza a próxima cobrança; cancelada/pausada => aplica
+ * o mesmo tratamento do aviso.
+ */
+export async function conferirAssinatura(admin: SupabaseClient, cfg: ConfigMP, assinaturaId: string): Promise<string> {
+  const r = await mpFetch<any>(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
+  if (!r.ok) return `sem resposta (HTTP ${r.status})`;
+  const status = String(r.data?.status || "").toLowerCase();
+
+  // cobranças já feitas (com número de pagamento): garante que cada uma tenha a sua fatura, mesmo que o aviso tenha se perdido
+  const { data: perfil } = await admin
+    .from("profiles")
+    .select("email, nome, plano, status_assinatura, renovacao_falhas")
+    .eq("gateway_assinatura_id", assinaturaId)
+    .maybeSingle();
+  if (perfil) {
+    const busca = await mpFetch<any>(cfg, "GET", `/authorized_payments/search?preapproval_id=${encodeURIComponent(assinaturaId)}`);
+    const lista: any[] = busca.ok && Array.isArray(busca.data?.results) ? busca.data.results : [];
+    // da mais antiga para a mais nova, para o perfil terminar refletindo a última cobrança
+    const comPagamento = lista.filter((c) => c?.payment?.id).sort((a, b) => String(a.date_created).localeCompare(String(b.date_created)));
+    for (const c of comPagamento) await aplicarCobrancaAssinatura(admin, cfg, perfil as Record<string, any>, assinaturaId, c, `cobranca_${c.payment.id}`);
+  }
+
+  if (status === "cancelled" || status === "canceled" || status === "paused") return processarAssinatura(admin, cfg, assinaturaId);
+  const proxima = r.data?.next_payment_date ? String(r.data.next_payment_date).split("T")[0] : null;
+  if (status === "authorized" && proxima) {
+    await admin.from("profiles").update({ proxima_cobranca: proxima }).eq("gateway_assinatura_id", assinaturaId).lt("proxima_cobranca", proxima);
+    return "assinatura em dia";
+  }
+  return `assinatura ${status || "sem status"}`;
 }

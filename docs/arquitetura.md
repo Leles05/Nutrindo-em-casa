@@ -122,6 +122,8 @@ sequenceDiagram
     A-->>F: pago → criar senha e entrar
 ```
 
+Proteções contra erro e cobrança em dobro: uma **trava de 1 minuto** por e-mail e plano impede dois pagamentos de cartão simultâneos (clique duplo, duas abas); se algo falhar depois da cobrança (ex.: o banco de dados), o pedido é **estornado automaticamente** (com nova tentativa, pois o Mercado Pago recusa estornos feitos nos primeiros segundos); ao reassinar ou fazer upgrade, a assinatura antiga é cancelada no Mercado Pago.
+
 Pontos de segurança: o número do cartão e o CVV **nunca chegam ao servidor** (só o token gerado no navegador); o valor é sempre recalculado no servidor, incluindo cupom e crédito de upgrade; o cupom e o pedido são desfeitos se qualquer etapa falhar; o cupom vale só para a primeira cobrança (a assinatura é ajustada para o preço de tabela logo depois).
 
 ### 7.2 Renovação, cancelamento e avisos do Mercado Pago
@@ -129,8 +131,10 @@ O Vercel chama `GET /api/cron/renovacoes` todo dia às 12:00 UTC (a rota exige o
 
 - **Pix e parcelado:** 7 dias antes do vencimento a rotina cria um Pix de renovação (preço de tabela, validade de 12 dias) e envia o link por e-mail, uma única vez por ciclo. Quando o Pix é pago, o aviso do Mercado Pago avança o ciclo. Nada é cobrado sem a ação da pessoa.
 - **Cartão à vista:** o Mercado Pago cobra sozinho; a rotina só envia o aviso de 7 dias antes.
+- **Conferência diária (rede de segurança):** a rotina consulta no Mercado Pago as assinaturas de cartão que venceram, cria a fatura de cada cobrança que ainda não existir e corrige a data da próxima renovação. Assim, um aviso perdido não bloqueia o cliente por engano nem deixa a fatura sem aparecer.
 - **Atraso:** além de 5 dias de carência o cadastro passa a INADIMPLENTE (o acesso já é bloqueado em tempo real por `statusEfetivo`).
 - **Cancelamento** (`POST /api/pagamentos/cancelar`): cancela a assinatura **no Mercado Pago primeiro**; se não conseguir, nada muda no site. O acesso continua até o fim do período já pago e um Pix de renovação em aberto também é cancelado.
+- **Estornos:** estorno total (ou contestação) de qualquer cobrança muda a fatura para "Estornado", o acesso para CANCELADO e cancela a assinatura no Mercado Pago; estorno parcial mantém o acesso. O estorno é feito no painel do Mercado Pago (Atividade > Devolver dinheiro) e o site se ajusta sozinho pelo aviso.
 - **Aviso (webhook):** `/api/pagamentos/webhook` valida a assinatura `x-signature` (HMAC-SHA256, janela de 5 minutos), consulta o Mercado Pago para saber o estado real, registra o aviso em `gateway_eventos` (sem processar duas vezes) e atualiza fatura e perfil. Um aviso atrasado nunca desfaz uma fatura paga. Cobrança recusada de renovação conta falhas (3 falhas = INADIMPLENTE, com e-mail).
 
 ### 7.3 Agendamento sincronizado com a agenda da nutricionista

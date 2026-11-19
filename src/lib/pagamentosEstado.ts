@@ -9,7 +9,7 @@ export type StatusFatura = "Pago" | "Pendente" | "Cancelado" | "Estornado" | "Re
 export function statusFaturaDoPedido(status: unknown, detalhe?: unknown): StatusFatura {
   const s = String(status || "").toLowerCase();
   const d = String(detalhe || "").toLowerCase();
-  if (s === "refunded") return "Estornado";
+  if (s === "refunded" || s === "charged_back" || d.includes("charged_back")) return "Estornado";
   if (s === "processed" && (d === "accredited" || d === "partially_refunded" || d === "")) return "Pago";
   if (s === "partially_refunded") return "Pago"; // estorno parcial: o acesso continua
   if (s === "canceled" || s === "cancelled" || s === "expired") return "Cancelado";

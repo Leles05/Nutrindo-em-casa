@@ -65,7 +65,7 @@ async function gerarTokenDoCartao(d: { numero: string; nome: string; mes: string
   if (!w.MercadoPago) throw new Error("O ambiente seguro de pagamento ainda está carregando. Aguarde um instante e tente de novo.");
   const msgPadrao = "Não foi possível validar o cartão. Confira os dados (número, validade e código) e tente novamente.";
   try {
-    const mp = new w.MercadoPago(CHAVE_PUBLICA_MP, { locale: "pt-BR" });
+    const mp = w.__mp || (w.__mp = new w.MercadoPago(CHAVE_PUBLICA_MP, { locale: "pt-BR" }));
     const token = await mp.createCardToken({
       cardNumber: d.numero,
       cardholderName: d.nome,
@@ -806,7 +806,19 @@ function ConteudoCheckout() {
   return (
     <div className="min-h-screen bg-[#F0EAE1] text-slate-800 font-sans pb-20">
       {/* Ambiente seguro do Mercado Pago: gera o token do cartão no navegador */}
-      <Script src="https://sdk.mercadopago.com/js/v2" strategy="afterInteractive" />
+      <Script
+        src="https://sdk.mercadopago.com/js/v2"
+        strategy="afterInteractive"
+        onLoad={() => {
+          // inicia o SDK já ao carregar a página: o identificador do dispositivo (antifraude) fica pronto antes do clique
+          try {
+            const w = window as unknown as { MercadoPago?: new (k: string, o: object) => unknown; __mp?: unknown };
+            if (CHAVE_PUBLICA_MP && w.MercadoPago && !w.__mp) w.__mp = new w.MercadoPago(CHAVE_PUBLICA_MP, { locale: "pt-BR" });
+          } catch {
+            /* o clique tenta de novo */
+          }
+        }}
+      />
       {/* HEADER DO CHECKOUT */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">

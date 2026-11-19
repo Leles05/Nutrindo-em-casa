@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { mpFetch, type ConfigMP, type RespostaMP } from "@/lib/mercadopago";
 import { PLANOS, type Plano } from "@/lib/planos";
 
+import { parcelaSemJuros } from "@/lib/mpPayloads";
+
 export * from "@/lib/mpPayloads";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- respostas JSON da API do Mercado Pago */
@@ -61,6 +63,19 @@ export async function estornarPagamentoMP(cfg: ConfigMP, pagamentoId: string, te
   }
   console.error("ATENÇÃO: não foi possível estornar automaticamente o pagamento", pagamentoId, "— estorne manualmente no painel do Mercado Pago.");
   return false;
+}
+
+/** Consulta, na conta do vendedor, se o parcelamento pedido sai SEM juros para o cliente (ver parcelaSemJuros). */
+export async function consultarParcelamentoSemJuros(cfg: ConfigMP, valor: number, metodo: string, parcelas: number): Promise<boolean | null> {
+  try {
+    const r = await mpFetch(cfg, "GET", `/v1/payment_methods/installments?amount=${valor.toFixed(2)}&payment_method_id=${encodeURIComponent(metodo)}`, undefined, { timeoutMs: 10_000 });
+    if (!r.ok) return null;
+    const dados: any = r.data;
+    const custos = Array.isArray(dados) ? dados[0]?.payer_costs : dados?.payer_costs;
+    return parcelaSemJuros(custos, parcelas);
+  } catch {
+    return null;
+  }
 }
 
 export async function cancelarPedidoMP(cfg: ConfigMP, pedidoId: string): Promise<boolean> {

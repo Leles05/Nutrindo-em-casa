@@ -7,6 +7,8 @@ import {
   alinharValorAssinatura,
   cancelarAssinaturaMP,
   cancelarPedidoMP,
+  cobrouJuros,
+  consultarParcelamentoSemJuros,
   criarPedido,
   estornarPagamentoMP,
   estornarPedidoMP,
@@ -210,6 +212,17 @@ export async function POST(request: Request) {
     }
     const usaAssinatura = billingType === "CREDIT_CARD" && parcelas === 1;
 
+    // "Sem juros" é uma promessa do site: se a conta do Mercado Pago não estiver configurada para a nutricionista assumir
+    // o custo do parcelamento, o cliente seria cobrado com juros. Confere ANTES de cobrar e recusa sem cobrar nada.
+    if (billingType === "CREDIT_CARD" && parcelas > 1) {
+      const semJuros = await consultarParcelamentoSemJuros(cfg, valorCobrado, metodoCartao, parcelas);
+      if (semJuros === false) {
+        console.error("ATENÇÃO: parcelamento sem juros NÃO está habilitado na conta do Mercado Pago (Seu negócio > Custos > Parcelamento). Compra parcelada recusada para não cobrar juros do cliente.");
+        await desfazer();
+        return erro("O parcelamento sem juros não está disponível no momento. Escolha o cartão à vista ou o Pix.", 409);
+      }
+    }
+
     // Trava contra clique duplo / duas abas: só um pagamento de cartão por e-mail e plano a cada minuto.
     // (A trava é liberada se a compra falhar; se der certo, o perfil ATIVO já impede uma segunda compra.)
     if (billingType === "CREDIT_CARD") {
@@ -280,6 +293,13 @@ export async function POST(request: Request) {
       }
       statusFatura = statusPedido === "Pago" ? "Pago" : "Pendente";
       pedidoFoiPago = statusPedido === "Pago";
+
+      // Rede de segurança: se mesmo assim o cliente pagou mais que o valor do plano (juros), estorna e avisa
+      if (parcelas > 1 && statusPedido === "Pago" && cobrouJuros(r.data.total_paid_amount, valorCobrado)) {
+        console.error("ATENÇÃO: o Mercado Pago cobrou juros do cliente no parcelamento; compra estornada.", pedidoCriadoId, r.data.total_paid_amount, valorCobrado);
+        await desfazer();
+        return erro("O parcelamento sem juros não está disponível no momento. Nenhuma cobrança foi mantida. Escolha o cartão à vista ou o Pix.", 409);
+      }
 
       if (billingType === "PIX") {
         pix = extrairPix(r.data);

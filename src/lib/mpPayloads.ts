@@ -92,6 +92,24 @@ export function montarAssinatura(o: { email: string; token: string; meses: numbe
   };
 }
 
+/**
+ * O Mercado Pago só cobra o parcelamento SEM juros do cliente se a conta do vendedor estiver configurada para assumir o custo
+ * (não dá para escolher por requisição). A tabela de parcelas do vendedor mostra a taxa que o CLIENTE pagaria em cada parcela.
+ * true = sem juros; false = com juros ou parcela não oferecida; null = tabela indisponível (não dá para saber).
+ */
+export function parcelaSemJuros(custos: any[] | undefined | null, parcelas: number): boolean | null {
+  if (!Array.isArray(custos)) return null;
+  const c = custos.find((x) => Number(x?.installments) === parcelas);
+  if (!c) return false;
+  return Number(c.installment_rate) === 0;
+}
+
+/** O total efetivamente pago pelo cliente passou do valor do plano? (juros cobrados do cliente) */
+export function cobrouJuros(totalPago: unknown, valor: number): boolean {
+  const t = Number(totalPago);
+  return Number.isFinite(t) && t > valor + 0.01;
+}
+
 /** Token do cartão gerado pelo MP.js: 32 caracteres hexadecimais. */
 export function tokenCartaoValido(t: unknown): t is string {
   return typeof t === "string" && /^[A-Za-z0-9]{16,64}$/.test(t);

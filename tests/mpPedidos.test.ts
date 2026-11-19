@@ -7,8 +7,10 @@ import assert from "node:assert/strict";
 
 import {
   ehRenovacao,
+  cobrouJuros,
   extrairPix,
   metodoCartaoValido,
+  parcelaSemJuros,
   montarAssinatura,
   montarPedidoCartao,
   montarPedidoPix,
@@ -168,5 +170,38 @@ describe("Aviso de renovação no cartão (assinatura do Mercado Pago)", () => {
     assert.equal(precisaAvisarCartao({ ...cartao, renovacao_automatica: false }, "2027-02-15"), false);
     assert.equal(precisaAvisarCartao({ ...cartao, acesso_ate: "2027-02-19T00:00:00Z" }, "2027-02-15"), false);
     assert.equal(precisaAvisarCartao({ ...cartao, gateway_assinatura_id: null }, "2027-02-15"), false);
+  });
+});
+
+describe("Parcelamento sem juros (a conta do Mercado Pago decide quem paga os juros)", () => {
+  const contaComJuros = [
+    { installments: 1, installment_rate: 0 },
+    { installments: 2, installment_rate: 9.64 },
+    { installments: 3, installment_rate: 11.23 },
+  ];
+  const contaSemJuros = [
+    { installments: 1, installment_rate: 0 },
+    { installments: 2, installment_rate: 0 },
+    { installments: 3, installment_rate: 0 },
+  ];
+
+  it("reconhece a conta que cobra juros do cliente e a que não cobra", () => {
+    assert.equal(parcelaSemJuros(contaComJuros, 3), false);
+    assert.equal(parcelaSemJuros(contaSemJuros, 3), true);
+    assert.equal(parcelaSemJuros(contaComJuros, 1), true);
+  });
+
+  it("parcela que a conta nem oferece é recusada; tabela indisponível não bloqueia (a 2ª proteção decide)", () => {
+    assert.equal(parcelaSemJuros(contaSemJuros, 12), false);
+    assert.equal(parcelaSemJuros(undefined, 3), null);
+    assert.equal(parcelaSemJuros(null, 3), null);
+  });
+
+  it("detecta juros cobrados do cliente pelo total pago", () => {
+    assert.equal(cobrouJuros("591.63", 531.9), true);
+    assert.equal(cobrouJuros("531.90", 531.9), false);
+    assert.equal(cobrouJuros(531.9, 531.9), false);
+    assert.equal(cobrouJuros("531.91", 531.9), false); // tolerância de 1 centavo
+    assert.equal(cobrouJuros(undefined, 531.9), false);
   });
 });

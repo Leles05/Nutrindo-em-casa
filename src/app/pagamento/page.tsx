@@ -1475,8 +1475,8 @@ function ConteudoCheckout() {
                   </select>
                   {Number(parcelas) > 1 && (
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-2">
-                      O valor total é cobrado de uma vez no cartão e aparece parcelado na sua fatura. <strong>Renovação automática:</strong> ao
-                      fim do período, uma nova cobrança é feita no mesmo cartão, com aviso por e-mail 7 dias antes. Você pode cancelar a
+                      O valor total é cobrado de uma vez no cartão e aparece parcelado na sua fatura. <strong>Renovação:</strong> ao
+                      fim do período, enviamos por e-mail, 7 dias antes, o link para renovar por Pix. Nada é cobrado sem o seu pagamento. Você pode cancelar a
                       qualquer momento em Configurações.
                     </p>
                   )}
@@ -1818,7 +1818,7 @@ function ConteudoCheckout() {
                   <Link href="/privacidade" target="_blank" className="text-[#4C6C54] font-bold underline">
                     Política de Privacidade
                   </Link>
-                  , inclusive a <strong>renovação automática</strong> da assinatura ao fim de cada período (no cartão, com aviso por e-mail 7 dias antes). Posso cancelar quando quiser.
+                  , inclusive a <strong>renovação automática</strong> da assinatura ao fim de cada período (no cartão à vista, a cobrança é automática; no Pix e no parcelado, enviamos o link de pagamento por e-mail 7 dias antes). Posso cancelar quando quiser.
                 </span>
               </label>
             </div>

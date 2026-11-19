@@ -109,7 +109,7 @@ export default function TermosGate() {
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <strong>Renovação automática:</strong> ao fim do período do plano, a assinatura é renovada no mesmo cartão, com aviso por e-mail 7 dias antes.
+              <strong>Renovação automática:</strong> ao fim do período do plano, a assinatura no cartão à vista é renovada no mesmo cartão; no Pix e no parcelado, enviamos o link de pagamento por e-mail. Em todos os casos, com aviso 7 dias antes.
               Você cancela quando quiser em Configurações, sem multa, e mantém o acesso até o fim do período pago.
             </li>
             <li>

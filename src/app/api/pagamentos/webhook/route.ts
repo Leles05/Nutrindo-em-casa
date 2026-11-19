@@ -28,7 +28,19 @@ export async function POST(request: Request) {
     dataId: dataIdUrl,
     segredo: cfg.webhookSecret,
   });
-  if (!assinaturaOk) return NextResponse.json({ error: "Assinatura inválida." }, { status: 401 });
+  if (!assinaturaOk) {
+    // Diagnóstico sem expor segredo: só indica o que faltou ou destoou no aviso recebido.
+    const sig = request.headers.get("x-signature") || "";
+    const ts = /(?:^|,)\s*ts=(\d+)/.exec(sig)?.[1];
+    console.warn("Webhook recusado (assinatura inválida):", {
+      temAssinatura: !!sig,
+      temRequestId: !!request.headers.get("x-request-id"),
+      temDataIdNaUrl: !!dataIdUrl,
+      idadeSegundos: ts ? Math.round((Date.now() - Number(ts.length <= 10 ? Number(ts) * 1000 : ts)) / 1000) : null,
+      tamanhoSegredo: cfg.webhookSecret.length,
+    });
+    return NextResponse.json({ error: "Assinatura inválida." }, { status: 401 });
+  }
 
   const admin = getSupabaseAdmin();
   let chaveEvento = "";

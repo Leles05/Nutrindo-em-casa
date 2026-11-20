@@ -90,16 +90,20 @@ export async function cancelarPedidoMP(cfg: ConfigMP, pedidoId: string): Promise
 }
 
 /** Cancela a assinatura no Mercado Pago. Devolve true também se ela já estava cancelada. */
-export async function cancelarAssinaturaMP(cfg: ConfigMP, assinaturaId: string): Promise<boolean> {
-  try {
-    const r = await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, { status: "cancelled" });
-    if (r.ok) return true;
-    const atual = await mpFetch(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
-    return atual.ok && String(atual.data?.status || "").toLowerCase().startsWith("cancel");
-  } catch (e) {
-    console.warn("Mercado Pago: falha ao cancelar assinatura:", e);
-    return false;
+export async function cancelarAssinaturaMP(cfg: ConfigMP, assinaturaId: string, tentativas = 3): Promise<boolean> {
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, { status: "cancelled" });
+      if (r.ok) return true;
+      const atual = await mpFetch(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
+      if (atual.ok && String(atual.data?.status || "").toLowerCase().startsWith("cancel")) return true;
+      console.warn("Mercado Pago: cancelamento da assinatura não aceito (tentativa", i + 1, "):", r.status);
+    } catch (e) {
+      console.warn("Mercado Pago: falha ao cancelar assinatura:", e);
+    }
+    if (i < tentativas - 1) await new Promise((ok) => setTimeout(ok, 1500));
   }
+  return false;
 }
 
 /**

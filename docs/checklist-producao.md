@@ -8,8 +8,8 @@ Legenda: **Bloqueia o lançamento** (sem isso não lança), **Decisão da nutric
 
 Resolva estas antes de mexer em qualquer chave. Os números estão na tabela de taxas mais abaixo.
 
-- [ ] **Decidir quem paga os juros do parcelamento** _(Decisão da nutricionista · Nutri)_
-  O site promete "sem juros". Pelo Mercado Pago, isso só acontece se a conta da nutricionista assumir o custo (de 4,62% no 3x até 17,28% no 12x, somados à taxa do cartão). No anual em 12x são cerca de R$ 447 de R$ 2.009,40. Opções: (A) assumir tudo como está; (B) assumir só até 3x ou 6x; (C) só à vista e Pix; (D) reajustar o preço do anual.
+- [ ] **Opcional: assumir os juros de algumas parcelas como atrativo (hoje o cliente paga os juros do Mercado Pago)** _(Decisão da nutricionista · Nutri)_
+  Já decidido: o parcelamento acompanha os juros do Mercado Pago e o cliente vê o total exato antes de pagar (ex.: trimestral em 3x = R$ 591,63 em vez de R$ 531,90). Se a nutricionista quiser assumir os juros em alguma parcela, é só ativar na conta do Mercado Pago: o site passa a mostrar "sem juros" nessas parcelas sozinho. Custo para ela: de 4,62% (3x) até 17,28% (12x) do valor, além da taxa do cartão.
 - [ ] **Escolher em quantos dias o cartão cai na conta** _(Decisão da nutricionista · Nutri)_
   Na hora custa 4,98%; em 14 dias, 4,48%; em 30 dias, 2,95%. Quanto mais espera, menos taxa. Pix cai na hora.
 - [ ] **Confirmar os preços (R$ 197, R$ 531,90, R$ 2.009,40) sabendo o valor líquido** _(Decisão da nutricionista · Nutri)_
@@ -28,8 +28,8 @@ Resolva estas antes de mexer em qualquer chave. Os números estão na tabela de 
 Tudo isto é feito dentro da conta da LAIS VIEIRA DE LIMA LELES LTDA, em Seu negócio > Custos e Configurações.
 
 - [ ] **Conta PJ com dados completos, validada e com credenciais de produção liberadas** _(Bloqueia o lançamento · Nutri)_
-- [ ] **Ativar o parcelamento sem juros nas parcelas escolhidas (Seu negócio > Custos > Parcelamento)** _(Bloqueia o lançamento · Nutri)_
-  Sem isso o site recusa a compra parcelada, de propósito, para não cobrar juros escondidos do cliente.
+- [ ] **Só se for assumir juros: ativar o parcelamento sem juros nas parcelas escolhidas (Seu negócio > Custos > Parcelamento)** _(Recomendado · Nutri)_
+  Não é obrigatório. Sem isso o cliente paga os juros do Mercado Pago, sempre avisado antes na tela de pagamento.
 - [ ] **Configurar o prazo de recebimento escolhido (Seu negócio > Custos > Checkouts)** _(Bloqueia o lançamento · Nutri)_
 - [ ] **Conferir as taxas reais exibidas na conta (cartão, parcelas, Pix e Assinaturas) e comparar com a tabela deste documento** _(Bloqueia o lançamento · Nutri)_
   A página pública do Mercado Pago tem números que não batem entre si e não informa a taxa das Assinaturas. O que vale é o que a conta mostrar.
@@ -64,7 +64,7 @@ Use um cupom de 99% (crie o TESTE99 com 1 uso no painel da nutricionista) para g
   Esperado: fatura "Estornado", acesso encerrado, assinatura cancelada no Mercado Pago. Confira também, no detalhe da venda, se a taxa foi devolvida. O estorno de cobrança de assinatura não pôde ser testado no ambiente de teste.
 - [ ] **Pix real (R$ 1,97): pagar o QR Code, acesso liberado em segundos; depois estornar (precisa de saldo)** _(Bloqueia o lançamento · Ambos)_
 - [ ] **Compra parcelada real (anual com cupom de 90%, cerca de R$ 200,94, em 2x ou 3x)** _(Bloqueia o lançamento · Ambos)_
-  O cliente deve pagar exatamente o valor do plano, sem juros. Anote quanto a nutricionista recebe de fato: é a taxa real do parcelamento.
+  Confira que a tela mostrou o total com juros antes de pagar e que o cartão foi cobrado exatamente esse valor. Anote quanto a nutricionista recebe de fato: é a taxa real do parcelamento.
 - [ ] **Cartão recusado (limite insuficiente): mensagem clara e nenhuma cobrança** _(Recomendado · Ambos)_
 - [ ] **Cancelar pelo site uma assinatura real e conferir no Mercado Pago que ficou cancelada e que o acesso segue até o fim do período** _(Bloqueia o lançamento · Ambos)_
 - [ ] **Painel do Mercado Pago > Webhooks: as entregas aparecem com resposta 200, sem falhas** _(Bloqueia o lançamento · Ambos)_
@@ -97,9 +97,9 @@ Página oficial de tarifas do Checkout do Mercado Pago, consultada em 19/11/2026
 | Trimestral R$ 531,90 | taxa 5,27 · fica 526,63 | taxa 26,49 · fica 505,41 | taxa 23,83 · fica 508,07 | taxa 15,69 · fica 516,21 |
 | Anual R$ 2.009,40 | taxa 19,89 · fica 1.989,51 | taxa 100,07 · fica 1.909,33 | taxa 90,02 · fica 1.919,38 | taxa 59,28 · fica 1.950,12 |
 
-### Parcelado sem juros para o cliente (a nutricionista paga), na hora
+### Parcelado: só vale se a nutricionista optar por assumir os juros (opcional), na hora
 
-Estimativa: taxa do cartão (4,98%) somada ao adicional da parcela. Confirme no ensaio com dinheiro real.
+No padrão atual da conta, o cliente paga os juros do Mercado Pago e vê o total antes (ex.: trimestral em 3x = R$ 591,63); o que a nutricionista recebe nesse caso será confirmado no ensaio. A tabela abaixo é a estimativa se ela assumir os juros: taxa do cartão (4,98%) somada ao adicional da parcela.
 
 | Compra | Taxa total | Taxa em R$ | Fica para a nutricionista |
 |---|---|---|---|

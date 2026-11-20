@@ -7,11 +7,11 @@ import {
   alinharValorAssinatura,
   cancelarAssinaturaMP,
   cancelarPedidoMP,
-  cobrouJuros,
-  consultarParcelamentoSemJuros,
+  consultarCustosParcelamento,
   criarPedido,
   estornarPagamentoMP,
   estornarPedidoMP,
+  custoDaParcela,
   extrairPix,
   metodoCartaoValido,
   montarAssinatura,
@@ -20,6 +20,7 @@ import {
   primeiraCobrancaDaAssinatura,
   referenciaExterna,
   tokenCartaoValido,
+  totalConfere,
 } from "@/lib/mpPedidos";
 import { statusFaturaDaCobrancaAssinatura, statusFaturaDoPedido } from "@/lib/pagamentosEstado";
 import {
@@ -212,15 +213,26 @@ export async function POST(request: Request) {
     }
     const usaAssinatura = billingType === "CREDIT_CARD" && parcelas === 1;
 
-    // "Sem juros" é uma promessa do site: se a conta do Mercado Pago não estiver configurada para a nutricionista assumir
-    // o custo do parcelamento, o cliente seria cobrado com juros. Confere ANTES de cobrar e recusa sem cobrar nada.
+    // Parcelado: os juros são definidos pelo Mercado Pago (configuração da conta) e o cliente PRECISA ter visto o total
+    // exato antes de pagar. Confere a tabela de parcelas ANTES de cobrar; se divergir do que a tela mostrou, não cobra.
+    let totalNoCartao = valorCobrado; // quanto o cliente paga no cartão (com juros, se houver)
     if (billingType === "CREDIT_CARD" && parcelas > 1) {
-      const semJuros = await consultarParcelamentoSemJuros(cfg, valorCobrado, metodoCartao, parcelas);
-      if (semJuros === false) {
-        console.error("ATENÇÃO: parcelamento sem juros NÃO está habilitado na conta do Mercado Pago (Seu negócio > Custos > Parcelamento). Compra parcelada recusada para não cobrar juros do cliente.");
+      const totalVisto = Number(body.totalEsperado);
+      if (!Number.isFinite(totalVisto)) {
         await desfazer();
-        return erro("O parcelamento sem juros não está disponível no momento. Escolha o cartão à vista ou o Pix.", 409);
+        return erro("Confira o valor do parcelamento na tela e tente novamente.", 400);
       }
+      const custos = await consultarCustosParcelamento(cfg, valorCobrado, metodoCartao);
+      const custo = custoDaParcela(custos, parcelas);
+      if (custos && !custo) {
+        await desfazer();
+        return erro("Essa quantidade de parcelas não está disponível para o seu cartão. Escolha outra opção.", 409);
+      }
+      if (custo && !totalConfere(custo.total, totalVisto)) {
+        await desfazer();
+        return erro("As condições do parcelamento mudaram. Atualize as opções de parcelas e confira o total antes de pagar.", 409);
+      }
+      totalNoCartao = custo ? custo.total : totalVisto;
     }
 
     // Trava contra clique duplo / duas abas: só um pagamento de cartão por e-mail e plano a cada minuto.
@@ -294,11 +306,11 @@ export async function POST(request: Request) {
       statusFatura = statusPedido === "Pago" ? "Pago" : "Pendente";
       pedidoFoiPago = statusPedido === "Pago";
 
-      // Rede de segurança: se mesmo assim o cliente pagou mais que o valor do plano (juros), estorna e avisa
-      if (parcelas > 1 && statusPedido === "Pago" && cobrouJuros(r.data.total_paid_amount, valorCobrado)) {
-        console.error("ATENÇÃO: o Mercado Pago cobrou juros do cliente no parcelamento; compra estornada.", pedidoCriadoId, r.data.total_paid_amount, valorCobrado);
+      // Rede de segurança: o total cobrado no cartão tem que ser exatamente o que o cliente viu; se não, estorna e avisa
+      if (parcelas > 1 && statusPedido === "Pago" && !totalConfere(r.data.total_paid_amount, totalNoCartao)) {
+        console.error("ATENÇÃO: total cobrado diferente do mostrado ao cliente; compra estornada.", pedidoCriadoId, r.data.total_paid_amount, totalNoCartao);
         await desfazer();
-        return erro("O parcelamento sem juros não está disponível no momento. Nenhuma cobrança foi mantida. Escolha o cartão à vista ou o Pix.", 409);
+        return erro("O valor do parcelamento mudou durante o pagamento. Nenhuma cobrança foi mantida. Confira as opções e tente novamente.", 409);
       }
 
       if (billingType === "PIX") {
@@ -356,8 +368,8 @@ export async function POST(request: Request) {
       {
         user_email: email,
         gateway_pagamento_id: pagamentoId,
-        descricao: descricaoFatura,
-        valor: valorCobrado,
+        descricao: parcelas > 1 && totalNoCartao > valorCobrado + 0.01 ? `${descricaoFatura} (${parcelas}x com juros, total R$ ${totalNoCartao.toFixed(2).replace(".", ",")})` : descricaoFatura,
+        valor: parcelas > 1 ? totalNoCartao : valorCobrado,
         forma_pagamento: billingType,
         status: statusFatura,
         data_emissao: new Date().toISOString(),
@@ -394,7 +406,8 @@ export async function POST(request: Request) {
       email,
       valorCobrado,
       parcelas,
-      valorParcela: arredondar(valorCobrado / parcelas),
+      valorParcela: arredondar(totalNoCartao / parcelas),
+      totalPago: totalNoCartao,
       proximaCobranca: proxima,
       pagamentoConfirmado: statusFatura === "Pago",
       tokenAcesso: ehUpgrade ? undefined : criarTokenCompra(email, pagamentoId),

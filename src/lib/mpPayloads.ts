@@ -93,21 +93,29 @@ export function montarAssinatura(o: { email: string; token: string; meses: numbe
 }
 
 /**
- * O Mercado Pago só cobra o parcelamento SEM juros do cliente se a conta do vendedor estiver configurada para assumir o custo
- * (não dá para escolher por requisição). A tabela de parcelas do vendedor mostra a taxa que o CLIENTE pagaria em cada parcela.
- * true = sem juros; false = com juros ou parcela não oferecida; null = tabela indisponível (não dá para saber).
+ * Condições de UMA quantidade de parcelas na tabela do Mercado Pago para o vendedor: a taxa (juros) que o CLIENTE paga,
+ * o valor de cada parcela e o total no cartão. Quem paga os juros é configuração da conta do vendedor, então o site
+ * SEMPRE mostra ao cliente o total exato antes de cobrar e confere depois.
  */
-export function parcelaSemJuros(custos: any[] | undefined | null, parcelas: number): boolean | null {
-  if (!Array.isArray(custos)) return null;
-  const c = custos.find((x) => Number(x?.installments) === parcelas);
-  if (!c) return false;
-  return Number(c.installment_rate) === 0;
+export interface CustoParcela {
+  parcelas: number;
+  taxa: number;
+  parcela: number;
+  total: number;
 }
 
-/** O total efetivamente pago pelo cliente passou do valor do plano? (juros cobrados do cliente) */
-export function cobrouJuros(totalPago: unknown, valor: number): boolean {
-  const t = Number(totalPago);
-  return Number.isFinite(t) && t > valor + 0.01;
+export function custoDaParcela(custos: any[] | undefined | null, parcelas: number): CustoParcela | null {
+  if (!Array.isArray(custos)) return null;
+  const c = custos.find((x) => Number(x?.installments) === parcelas);
+  if (!c) return null;
+  const custo = { parcelas, taxa: Number(c.installment_rate), parcela: Number(c.installment_amount), total: Number(c.total_amount) };
+  return Number.isFinite(custo.total) && Number.isFinite(custo.parcela) ? custo : null;
+}
+
+/** O total que o cliente pagou (ou vai pagar) é o que ele viu na tela? Tolerância de 1 centavo. */
+export function totalConfere(pago: unknown, esperado: number): boolean {
+  const t = Number(pago);
+  return Number.isFinite(t) && Number.isFinite(esperado) && Math.abs(t - esperado) <= 0.01;
 }
 
 /** Token do cartão gerado pelo MP.js: 32 caracteres hexadecimais. */

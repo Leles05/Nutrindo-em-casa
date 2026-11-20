@@ -32,6 +32,14 @@ interface DetalhesPlano {
   beneficios: string[];
 }
 
+/** Uma linha da tabela de parcelas do Mercado Pago (juros que o cliente paga em cada quantidade). */
+interface CustoParcelaMP {
+  installments: number;
+  installment_rate: number;
+  installment_amount: number;
+  total_amount: number;
+}
+
 interface ErrosCartao {
   numero?: string;
   nome?: string;
@@ -171,6 +179,10 @@ function ConteudoCheckout() {
   const [processando, setProcessando] = useState(false);
   const [idAssinaturaGerada, setIdAssinaturaGerada] = useState("");
   const [parcelasCompradas, setParcelasCompradas] = useState(1);
+  const [totalPagoInfo, setTotalPagoInfo] = useState(0);
+  const [valorParcelaInfo, setValorParcelaInfo] = useState(0);
+  const [sdkPronto, setSdkPronto] = useState(false);
+  const [custosParcelas, setCustosParcelas] = useState<{ chave: string; lista: CustoParcelaMP[] } | null>(null);
   const [aceiteCompra, setAceiteCompra] = useState(false);
   const [proximaCobrancaInfo, setProximaCobrancaInfo] = useState("");
   const [modalSucesso, setModalSucesso] = useState(false);
@@ -550,23 +562,52 @@ function ConteudoCheckout() {
     return "Cartão 💳";
   };
 
-  // Parcelamento no cartão: mesmas quantidades aceitas pelo servidor (PARCELAS_PERMITIDAS), sempre sem juros
-  const getOpcoesParcelamento = () => {
-    const brl = (v: number) => v.toFixed(2).replace(".", ",");
-    return PARCELAS_PERMITIDAS[planoSelecionado]
-      .filter((n) => n === 1 || valorTotalFinal / n >= 5)
-      .map((n) => ({
-        parcelas: n,
-        valorParcela: valorTotalFinal / n,
-        texto: n === 1 ? `1x de R$ ${brl(valorTotalFinal)} à vista` : `${n}x de R$ ${brl(valorTotalFinal / n)} sem juros`,
-      }));
-  };
+  const brlTxt = (v: number) => v.toFixed(2).replace(".", ",");
 
-  // Se trocar de plano/cupom e a quantidade escolhida deixar de existir, volta para à vista
+  // Parcelas no cartão: a tabela vem do Mercado Pago para o cartão digitado (os juros são definidos por ele). O cliente vê o
+  // total exato antes de pagar e o servidor confere de novo. As quantidades continuam limitadas ao que o plano permite.
+  const binCartao = cartaoNumero.replace(/\D/g, "").slice(0, 8);
+  const chaveCustos = `${binCartao}|${valorTotalFinal.toFixed(2)}`;
   useEffect(() => {
-    const validas = PARCELAS_PERMITIDAS[planoSelecionado].filter((n) => n === 1 || valorTotalFinal / n >= 5);
-    if (!validas.includes(Number(parcelas))) setParcelas("1");
-  }, [planoSelecionado, valorTotalFinal, parcelas]);
+    if (metodoPagamento !== "credito" || binCartao.length < 6 || !sdkPronto) return;
+    const mp = (window as unknown as { __mp?: { getInstallments?: (o: { amount: string; bin: string }) => Promise<Array<{ payer_costs?: CustoParcelaMP[] }>> } }).__mp;
+    if (!mp?.getInstallments) return;
+    let cancelado = false;
+    mp.getInstallments({ amount: valorTotalFinal.toFixed(2), bin: binCartao })
+      .then((r) => {
+        const lista = r?.[0]?.payer_costs;
+        if (!cancelado && Array.isArray(lista)) setCustosParcelas({ chave: chaveCustos, lista });
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [metodoPagamento, binCartao, valorTotalFinal, sdkPronto, chaveCustos]);
+
+  const custosValidos = custosParcelas && custosParcelas.chave === chaveCustos ? custosParcelas.lista : null;
+  const aVista = { parcelas: 1, total: valorTotalFinal, texto: `1x de R$ ${brlTxt(valorTotalFinal)} à vista` };
+  const opcoesParcelas = (() => {
+    if (!custosValidos) return [aVista];
+    const permitidas = PARCELAS_PERMITIDAS[planoSelecionado].filter((n) => n === 1 || valorTotalFinal / n >= 5);
+    const lista = permitidas.flatMap((n) => {
+      if (n === 1) return [aVista];
+      const c = custosValidos.find((x) => Number(x.installments) === n);
+      if (!c) return [];
+      const total = Number(c.total_amount);
+      const parcela = Number(c.installment_amount);
+      const comJuros = total > valorTotalFinal + 0.01;
+      return [{ parcelas: n, total, texto: comJuros ? `${n}x de R$ ${brlTxt(parcela)} (total R$ ${brlTxt(total)}, com juros)` : `${n}x de R$ ${brlTxt(parcela)} sem juros` }];
+    });
+    return lista.length > 0 ? lista : [aVista];
+  })();
+  const opcaoSelecionada = opcoesParcelas.find((o) => o.parcelas === Number(parcelas)) || aVista;
+  const jurosDoParcelamento = metodoPagamento === "credito" && opcaoSelecionada.total > valorTotalFinal + 0.01;
+  const quantidadesValidas = opcoesParcelas.map((o) => o.parcelas).join(",");
+
+  // Se trocar de plano, cupom ou cartão e a quantidade escolhida deixar de existir, volta para à vista
+  useEffect(() => {
+    if (!quantidadesValidas.split(",").includes(String(parcelas))) setParcelas("1");
+  }, [quantidadesValidas, parcelas]);
 
   // =========================================================================
   // VALIDAÇÃO LOCAL E DESTAQUE CAMPO A CAMPO
@@ -761,6 +802,7 @@ function ConteudoCheckout() {
             plano: planoSelecionado,
             origem: ehUpgrade ? "upgrade" : undefined,
             parcelas: Number(parcelas) || 1,
+            totalEsperado: Number(parcelas) > 1 ? opcaoSelecionada.total : undefined,
             cupom: cupomAplicado?.codigo,
             cartao: dadosCartaoSeguro,
           })
@@ -786,6 +828,8 @@ function ConteudoCheckout() {
         setTokenAcesso(data.tokenAcesso || "");
         setCartaoConfirmado(Boolean(data.pagamentoConfirmado));
         setParcelasCompradas(Number(data.parcelas) || 1);
+        setTotalPagoInfo(Number(data.totalPago) || 0);
+        setValorParcelaInfo(Number(data.valorParcela) || 0);
         setProximaCobrancaInfo(data.proximaCobranca || "");
         if (data.emailEnviado) {
           setEmailEnviado(true);
@@ -814,6 +858,7 @@ function ConteudoCheckout() {
           try {
             const w = window as unknown as { MercadoPago?: new (k: string, o: object) => unknown; __mp?: unknown };
             if (CHAVE_PUBLICA_MP && w.MercadoPago && !w.__mp) w.__mp = new w.MercadoPago(CHAVE_PUBLICA_MP, { locale: "pt-BR" });
+            setSdkPronto(true);
           } catch {
             /* o clique tenta de novo */
           }
@@ -1479,14 +1524,26 @@ function ConteudoCheckout() {
                     onChange={(e) => setParcelas(e.target.value)}
                     className="w-full h-11 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54] transition-all cursor-pointer"
                   >
-                    {getOpcoesParcelamento().map((op) => (
+                    {opcoesParcelas.map((op) => (
                       <option key={op.parcelas} value={op.parcelas}>
                         {op.texto}
                       </option>
                     ))}
                   </select>
+                  {!custosValidos && PARCELAS_PERMITIDAS[planoSelecionado].length > 1 && (
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-2">
+                      Digite o número do cartão para ver as parcelas disponíveis e o total de cada uma.
+                    </p>
+                  )}
                   {Number(parcelas) > 1 && (
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-2">
+                      {jurosDoParcelamento && (
+                        <>
+                          <strong className="text-amber-800">Atenção aos juros:</strong> neste parcelamento o Mercado Pago cobra juros. Você paga
+                          R$ {brlTxt(opcaoSelecionada.total)} no cartão (R$ {brlTxt(opcaoSelecionada.total - valorTotalFinal)} de juros). À vista ou no Pix o
+                          valor é R$ {brlTxt(valorTotalFinal)}.{" "}
+                        </>
+                      )}
                       O valor total é cobrado de uma vez no cartão e aparece parcelado na sua fatura. <strong>Renovação:</strong> ao
                       fim do período, enviamos por e-mail, 7 dias antes, o link para renovar por Pix. Nada é cobrado sem o seu pagamento. Você pode cancelar a
                       qualquer momento em Configurações.
@@ -1775,11 +1832,19 @@ function ConteudoCheckout() {
                   </div>
                 </div>
 
+                {jurosDoParcelamento && (
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-md inline-block">
+                      No cartão em {opcaoSelecionada.parcelas}x: R$ {brlTxt(opcaoSelecionada.total)} (com juros)
+                    </span>
+                  </div>
+                )}
+
                 {/* DESTAQUE DE PARCELAMENTO FACILITADO EM ATÉ 12X */}
                 {planoSelecionado === "anual" && (
                   <div className="text-right">
                     <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-md inline-block">
-                      ou em até 12x de R$ {(valorTotalFinal / 12).toFixed(2).replace(".", ",")} sem juros
+                      ou parcele em até 12x: veja as parcelas e o total ao digitar o cartão
                     </span>
                   </div>
                 )}
@@ -1926,7 +1991,15 @@ function ConteudoCheckout() {
               {parcelasCompradas > 1 && (
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Parcelamento:</span>
-                  <strong className="text-slate-800">{parcelasCompradas}x sem juros</strong>
+                  <strong className="text-slate-800">
+                    {parcelasCompradas}x de R$ {brlTxt(valorParcelaInfo || valorTotalFinal / parcelasCompradas)}
+                  </strong>
+                </div>
+              )}
+              {parcelasCompradas > 1 && totalPagoInfo > valorTotalFinal + 0.01 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Total no cartão (com juros):</span>
+                  <strong className="text-slate-800">R$ {brlTxt(totalPagoInfo)}</strong>
                 </div>
               )}
               {proximaCobrancaInfo && (

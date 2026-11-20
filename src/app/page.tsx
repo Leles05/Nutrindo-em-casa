@@ -624,7 +624,7 @@ export default function PaginaInicialLanding() {
               Escolha o plano ideal para a sua família
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
-              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado sem juros. Pagamentos seguros processados pelo Mercado Pago.
+              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado (os juros, quando houver, aparecem antes de você pagar). À vista e no Pix não há juros. Pagamentos seguros processados pelo Mercado Pago.
             </p>
           </div>
 

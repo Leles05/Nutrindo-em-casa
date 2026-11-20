@@ -2,8 +2,6 @@ import { randomUUID } from "crypto";
 import { mpFetch, type ConfigMP, type RespostaMP } from "@/lib/mercadopago";
 import { PLANOS, type Plano } from "@/lib/planos";
 
-import { parcelaSemJuros } from "@/lib/mpPayloads";
-
 export * from "@/lib/mpPayloads";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- respostas JSON da API do Mercado Pago */
@@ -65,14 +63,17 @@ export async function estornarPagamentoMP(cfg: ConfigMP, pagamentoId: string, te
   return false;
 }
 
-/** Consulta, na conta do vendedor, se o parcelamento pedido sai SEM juros para o cliente (ver parcelaSemJuros). */
-export async function consultarParcelamentoSemJuros(cfg: ConfigMP, valor: number, metodo: string, parcelas: number): Promise<boolean | null> {
+/**
+ * Tabela de parcelas do vendedor para um valor e uma bandeira (juros que o cliente paga em cada quantidade).
+ * Devolve null se o Mercado Pago não responder (a conferência do total pago depois da cobrança continua valendo).
+ */
+export async function consultarCustosParcelamento(cfg: ConfigMP, valor: number, metodo: string): Promise<any[] | null> {
   try {
     const r = await mpFetch(cfg, "GET", `/v1/payment_methods/installments?amount=${valor.toFixed(2)}&payment_method_id=${encodeURIComponent(metodo)}`, undefined, { timeoutMs: 10_000 });
     if (!r.ok) return null;
     const dados: any = r.data;
     const custos = Array.isArray(dados) ? dados[0]?.payer_costs : dados?.payer_costs;
-    return parcelaSemJuros(custos, parcelas);
+    return Array.isArray(custos) ? custos : null;
   } catch {
     return null;
   }

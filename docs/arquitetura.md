@@ -96,7 +96,7 @@ Três modelos de cobrança, escolhidos no servidor conforme a forma de pagamento
 |---|---|---|
 | Pix | Pedido (Orders API) à vista, com QR Code e "copia e cola" | Link de Pix enviado por e-mail 7 dias antes do vencimento |
 | Cartão à vista | **Assinatura** do Mercado Pago (cobra na hora e a cada ciclo) | Automática, pelo Mercado Pago; aviso por e-mail 7 dias antes |
-| Cartão parcelado (primeira compra) | Pedido (Orders API) em N parcelas sem juros | Link de Pix por e-mail, como no Pix |
+| Cartão parcelado (primeira compra) | Pedido (Orders API) em N parcelas; os juros (se houver) vêm da tabela do Mercado Pago e o cliente vê o total exato antes de pagar | Link de Pix por e-mail, como no Pix |
 
 ```mermaid
 sequenceDiagram
@@ -121,6 +121,8 @@ sequenceDiagram
     F->>A: consulta o status (a cada 4 s)
     A-->>F: pago → criar senha e entrar
 ```
+
+Parcelamento: quem paga os juros é configuração da conta do Mercado Pago (a Orders API não permite escolher por pedido). A tela mostra as parcelas reais do cartão digitado (`getInstallments` do MP.js), com juros e total. O servidor confere a tabela do Mercado Pago antes de cobrar e, depois, o total pago: se divergir do que foi mostrado, não cobra ou estorna na hora.
 
 Proteções contra erro e cobrança em dobro: uma **trava de 1 minuto** por e-mail e plano impede dois pagamentos de cartão simultâneos (clique duplo, duas abas); se algo falhar depois da cobrança (ex.: o banco de dados), o pedido é **estornado automaticamente** (com nova tentativa, pois o Mercado Pago recusa estornos feitos nos primeiros segundos); ao reassinar ou fazer upgrade, a assinatura antiga é cancelada no Mercado Pago.
 

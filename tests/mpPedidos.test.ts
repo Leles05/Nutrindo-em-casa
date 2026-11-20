@@ -7,14 +7,14 @@ import assert from "node:assert/strict";
 
 import {
   ehRenovacao,
-  cobrouJuros,
+  custoDaParcela,
   extrairPix,
   metodoCartaoValido,
-  parcelaSemJuros,
   montarAssinatura,
   montarPedidoCartao,
   montarPedidoPix,
   referenciaExterna,
+  totalConfere,
   tokenCartaoValido,
   valorTexto,
 } from "../src/lib/mpPayloads.ts";
@@ -173,35 +173,38 @@ describe("Aviso de renovação no cartão (assinatura do Mercado Pago)", () => {
   });
 });
 
-describe("Parcelamento sem juros (a conta do Mercado Pago decide quem paga os juros)", () => {
-  const contaComJuros = [
-    { installments: 1, installment_rate: 0 },
-    { installments: 2, installment_rate: 9.64 },
-    { installments: 3, installment_rate: 11.23 },
-  ];
-  const contaSemJuros = [
-    { installments: 1, installment_rate: 0 },
-    { installments: 2, installment_rate: 0 },
-    { installments: 3, installment_rate: 0 },
+describe("Parcelamento: juros definidos pelo Mercado Pago (o cliente vê o total exato antes de pagar)", () => {
+  const tabela = [
+    { installments: 1, installment_rate: 0, installment_amount: 531.9, total_amount: 531.9 },
+    { installments: 2, installment_rate: 9.64, installment_amount: 291.59, total_amount: 583.18 },
+    { installments: 3, installment_rate: 11.23, installment_amount: 197.21, total_amount: 591.63 },
   ];
 
-  it("reconhece a conta que cobra juros do cliente e a que não cobra", () => {
-    assert.equal(parcelaSemJuros(contaComJuros, 3), false);
-    assert.equal(parcelaSemJuros(contaSemJuros, 3), true);
-    assert.equal(parcelaSemJuros(contaComJuros, 1), true);
+  it("lê parcela, taxa e total de cada quantidade da tabela do Mercado Pago", () => {
+    assert.deepEqual(custoDaParcela(tabela, 3), { parcelas: 3, taxa: 11.23, parcela: 197.21, total: 591.63 });
+    assert.deepEqual(custoDaParcela(tabela, 1), { parcelas: 1, taxa: 0, parcela: 531.9, total: 531.9 });
   });
 
-  it("parcela que a conta nem oferece é recusada; tabela indisponível não bloqueia (a 2ª proteção decide)", () => {
-    assert.equal(parcelaSemJuros(contaSemJuros, 12), false);
-    assert.equal(parcelaSemJuros(undefined, 3), null);
-    assert.equal(parcelaSemJuros(null, 3), null);
+  it("conta configurada sem juros: taxa 0 e total igual ao valor do plano", () => {
+    const semJuros = [{ installments: 3, installment_rate: 0, installment_amount: 177.3, total_amount: 531.9 }];
+    const c = custoDaParcela(semJuros, 3);
+    assert.equal(c?.taxa, 0);
+    assert.equal(c?.total, 531.9);
   });
 
-  it("detecta juros cobrados do cliente pelo total pago", () => {
-    assert.equal(cobrouJuros("591.63", 531.9), true);
-    assert.equal(cobrouJuros("531.90", 531.9), false);
-    assert.equal(cobrouJuros(531.9, 531.9), false);
-    assert.equal(cobrouJuros("531.91", 531.9), false); // tolerância de 1 centavo
-    assert.equal(cobrouJuros(undefined, 531.9), false);
+  it("parcela que a conta não oferece e tabela indisponível viram null (o servidor decide o que fazer)", () => {
+    assert.equal(custoDaParcela(tabela, 12), null);
+    assert.equal(custoDaParcela(undefined, 3), null);
+    assert.equal(custoDaParcela(null, 3), null);
+    assert.equal(custoDaParcela([{ installments: 3, installment_rate: "x", installment_amount: "y", total_amount: "z" }], 3), null);
+  });
+
+  it("confere se o total cobrado é o que o cliente viu (tolerância de 1 centavo)", () => {
+    assert.equal(totalConfere("591.63", 591.63), true);
+    assert.equal(totalConfere(591.64, 591.63), true);
+    assert.equal(totalConfere("591.63", 531.9), false, "juros que o cliente não viu");
+    assert.equal(totalConfere("531.90", 591.63), false);
+    assert.equal(totalConfere(undefined, 531.9), false);
+    assert.equal(totalConfere("abc", 531.9), false);
   });
 });

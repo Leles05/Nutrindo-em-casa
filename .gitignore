@@ -43,3 +43,6 @@ next-env.d.ts
 
 # modelo de variáveis (sem segredos) deve ser versionado
 !.env.example
+
+# backups do banco (dados de clientes: nunca versionar)
+/backups/

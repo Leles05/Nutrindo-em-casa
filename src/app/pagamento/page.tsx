@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Script from "next/script";
-import { PARCELAS_PERMITIDAS } from "@/lib/planos";
+import { formatarReais, PARCELAS_PERMITIDAS, PLANOS } from "@/lib/planos";
 import { TERMOS_VERSAO } from "@/lib/termos";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
@@ -200,13 +200,17 @@ function ConteudoCheckout() {
   // Crédito proporcional do plano vigente
   const creditoProporcional = ehUpgrade ? 177.30 : 0;
 
+  // Preço do plano na forma de pagamento escolhida: o Pix é mais barato; o cartão (à vista ou parcelado) é o preço padrão.
+  // Os valores vêm de lib/planos.ts, a mesma fonte usada pelo servidor.
+  const precoPlano = (id: TipoPlano) => (metodoPagamento === "pix" ? PLANOS[id].valor : PLANOS[id].valorCartao);
+
   // Planos disponíveis
   const planos: Record<TipoPlano, DetalhesPlano> = {
     mensal: {
       id: "mensal",
       nome: "Plano Mensal",
-      precoEquivalenteMes: "R$ 197,00",
-      precoCobradoTotal: 197.00,
+      precoEquivalenteMes: formatarReais(PLANOS.mensal.valor),
+      precoCobradoTotal: precoPlano("mensal"),
       subtotal: 197.00,
       periodicidade: "Cobrado mensalmente",
       descricao: "Flexibilidade para testar mês a mês",
@@ -225,12 +229,12 @@ function ConteudoCheckout() {
       nome: "Plano Trimestral",
       badge: ehUpgrade ? "Seu Plano Atual" : "Mais Escolhido pelas Famílias",
       badgeCor: ehUpgrade ? "bg-slate-800 text-white" : "bg-emerald-500 text-white",
-      precoEquivalenteMes: "R$ 177,30",
-      precoCobradoTotal: 531.90,
+      precoEquivalenteMes: formatarReais(PLANOS.trimestral.valor / 3),
+      precoCobradoTotal: precoPlano("trimestral"),
       subtotal: 591.00,
       economiaTexto: "10% OFF",
       economiaValor: 59.10,
-      periodicidade: "Cobrado R$ 531,90 a cada 3 meses",
+      periodicidade: `Cobrado ${formatarReais(precoPlano("trimestral"))} a cada 3 meses`,
       descricao: "Tempo ideal para consolidação das rotinas",
       destaque: !ehUpgrade,
       beneficios: [
@@ -244,12 +248,12 @@ function ConteudoCheckout() {
       nome: "Plano Anual",
       badge: ehUpgrade ? "🔥 Oportunidade: Economize R$ 354,60 no ano" : "Melhor Custo-Benefício",
       badgeCor: "bg-[#EB6D57] text-white",
-      precoEquivalenteMes: "R$ 167,45",
-      precoCobradoTotal: 2009.40,
+      precoEquivalenteMes: formatarReais(PLANOS.anual.valor / 12),
+      precoCobradoTotal: precoPlano("anual"),
       subtotal: 2364.00,
       economiaTexto: "15% OFF",
       economiaValor: 354.60,
-      periodicidade: "Cobrado R$ 2.009,40 ao ano",
+      periodicidade: `Cobrado ${formatarReais(precoPlano("anual"))} ao ano`,
       descricao: "Consolidação dos ganhos e continuação do progresso",
       destaque: ehUpgrade,
       beneficios: [
@@ -972,11 +976,13 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 197,00
+                      {formatarReais(PLANOS.mensal.valor)}
                     </span>
-                    <span className="text-xs font-semibold text-slate-500">/mês</span>
+                    <span className="text-xs font-semibold text-slate-500">/mês no Pix</span>
                   </div>
-                  <span className="text-xs text-slate-500 font-medium block mt-1">Cobrado mensalmente</span>
+                  <span className="text-xs text-slate-500 font-medium block mt-1">
+                    Cobrado mensalmente · ou <strong className="text-slate-700">{formatarReais(PLANOS.mensal.valorCartao)}</strong> no cartão
+                  </span>
                 </div>
 
                 <ul className="space-y-2.5 my-4 pt-3 border-t border-slate-100">
@@ -1057,13 +1063,15 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 177,30
+                      {formatarReais(PLANOS.trimestral.valor / 3)}
                     </span>
-                    <span className="text-xs font-semibold text-slate-500">/mês</span>
+                    <span className="text-xs font-semibold text-slate-500">/mês no Pix</span>
                   </div>
 
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-500 font-medium">R$ 531,90 a cada 3 meses</span>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {formatarReais(PLANOS.trimestral.valor)} a cada 3 meses no Pix · ou <strong className="text-slate-700">{formatarReais(PLANOS.trimestral.valorCartao)}</strong> no cartão
+                    </span>
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
                       10% OFF
                     </span>
@@ -1148,13 +1156,15 @@ function ConteudoCheckout() {
                 <div className="my-4 pt-3 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                      R$ 167,45
+                      {formatarReais(PLANOS.anual.valor / 12)}
                     </span>
-                    <span className="text-xs font-semibold text-slate-500">/mês</span>
+                    <span className="text-xs font-semibold text-slate-500">/mês no Pix</span>
                   </div>
 
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-500 font-medium">Cobrado R$ 2.009,40 ao ano</span>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {formatarReais(PLANOS.anual.valor)} ao ano no Pix · ou <strong className="text-slate-700">{formatarReais(PLANOS.anual.valorCartao)}</strong> no cartão
+                    </span>
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
                       15% OFF
                     </span>

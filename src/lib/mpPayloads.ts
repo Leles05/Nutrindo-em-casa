@@ -118,6 +118,17 @@ export function totalConfere(pago: unknown, esperado: number): boolean {
   return Number.isFinite(t) && Number.isFinite(esperado) && Math.abs(t - esperado) <= 0.01;
 }
 
+/** Pedido ainda sem resultado: o Mercado Pago às vezes devolve "processando" e termina de processar segundos depois. */
+export function pedidoEmProcessamento(ordem: any, ehPix: boolean): boolean {
+  const s = String(ordem?.status || "").toLowerCase();
+  if (s === "processing" || s === "created") return true;
+  if (ehPix && s === "action_required") {
+    const pix = extrairPix(ordem);
+    return !pix.qrCode || !pix.qrCodeBase64; // Pix ainda sem o código ou sem a imagem do QR Code
+  }
+  return false;
+}
+
 /** Token do cartão gerado pelo MP.js: 32 caracteres hexadecimais. */
 export function tokenCartaoValido(t: unknown): t is string {
   return typeof t === "string" && /^[A-Za-z0-9]{16,64}$/.test(t);

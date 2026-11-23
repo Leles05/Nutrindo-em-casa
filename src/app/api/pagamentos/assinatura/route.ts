@@ -8,6 +8,7 @@ import {
   cancelarAssinaturaMP,
   cancelarPedidoMP,
   consultarCustosParcelamento,
+  aguardarPedido,
   criarPedido,
   estornarPagamentoMP,
   estornarPedidoMP,
@@ -193,7 +194,7 @@ export async function POST(request: Request) {
       percentualCupom = consumido.percentual;
     }
 
-    const valorCobrado = calcularTotal({ plano, percentualCupom, credito });
+    const valorCobrado = calcularTotal({ plano, percentualCupom, credito, forma: billingType === "PIX" ? "PIX" : "CARTAO" });
     if (valorCobrado < VALOR_MINIMO_COBRANCA) {
       await desfazer();
       const minimoBR = VALOR_MINIMO_COBRANCA.toFixed(2).replace(".", ",");
@@ -298,7 +299,10 @@ export async function POST(request: Request) {
       pedidoCriadoId = String(r.data.id);
       pagamentoId = pedidoCriadoId;
 
-      const statusPedido = statusFaturaDoPedido(r.data.status, r.data.status_detail);
+      // O Mercado Pago pode responder "processando": espera o resultado (Pix sem QR Code, cartão ainda sem aprovação)
+      const ordem = await aguardarPedido(cfg, r.data, billingType === "PIX");
+
+      const statusPedido = statusFaturaDoPedido(ordem.status, ordem.status_detail);
       if (statusPedido === "Recusado" || statusPedido === "Cancelado") {
         await desfazer();
         return erro("Cartão recusado pela operadora. Confira os dados ou utilize outro cartão ou o Pix.", 402);
@@ -307,14 +311,14 @@ export async function POST(request: Request) {
       pedidoFoiPago = statusPedido === "Pago";
 
       // Rede de segurança: o total cobrado no cartão tem que ser exatamente o que o cliente viu; se não, estorna e avisa
-      if (parcelas > 1 && statusPedido === "Pago" && !totalConfere(r.data.total_paid_amount, totalNoCartao)) {
-        console.error("ATENÇÃO: total cobrado diferente do mostrado ao cliente; compra estornada.", pedidoCriadoId, r.data.total_paid_amount, totalNoCartao);
+      if (parcelas > 1 && statusPedido === "Pago" && !totalConfere(ordem.total_paid_amount, totalNoCartao)) {
+        console.error("ATENÇÃO: total cobrado diferente do mostrado ao cliente; compra estornada.", pedidoCriadoId, ordem.total_paid_amount, totalNoCartao);
         await desfazer();
         return erro("O valor do parcelamento mudou durante o pagamento. Nenhuma cobrança foi mantida. Confira as opções e tente novamente.", 409);
       }
 
       if (billingType === "PIX") {
-        pix = extrairPix(r.data);
+        pix = extrairPix(ordem);
         if (!pix.qrCode || !pix.qrCodeBase64) {
           console.error("Mercado Pago: QR Code Pix indisponível para o pedido", pedidoCriadoId);
           await desfazer();

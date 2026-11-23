@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { formatarReais, PLANOS, valorDoPlano } from "@/lib/planos";
 import {
   User, CreditCard, ShieldCheck, ArrowLeft, Calendar,
   Lock, CheckCircle2, Download, ExternalLink, FileText,
@@ -88,7 +89,7 @@ function ConteudoConfiguracoes() {
   const [planoUsuario, setPlanoUsuario] = useState({
     tipo: "trimestral",
     nome: "Plano Trimestral",
-    valor: "R$ 531,90",
+    valor: formatarReais(PLANOS.trimestral.valorCartao),
     periodicidade: "Cobrado a cada 3 meses",
     assinaturaId: "",
     status: "ATIVO",
@@ -159,16 +160,18 @@ function ConteudoConfiguracoes() {
 
             const planoTipo = (data.profile.plano || "trimestral").toLowerCase();
             let nomePlano = "Plano Trimestral";
-            let valorPlano = "R$ 531,90";
+            // o valor mostrado segue a forma de pagamento da última fatura: Pix (menor) ou cartão
+            const formaPreco = data.faturas?.[0]?.forma_pagamento === "PIX" ? "PIX" : "CARTAO";
+            let valorPlano = formatarReais(valorDoPlano("trimestral", formaPreco));
             let periodicidadePlano = "Cobrado a cada 3 meses";
 
             if (planoTipo === "mensal") {
               nomePlano = "Plano Mensal";
-              valorPlano = "R$ 197,00";
+              valorPlano = formatarReais(valorDoPlano("mensal", formaPreco));
               periodicidadePlano = "Cobrado mensalmente";
             } else if (planoTipo === "anual") {
               nomePlano = "Plano Anual";
-              valorPlano = "R$ 2.009,40";
+              valorPlano = formatarReais(valorDoPlano("anual", formaPreco));
               periodicidadePlano = "Cobrado anualmente";
             }
 

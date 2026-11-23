@@ -1,14 +1,31 @@
 /**
- * FONTE ÚNICA DE PREÇOS E REGRAS DE PARCELAMENTO (servidor). O valor cobrado NUNCA vem do navegador.
- * Se mudar o preço de um plano, altere aqui e também o texto exibido em /pagamento.
+ * FONTE ÚNICA DE PREÇOS E REGRAS DE PARCELAMENTO. O valor cobrado NUNCA vem do navegador: o servidor recalcula tudo aqui,
+ * e as telas (página inicial e /pagamento) também leem daqui para mostrar o mesmo valor.
+ *
+ * Dois preços por plano: o PIX é mais barato (incentivo: a taxa do Pix é menor) e o CARTÃO é o preço padrão.
+ * Cartão = Pix × 210 / 197 (mantém os mesmos descontos de 10% no trimestral e 15% no anual).
  */
 export type Plano = "mensal" | "trimestral" | "anual";
 
-export const PLANOS: Record<Plano, { ciclo: "MONTHLY" | "QUARTERLY" | "YEARLY"; valor: number; nome: string }> = {
-  mensal: { ciclo: "MONTHLY", valor: 197.0, nome: "Mensal" },
-  trimestral: { ciclo: "QUARTERLY", valor: 531.9, nome: "Trimestral" },
-  anual: { ciclo: "YEARLY", valor: 2009.4, nome: "Anual" },
+export const PLANOS: Record<Plano, { ciclo: "MONTHLY" | "QUARTERLY" | "YEARLY"; valor: number; valorCartao: number; nome: string }> = {
+  // valor = preço no Pix; valorCartao = preço no cartão (à vista ou parcelado)
+  mensal: { ciclo: "MONTHLY", valor: 197.0, valorCartao: 210.0, nome: "Mensal" },
+  trimestral: { ciclo: "QUARTERLY", valor: 531.9, valorCartao: 567.0, nome: "Trimestral" },
+  anual: { ciclo: "YEARLY", valor: 2009.4, valorCartao: 2142.0, nome: "Anual" },
 };
+
+/** Forma de pagamento para efeito de preço. */
+export type FormaPreco = "PIX" | "CARTAO";
+
+/** Preço de tabela do plano na forma de pagamento escolhida. */
+export function valorDoPlano(plano: Plano, forma: FormaPreco): number {
+  return forma === "PIX" ? PLANOS[plano].valor : PLANOS[plano].valorCartao;
+}
+
+/** Valor em reais no padrão brasileiro: "R$ 2.009,40". */
+export function formatarReais(valor: number): string {
+  return "R$ " + new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor);
+}
 
 /** Crédito aplicado ao migrar do Trimestral para o Anual (mesmo valor exibido na tela de upgrade). */
 export const CREDITO_UPGRADE_TRIMESTRAL_PARA_ANUAL = 177.3;
@@ -27,8 +44,8 @@ export function arredondar(valor: number): number {
   return Math.round((valor + Number.EPSILON) * 100) / 100;
 }
 
-export function calcularTotal(opts: { plano: Plano; percentualCupom?: number; credito?: number }): number {
-  const base = PLANOS[opts.plano].valor;
+export function calcularTotal(opts: { plano: Plano; percentualCupom?: number; credito?: number; forma?: FormaPreco }): number {
+  const base = valorDoPlano(opts.plano, opts.forma ?? "PIX");
   const desconto = arredondar((base * (opts.percentualCupom || 0)) / 100);
   return arredondar(Math.max(0, base - (opts.credito || 0) - desconto));
 }

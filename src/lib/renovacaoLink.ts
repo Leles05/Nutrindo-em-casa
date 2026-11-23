@@ -119,7 +119,7 @@ export async function avisarRenovacaoCartao(admin: SupabaseClient, p: PerfilReno
     html: montarEmail(
       "Sua assinatura será renovada em breve",
       [
-        `Olá, ${p.nome || "tudo bem"}! No dia ${dataBR(proxima)} o seu Plano ${PLANOS[plano].nome} será renovado automaticamente, no valor de ${brl(PLANOS[plano].valor)}, no mesmo cartão usado na contratação.`,
+        `Olá, ${p.nome || "tudo bem"}! No dia ${dataBR(proxima)} o seu Plano ${PLANOS[plano].nome} será renovado automaticamente, no valor de ${brl(PLANOS[plano].valorCartao)}, no mesmo cartão usado na contratação.`,
         "Se preferir não renovar, cancele a qualquer momento em Configurações > Assinatura, antes dessa data.",
       ],
       { texto: "Gerenciar minha assinatura", url: `${urlDoSite()}/configuracoes` }

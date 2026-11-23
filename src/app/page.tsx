@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { formatarReais, PLANOS } from "@/lib/planos";
 import {
   Stethoscope, Video, Sparkles, ShieldCheck, CheckCircle2,
   ChevronRight, ChevronDown, Award, Star, ArrowRight, Play,
@@ -624,7 +625,7 @@ export default function PaginaInicialLanding() {
               Escolha o plano ideal para a sua família
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
-              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. Nos planos Trimestral e Anual, o cartão pode ser parcelado (os juros, quando houver, aparecem antes de você pagar). À vista e no Pix não há juros. Pagamentos seguros processados pelo Mercado Pago.
+              Pague com <strong>Pix</strong> ou <strong>cartão de crédito</strong>, com liberação imediata. O Pix tem o menor valor. Nos planos Trimestral e Anual, o cartão pode ser parcelado em até 3x sem juros; em mais parcelas, os juros do Mercado Pago aparecem antes de você pagar. Pagamentos seguros processados pelo Mercado Pago.
             </p>
           </div>
 
@@ -639,9 +640,9 @@ export default function PaginaInicialLanding() {
                 </div>
 
                 <div className="pt-2 border-t border-slate-100">
-                  <span className="text-3xl font-black text-slate-900">R$ 197,00</span>
-                  <span className="text-xs text-slate-500">/mês</span>
-                  <span className="text-[11px] text-slate-400 block mt-0.5">Cobrado mensalmente</span>
+                  <span className="text-3xl font-black text-slate-900">{formatarReais(PLANOS.mensal.valor)}</span>
+                  <span className="text-xs text-slate-500">/mês no Pix</span>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">ou {formatarReais(PLANOS.mensal.valorCartao)} no cartão</span>
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
@@ -689,11 +690,11 @@ export default function PaginaInicialLanding() {
 
                 <div className="pt-2 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-slate-900">R$ 177,30</span>
-                    <span className="text-xs text-slate-500">/mês</span>
+                    <span className="text-3xl font-black text-slate-900">{formatarReais(PLANOS.trimestral.valor / 3)}</span>
+                    <span className="text-xs text-slate-500">/mês no Pix</span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-slate-500">R$ 531,90 por trimestre</span>
+                    <span className="text-[11px] text-slate-500">{formatarReais(PLANOS.trimestral.valor)} por trimestre no Pix · ou {formatarReais(PLANOS.trimestral.valorCartao)} no cartão</span>
                     <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
                       10% OFF
                     </span>
@@ -742,11 +743,11 @@ export default function PaginaInicialLanding() {
 
                 <div className="pt-2 border-t border-slate-100">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-slate-900">R$ 167,45</span>
-                    <span className="text-xs text-slate-500">/mês</span>
+                    <span className="text-3xl font-black text-slate-900">{formatarReais(PLANOS.anual.valor / 12)}</span>
+                    <span className="text-xs text-slate-500">/mês no Pix</span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-slate-500">R$ 2.009,40 ao ano (até 12x)</span>
+                    <span className="text-[11px] text-slate-500">{formatarReais(PLANOS.anual.valor)} ao ano no Pix · ou {formatarReais(PLANOS.anual.valorCartao)} no cartão (até 12x)</span>
                     <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
                       15% OFF
                     </span>

@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { mpFetch, type ConfigMP, type RespostaMP } from "@/lib/mercadopago";
 import { PLANOS, type Plano } from "@/lib/planos";
 
+import { pedidoEmProcessamento } from "@/lib/mpPayloads";
+
 export * from "@/lib/mpPayloads";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- respostas JSON da API do Mercado Pago */
@@ -61,6 +63,24 @@ export async function estornarPagamentoMP(cfg: ConfigMP, pagamentoId: string, te
   }
   console.error("ATENÇÃO: não foi possível estornar automaticamente o pagamento", pagamentoId, "— estorne manualmente no painel do Mercado Pago.");
   return false;
+}
+
+/**
+ * Espera o pedido terminar de processar (até ~14 s): consulta de 2 em 2 segundos até ter resultado.
+ * Se não terminar, devolve o último estado conhecido (o aviso do Mercado Pago conclui depois).
+ */
+export async function aguardarPedido(cfg: ConfigMP, ordem: any, ehPix: boolean, tentativas = 7): Promise<any> {
+  let atual = ordem;
+  for (let i = 0; i < tentativas && pedidoEmProcessamento(atual, ehPix); i++) {
+    await new Promise((ok) => setTimeout(ok, 2000));
+    try {
+      const r = await mpFetch(cfg, "GET", `/v1/orders/${encodeURIComponent(String(ordem.id))}`, undefined, { timeoutMs: 10_000 });
+      if (r.ok) atual = r.data;
+    } catch {
+      /* tenta de novo */
+    }
+  }
+  return atual;
 }
 
 /**
@@ -134,7 +154,7 @@ export async function alinharValorAssinatura(cfg: ConfigMP, assinaturaId: string
     const a = await mpFetch(cfg, "GET", `/preapproval/${encodeURIComponent(assinaturaId)}`);
     if (!a.ok) return false;
     const atual = Number(a.data?.auto_recurring?.transaction_amount);
-    const tabela = PLANOS[plano].valor;
+    const tabela = PLANOS[plano].valorCartao; // assinatura = cartão: renova pelo preço do cartão
     if (Math.abs(atual - tabela) < 0.005) return true;
     const r = await mpFetch(cfg, "PUT", `/preapproval/${encodeURIComponent(assinaturaId)}`, {
       auto_recurring: { transaction_amount: tabela, currency_id: "BRL" },

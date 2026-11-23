@@ -53,8 +53,8 @@ const SECOES: Secao[] = [
     ],
     itens: [
       "Pix: pagamento à vista. Antes do fim do ciclo, enviamos ao seu e-mail a cobrança do ciclo seguinte;",
-      "Cartão de crédito: à vista ou, na primeira compra, parcelado nas quantidades oferecidas para cada plano. No parcelamento, o valor total da compra é aprovado de uma só vez no limite do cartão e dividido na fatura conforme as regras da sua operadora. Os juros do parcelamento, quando houver, são definidos pelo Mercado Pago e mostrados na tela de pagamento, com o total exato, antes de você finalizar. À vista e no Pix não há juros;",
-      "Cupons de desconto são pessoais, têm validade e limite de uso, não são acumulativos e valem apenas para a compra em que foram aplicados. As renovações seguem o preço de tabela vigente do plano;",
+      "Cartão de crédito: à vista ou, na primeira compra, parcelado nas quantidades oferecidas para cada plano. No parcelamento, o valor total da compra é aprovado de uma só vez no limite do cartão e dividido na fatura conforme as regras da sua operadora. O parcelamento em até 3x é sem juros; em mais parcelas, os juros são definidos pelo Mercado Pago e mostrados na tela de pagamento, com o total exato, antes de você finalizar. Cada plano tem dois valores, o do Pix (menor) e o do cartão, ambos exibidos antes do pagamento;",
+      "Cupons de desconto são pessoais, têm validade e limite de uso, não são acumulativos e valem apenas para a compra em que foram aplicados. As renovações seguem o preço de tabela vigente do plano na forma de pagamento da renovação (Pix ou cartão);",
       "Os pagamentos são processados pelo Mercado Pago, instituição de pagamento. Os dados do cartão são digitados nesta página e convertidos, no seu próprio navegador, em um código seguro (token) pelo Mercado Pago: o Nutrindo em Casa não recebe nem armazena o número do cartão nem o código de segurança (CVV). Para prevenção a fraudes, o Mercado Pago coleta dados do dispositivo durante o pagamento.",
     ],
   },
@@ -76,7 +76,7 @@ const SECOES: Secao[] = [
     destaque: true,
     paragrafos: [
       "Em respeito ao art. 49 do Código de Defesa do Consumidor, você tem 7 dias a partir da confirmação do pagamento para desistir da contratação, com devolução de 100% do valor pago, sem burocracia.",
-      "Para solicitar, escreva para contato@nutrindoemcasa.com.br ou use o suporte da plataforma. O estorno é feito pelo mesmo meio de pagamento; o prazo para o valor aparecer na fatura ou na conta depende da operadora do cartão ou do banco.",
+      "Para solicitar, escreva para contato@nutrindoemcasa.com.br ou use o suporte da plataforma. Respondemos ao seu pedido em até 48 horas úteis. O estorno é feito pelo mesmo meio de pagamento, pela plataforma do Mercado Pago; o prazo para o valor aparecer na fatura ou na conta depende da operadora do cartão ou do banco.",
     ],
   },
   {

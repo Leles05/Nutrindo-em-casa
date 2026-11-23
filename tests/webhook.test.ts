@@ -112,7 +112,7 @@ describe("Pagamento confirmado de pedido", () => {
 
 describe("Cobranças da assinatura no cartão", () => {
   const cobranca = (extra: Record<string, unknown> = {}) => ({ id: 77, preapproval_id: "SUB1", transaction_amount: 197, payment: { id: 555, status: "approved" }, ...extra });
-  const assinatura = (valor = 197) => ({ status: "authorized", next_payment_date: "2027-03-19T12:00:00.000-03:00", auto_recurring: { transaction_amount: valor } });
+  const assinatura = (valor = 210) => ({ status: "authorized", next_payment_date: "2027-03-19T12:00:00.000-03:00", auto_recurring: { transaction_amount: valor } });
 
   it("cobrança aprovada: gera a fatura da renovação, mantém ATIVO e usa a data do Mercado Pago", async () => {
     const { admin, tabelas } = bancoFalso({ profiles: [perfilBase({ plano: "mensal", gateway_assinatura_id: "SUB1" })], faturas: [] });
@@ -124,11 +124,11 @@ describe("Cobranças da assinatura no cartão", () => {
     assert.equal(tabelas.profiles[0].proxima_cobranca, "2027-03-19");
   });
 
-  it("1ª cobrança com cupom: depois dela a assinatura volta ao preço de tabela", async () => {
+  it("1ª cobrança com cupom: depois dela a assinatura volta ao preço de tabela do cartão (R$ 210)", async () => {
     const { admin } = bancoFalso({ profiles: [perfilBase({ plano: "mensal", gateway_assinatura_id: "SUB1" })], faturas: [] });
-    mp = mercadoPagoFalso({ cobrancas: { 77: cobranca({ transaction_amount: 98.5 }) }, assinaturas: { SUB1: assinatura(98.5) } });
+    mp = mercadoPagoFalso({ cobrancas: { 77: cobranca({ transaction_amount: 105 }) }, assinaturas: { SUB1: assinatura(105) } });
     await webhook.processarCobrancaAssinatura(admin as never, cfg, "77");
-    assert.equal((mp.assinaturas.SUB1.auto_recurring as { transaction_amount: number }).transaction_amount, 197);
+    assert.equal((mp.assinaturas.SUB1.auto_recurring as { transaction_amount: number }).transaction_amount, 210);
   });
 
   it("fatura provisória do checkout é adotada (sem criar fatura duplicada)", async () => {

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   ehRenovacao,
   custoDaParcela,
+  pedidoEmProcessamento,
   extrairPix,
   metodoCartaoValido,
   montarAssinatura,
@@ -206,5 +207,27 @@ describe("Parcelamento: juros definidos pelo Mercado Pago (o cliente vê o total
     assert.equal(totalConfere("531.90", 591.63), false);
     assert.equal(totalConfere(undefined, 531.9), false);
     assert.equal(totalConfere("abc", 531.9), false);
+  });
+});
+
+describe("Pedido ainda processando no Mercado Pago", () => {
+  const completo = { status: "action_required", transactions: { payments: [{ payment_method: { qr_code: "000201...", qr_code_base64: "iVBOR..." } }] } };
+  const semImagem = { status: "action_required", transactions: { payments: [{ payment_method: { qr_code: "000201..." } }] } };
+
+  it("espera quando está processando", () => {
+    assert.equal(pedidoEmProcessamento({ status: "processing" }, false), true);
+    assert.equal(pedidoEmProcessamento({ status: "created" }, true), true);
+  });
+
+  it("Pix só está pronto com o código E a imagem do QR Code", () => {
+    assert.equal(pedidoEmProcessamento(semImagem, true), true);
+    assert.equal(pedidoEmProcessamento({ status: "action_required" }, true), true);
+    assert.equal(pedidoEmProcessamento(completo, true), false);
+  });
+
+  it("resultado final não precisa esperar", () => {
+    assert.equal(pedidoEmProcessamento({ status: "processed" }, false), false);
+    assert.equal(pedidoEmProcessamento({ status: "failed" }, false), false);
+    assert.equal(pedidoEmProcessamento({ status: "canceled" }, true), false);
   });
 });

@@ -34,8 +34,11 @@ src/
 ├── hooks/useAuthGuard.ts   # Proteção de páginas e encerramento de sessão
 └── lib/                    # Regras de negócio e integrações (sem tela)
     ├── auth.ts             # Valida o token no servidor, papel (nutri/cliente)
-    ├── planos.ts           # Fonte única de preços e parcelas
-    ├── cupons.ts, renovacao.ts, parcelado.ts, assinatura.ts
+    ├── planos.ts           # Fonte única de preços (Pix e cartão) e parcelas
+    ├── cupons.ts, assinatura.ts          # Cupons e situação do acesso
+    ├── mercadopago.ts, mpPedidos.ts, mpPayloads.ts   # Mercado Pago: API, pedidos e regras puras
+    ├── pagamentosWebhook.ts, pagamentosEstado.ts     # Avisos do Mercado Pago (webhook)
+    ├── renovacaoLink.ts, renovacaoRegras.ts          # Renovação por link e avisos por e-mail
     ├── googleAgenda.ts, agendaSync.ts   # Integração com a agenda
     ├── email.ts, termos.ts, tokenCompra.ts, rateLimit.ts
 supabase/
@@ -121,6 +124,8 @@ sequenceDiagram
     F->>A: consulta o status (a cada 4 s)
     A-->>F: pago → criar senha e entrar
 ```
+
+Preços: cada plano tem dois valores, definidos em `lib/planos.ts` e lidos pelo servidor e pelas telas. O **Pix** é mais barato (R$ 197 / R$ 531,90 / R$ 2.009,40), como incentivo, e o **cartão** é o preço padrão (R$ 210 / R$ 567,00 / R$ 2.142,00), na mesma proporção, mantendo os descontos de 10% (trimestral) e 15% (anual). O servidor escolhe o preço pela forma de pagamento; a assinatura no cartão renova pelo preço do cartão e o Pix de renovação, pelo do Pix.
 
 Parcelamento: quem paga os juros é configuração da conta do Mercado Pago (a Orders API não permite escolher por pedido). A tela mostra as parcelas reais do cartão digitado (`getInstallments` do MP.js), com juros e total. O servidor confere a tabela do Mercado Pago antes de cobrar e, depois, o total pago: se divergir do que foi mostrado, não cobra ou estorna na hora.
 

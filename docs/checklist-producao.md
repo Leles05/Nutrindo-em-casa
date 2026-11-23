@@ -12,13 +12,12 @@ Legenda: **Bloqueia o lançamento** (sem isso não lança), **Em aberto** (preci
 - Devoluções: pedido respondido em até 48 horas úteis; a nutricionista devolve pela plataforma do Mercado Pago.
 - Contestações de cartão: a nutricionista acompanha o e-mail, com a ajuda do irmão do Lucas.
 - Nota fiscal e impostos: aguardando a resposta do contador.
+- Hospedagem: Vercel e Supabase gratuitos nos primeiros dias. Risco aceito: os Termos da Vercel só preveem o plano gratuito para uso não comercial (pode haver suspensão); por isso o backup semanal do banco é obrigatório e a migração para a Vercel Pro deve ser reavaliada logo após as primeiras vendas.
 
 ## 1. Ainda em aberto
 
-Só sobram três pontos. Os números estão na tabela de taxas mais abaixo.
+Só sobram dois pontos, os dois dependem de resposta de terceiros (contador e suporte do Mercado Pago).
 
-- [ ] **Decidir a hospedagem para vender: manter o plano gratuito ou pagar a Vercel (Pro, US$ 20 por mês)** _(Em aberto · Ambos)_
-  Os Termos da Vercel dizem que o plano gratuito é só para uso pessoal ou não comercial. Um site que cobra assinaturas é comercial, então há risco de a conta ser suspensa. O Supabase gratuito funciona no começo (500 MB, 50 mil usuários), pausa só após 7 dias parado (o cron diário mantém ativo) e não tem backup: use scripts/backup_banco.mjs toda semana. Sugestão: começar com o Supabase gratuito e a Vercel Pro.
 - [ ] **Receber a resposta do contador sobre nota fiscal e impostos das assinaturas** _(Em aberto · Nutri)_
   O site não emite nota fiscal. Definir se será manual ou automática (sistemas como Focus NFe ou eNotas emitem a cada pagamento).
 - [ ] **Pedir ao suporte do Mercado Pago a confirmação por escrito de que a tarifa é devolvida nas devoluções** _(Em aberto · Nutri)_
@@ -84,7 +83,7 @@ O que precisa estar combinado e escrito antes de ter clientes de verdade.
 - [ ] **Responder o contato@nutrindoemcasa.com.br dentro da regra de 48 horas úteis (a garantia é de 7 dias)** _(Bloqueia o lançamento · Nutri)_
 - [ ] **Rotina semanal: Vercel > Logs (procure "ATENÇÃO") e Mercado Pago > Webhooks > entregas** _(Recomendado · Lucas)_
 - [ ] **Plano de emergência: para pausar vendas, remova MERCADOPAGO_ACCESS_TOKEN na Vercel e faça deploy; o site avisa que o pagamento está indisponível e não cobra ninguém** _(Recomendado · Lucas)_
-- [ ] **Backup semanal do banco enquanto estiver no Supabase gratuito: node scripts/backup_banco.mjs** _(Bloqueia o lançamento · Lucas)_
+- [ ] **Backup semanal do banco (o Supabase gratuito não tem backup): node scripts/backup_banco.mjs** _(Bloqueia o lançamento · Lucas)_
   Guarde a pasta backups/ em local privado e protegido: ela tem dados de saúde de clientes.
 - [ ] **Revisão jurídica dos Termos e da Privacidade (dados de saúde de crianças, LGPD)** _(Recomendado · Nutri)_
 

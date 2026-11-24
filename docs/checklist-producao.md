@@ -6,9 +6,10 @@ Legenda: **Bloqueia o lançamento** (sem isso não lança), **Em aberto** (preci
 
 ## Decisões já tomadas (23/11/2026)
 
-- Cartão cai na conta em 30 dias (taxa de 2,95%). Pix cai na hora (0,99%).
+- Cartão cai na conta em 30 dias (taxa de 3,98% à vista). Pix cai na hora (0,99%).
 - Preços: Pix R$ 197,00 / R$ 531,90 / R$ 2.009,40 e cartão R$ 210,00 / R$ 567,00 / R$ 2.142,00 (mensal, trimestral, anual). Já está no site.
-- Parcelamento: até 3x sem juros (a nutricionista assume); acima de 3x o cliente paga os juros do Mercado Pago, avisado antes na tela.
+- Parcelamento: até 3x sem juros (a nutricionista assume: custo total de 6,52% no 2x e 8,61% no 3x, já com o prazo de 30 dias); acima de 3x o cliente paga os juros do Mercado Pago, avisado antes na tela.
+- Já configurado na conta do Mercado Pago em 23/11/2026: recebimento do cartão em 30 dias e parcelado vendedor até 3x ligados (conferido depois de recarregar a página).
 - Devoluções: pedido respondido em até 48 horas úteis; a nutricionista devolve pela plataforma do Mercado Pago.
 - Contestações de cartão: a nutricionista acompanha o e-mail, com a ajuda do irmão do Lucas.
 - Nota fiscal e impostos: aguardando a resposta do contador.
@@ -19,7 +20,7 @@ Legenda: **Bloqueia o lançamento** (sem isso não lança), **Em aberto** (preci
 Só sobram dois pontos, os dois dependem de resposta de terceiros (contador e suporte do Mercado Pago).
 
 - [ ] **Receber a resposta do contador sobre nota fiscal e impostos das assinaturas** _(Em aberto · Nutri)_
-  O site não emite nota fiscal. Definir se será manual ou automática (sistemas como Focus NFe ou eNotas emitem a cada pagamento).
+  O site não emite nota fiscal. Definir se será manual ou automática. O Mercado Pago tem o módulo Notas fiscais dentro do Sistema de gestão (assinatura paga, ainda não contratada); sistemas como Focus NFe ou eNotas também emitem a cada pagamento.
 - [ ] **Pedir ao suporte do Mercado Pago a confirmação por escrito de que a tarifa é devolvida nas devoluções** _(Em aberto · Nutri)_
   A ajuda do Mercado Pago diz que sim, mas a documentação técnica não confirma. O ensaio com dinheiro real (grupo 4) também confirma.
 
@@ -28,11 +29,12 @@ Só sobram dois pontos, os dois dependem de resposta de terceiros (contador e su
 Tudo isto é feito dentro da conta da LAIS VIEIRA DE LIMA LELES LTDA, em Seu negócio > Custos e Configurações.
 
 - [ ] **Conta PJ com dados completos, validada e com credenciais de produção liberadas** _(Bloqueia o lançamento · Nutri)_
-- [ ] **Ativar o parcelamento sem juros em 2x e 3x (Seu negócio > Custos > Parcelamento), deixando as parcelas maiores com juros para o cliente** _(Bloqueia o lançamento · Nutri)_
-  O site promete 3x sem juros: sem essa configuração o cliente verá os juros do Mercado Pago em todas as parcelas. Custo para a nutricionista: 2,53% (2x) e 4,62% (3x), além dos 2,95% do cartão em 30 dias.
-- [ ] **Configurar o recebimento do cartão em 30 dias (Seu negócio > Custos > Checkouts)** _(Bloqueia o lançamento · Nutri)_
-- [ ] **Conferir as taxas reais exibidas na conta (cartão, parcelas, Pix e Assinaturas) e comparar com a tabela deste documento** _(Bloqueia o lançamento · Nutri)_
-  A página pública do Mercado Pago tem números que não batem entre si e não informa a taxa das Assinaturas. O que vale é o que a conta mostrar.
+- [ ] **Confirmar com um pagamento real que a assinatura no cartão cobra a taxa do cartão (3,98% em 30 dias)** _(Recomendado · Ambos)_
+  As taxas da tabela abaixo foram lidas na própria conta em 23/11. A tela de taxas não mostra uma linha separada para Assinaturas; o ensaio com dinheiro real confirma.
+- [ ] **Validar a identidade com o código por SMS (celular final 6020) quando o Mercado Pago pedir, para abrir as credenciais de produção do aplicativo** _(Bloqueia o lançamento · Nutri)_
+  A página de credenciais pede a confirmação por código enviado ao celular da titular. Só ela recebe o código.
+- [ ] **Resolver as pendências de Segurança da conta (métodos de verificação, senha) e usar Colaboradores para dar acesso ao Lucas e ao irmão, em vez de compartilhar o login** _(Recomendado · Nutri)_
+  Em Configurações > Segurança e Colaboradores. A conta hoje mostra "configurações pendentes" e não tem senha criada.
 - [ ] **Conferir o nome que aparece na fatura do cartão do cliente (ex.: NUTRINDOEMCASA)** _(Recomendado · Nutri)_
   Nome reconhecível reduz contestações de quem não lembra da compra.
 - [ ] **Conta bancária cadastrada para saque** _(Bloqueia o lançamento · Nutri)_
@@ -89,24 +91,24 @@ O que precisa estar combinado e escrito antes de ter clientes de verdade.
 
 ## Tabela de taxas
 
-Página oficial de tarifas do Checkout do Mercado Pago, consultada em 19/11/2026, com o prazo de 30 dias escolhido. Confirme na sua conta: a própria página tem números que não batem entre si.
+Lida na própria conta do Mercado Pago (Taxas e parcelas > Checkout) em 23/11/2026, com o recebimento do cartão em 30 dias.
 
 ### À vista: Pix e cartão
 
-| Plano | Pix, cai na hora (taxa 0,99%) | Cartão à vista, cai em 30 dias (taxa 2,95%) |
+| Plano | Pix, cai na hora (taxa 0,99%) | Cartão à vista, cai em 30 dias (taxa 3,98%) |
 |---|---|---|
-| Mensal | cliente paga R$ 197,00 · taxa 1,95 · fica R$ 195,05 | cliente paga R$ 210,00 · taxa 6,19 · fica R$ 203,81 |
-| Trimestral | cliente paga R$ 531,90 · taxa 5,27 · fica R$ 526,63 | cliente paga R$ 567,00 · taxa 16,73 · fica R$ 550,27 |
-| Anual | cliente paga R$ 2.009,40 · taxa 19,89 · fica R$ 1.989,51 | cliente paga R$ 2.142,00 · taxa 63,19 · fica R$ 2.078,81 |
+| Mensal | cliente paga R$ 197,00 · taxa 1,95 · fica R$ 195,05 | cliente paga R$ 210,00 · taxa 8,36 · fica R$ 201,64 |
+| Trimestral | cliente paga R$ 531,90 · taxa 5,27 · fica R$ 526,63 | cliente paga R$ 567,00 · taxa 22,57 · fica R$ 544,43 |
+| Anual | cliente paga R$ 2.009,40 · taxa 19,89 · fica R$ 1.989,51 | cliente paga R$ 2.142,00 · taxa 85,25 · fica R$ 2.056,75 |
 
 ### Parcelado sem juros (a nutricionista assume), cartão em 30 dias
 
-Taxa do cartão (2,95%) somada ao adicional da parcela (2x: 2,53%; 3x: 4,62%). Acima de 3x o cliente paga os juros do Mercado Pago e a nutricionista recebe como no cartão à vista. Estimativa a confirmar no ensaio com dinheiro real.
+Taxa por venda de 2,00% mais a taxa de parcelamento (2x: 4,52%; 3x: 6,61%), como mostra a conta. Acima de 3x o cliente paga os juros do Mercado Pago e a nutricionista paga só a taxa por venda (de 2,00% a 2,10% no parcelado do comprador, conforme a tela da conta).
 
 | Compra | Taxa total | Taxa em R$ | Fica para a nutricionista |
 |---|---|---|---|
-| Trimestral em 2x (R$ 283,50 cada) | 5,48% | 31,07 | 535,93 |
-| Trimestral em 3x (R$ 189,00 cada) | 7,57% | 42,92 | 524,08 |
-| Anual em 3x (R$ 714,00 cada) | 7,57% | 162,15 | 1.979,85 |
+| Trimestral em 2x (R$ 283,50 cada) | 6,52% | 36,97 | 530,03 |
+| Trimestral em 3x (R$ 189,00 cada) | 8,61% | 48,82 | 518,18 |
+| Anual em 3x (R$ 714,00 cada) | 8,61% | 184,42 | 1.957,58 |
 
-Pix x cartão à vista: com o recebimento em 30 dias, o cartão deixa mais líquido para a nutricionista (mensal R$ 203,81 contra R$ 195,05 no Pix). O incentivo ao Pix é, na prática, um desconto de R$ 13 para o cliente em troca de receber na hora, sem risco de contestação. Referência de devolução: no Asaas, a devolução de R$ 11,82 retornou R$ 9,75 e reteve R$ 2,07 (17,5%); no Mercado Pago a ajuda oficial diz que a tarifa de pagamento devolvido não é cobrada, a confirmar na prática.
+Pix x cartão à vista: com o recebimento em 30 dias, o cartão deixa mais líquido para a nutricionista (mensal R$ 201,64 contra R$ 195,05 no Pix). O incentivo ao Pix é, na prática, um desconto de R$ 13 para o cliente em troca de receber na hora, sem risco de contestação. O 3x sem juros fica abaixo do Pix no trimestral (R$ 518,18 contra R$ 526,63). Referência de devolução: no Asaas, a devolução de R$ 11,82 retornou R$ 9,75 e reteve R$ 2,07 (17,5%); no Mercado Pago a ajuda oficial diz que a tarifa de pagamento devolvido não é cobrada, a confirmar na prática.

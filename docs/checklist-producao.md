@@ -1,6 +1,6 @@
 # Checklist de produção
 
-Nutrindo em Casa: do ambiente de teste ao dinheiro de verdade com o Mercado Pago. Atualizado em 23/11/2026.
+Nutrindo em Casa: do ambiente de teste ao dinheiro de verdade com o Mercado Pago. Atualizado em 26/11/2026.
 
 Legenda: **Bloqueia o lançamento** (sem isso não lança), **Em aberto** (precisa de escolha), **Recomendado**.
 
@@ -12,15 +12,16 @@ Legenda: **Bloqueia o lançamento** (sem isso não lança), **Em aberto** (preci
 - Já configurado na conta do Mercado Pago em 23/11/2026: recebimento do cartão em 30 dias e parcelado vendedor até 3x ligados (conferido depois de recarregar a página).
 - Devoluções: pedido respondido em até 48 horas úteis; a nutricionista devolve pela plataforma do Mercado Pago.
 - Contestações de cartão: a nutricionista acompanha o e-mail, com a ajuda do irmão do Lucas.
-- Nota fiscal e impostos: aguardando a resposta do contador.
+- Preços confirmados pela nutricionista em 26/11/2026.
+- Nota fiscal: emitida ao final do atendimento por videochamada (não na compra), pela nutricionista ou pelo contador, e enviada ao cliente por e-mail. Se houver devolução depois do atendimento, a nota precisa ser cancelada. A nutricionista segue acertando os detalhes de impostos com o contador.
+- Segurança da conta do Mercado Pago: resolvida pela nutricionista em 26/11/2026.
+- Preparação feita em 26/11/2026: backup do banco, perfil de teste apagado (só resta a conta da nutricionista), cupons antigos desativados e criados TESTE99 (99%, 4 usos) e TESTE95 (95%, 3 usos), válidos até 30/11.
 - Hospedagem: Vercel e Supabase gratuitos nos primeiros dias. Risco aceito: os Termos da Vercel só preveem o plano gratuito para uso não comercial (pode haver suspensão); por isso o backup semanal do banco é obrigatório e a migração para a Vercel Pro deve ser reavaliada logo após as primeiras vendas.
 
 ## 1. Ainda em aberto
 
-Só sobram dois pontos, os dois dependem de resposta de terceiros (contador e suporte do Mercado Pago).
+Só sobra um ponto, que depende do suporte do Mercado Pago. A nota fiscal está decidida: é emitida manualmente ao final do atendimento.
 
-- [ ] **Receber a resposta do contador sobre nota fiscal e impostos das assinaturas** _(Em aberto · Nutri)_
-  O site não emite nota fiscal. Definir se será manual ou automática. O Mercado Pago tem o módulo Notas fiscais dentro do Sistema de gestão (assinatura paga, ainda não contratada); sistemas como Focus NFe ou eNotas também emitem a cada pagamento.
 - [ ] **Pedir ao suporte do Mercado Pago a confirmação por escrito de que a tarifa é devolvida nas devoluções** _(Em aberto · Nutri)_
   A ajuda do Mercado Pago diz que sim, mas a documentação técnica não confirma. O ensaio com dinheiro real (grupo 4) também confirma.
 
@@ -33,8 +34,8 @@ Tudo isto é feito dentro da conta da LAIS VIEIRA DE LIMA LELES LTDA, em Seu neg
   As taxas da tabela abaixo foram lidas na própria conta em 23/11. A tela de taxas não mostra uma linha separada para Assinaturas; o ensaio com dinheiro real confirma.
 - [ ] **Validar a identidade com o código por SMS (celular final 6020) quando o Mercado Pago pedir, para abrir as credenciais de produção do aplicativo** _(Bloqueia o lançamento · Nutri)_
   A página de credenciais pede a confirmação por código enviado ao celular da titular. Só ela recebe o código.
-- [ ] **Resolver as pendências de Segurança da conta (métodos de verificação, senha) e usar Colaboradores para dar acesso ao Lucas e ao irmão, em vez de compartilhar o login** _(Recomendado · Nutri)_
-  Em Configurações > Segurança e Colaboradores. A conta hoje mostra "configurações pendentes" e não tem senha criada.
+- [ ] **Usar Colaboradores para dar acesso ao Lucas e ao irmão, em vez de compartilhar o login** _(Recomendado · Nutri)_
+  Em Configurações > Colaboradores. As pendências de segurança da conta já foram resolvidas pela nutricionista (26/11).
 - [ ] **Conferir o nome que aparece na fatura do cartão do cliente (ex.: NUTRINDOEMCASA)** _(Recomendado · Nutri)_
   Nome reconhecível reduz contestações de quem não lembra da compra.
 - [ ] **Conta bancária cadastrada para saque** _(Bloqueia o lançamento · Nutri)_
@@ -53,13 +54,14 @@ Hoje o site inteiro roda com chaves de teste. A troca é feita na Vercel e no pa
 - [ ] **Manter o .env.local com chaves de TESTE** _(Bloqueia o lançamento · Lucas)_
   Os testes automáticos fazem compras. Com chave de produção elas seriam cobranças reais. O banco de dados é o mesmo do site publicado.
 - [ ] **Limpar os dados de teste do banco (perfis, faturas, cupons de teste) e deixar só a conta da nutricionista** _(Bloqueia o lançamento · Lucas)_
+  Feito em 26/11 antes do ensaio (backup antes). Repetir a limpeza depois do ensaio.
 - [ ] **Revogar a chave de API antiga do Asaas** _(Recomendado · Nutri)_
   Em asaas.com/customerApiAccessToken. O Asaas pede um código por SMS no celular final 6020.
 - [ ] **No painel de produção, usar Simular notificação e conferir nos logs da Vercel que o aviso passou pela assinatura** _(Bloqueia o lançamento · Ambos)_
 
 ## 4. Ensaio geral com dinheiro de verdade
 
-Use um cupom de 99% (crie o TESTE99 com 1 uso no painel da nutricionista) para gastar centavos. O plano mensal no cartão sai por R$ 2,10 e no Pix por R$ 1,97.
+Use os cupons já criados (TESTE99 = 99%, 4 usos; TESTE95 = 95%, 3 usos; válidos até 30/11) para gastar centavos. O plano mensal no cartão sai por R$ 2,10 e no Pix por R$ 1,97.
 
 - [ ] **Cartão à vista real (mensal com cupom): acesso liberado, e-mail de acesso chega (olhe o spam) e assinatura ativa no Mercado Pago** _(Bloqueia o lançamento · Ambos)_
 - [ ] **Devolver essa compra no painel do Mercado Pago e conferir tudo** _(Bloqueia o lançamento · Ambos)_

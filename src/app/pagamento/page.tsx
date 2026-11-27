@@ -789,7 +789,7 @@ function ConteudoCheckout() {
           mes: mesCartao,
           ano: `20${anoCartao}`,
           cvv: cartaoCvv.trim(),
-          cpf: (cartaoCpf || clienteCpf).replace(/D/g, ""),
+          cpf: (cartaoCpf || clienteCpf).replace(/\D/g, ""),
         });
 
         const res = await fetch("/api/pagamentos/assinatura", {

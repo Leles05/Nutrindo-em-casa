@@ -1246,9 +1246,11 @@ function ConteudoCheckout() {
                   <input
                     type="text"
                     value={clienteNome}
-                    onChange={(e) => {
-                      setClienteNome(e.target.value);
-                      if (!cartaoNome) setCartaoNome(e.target.value.toUpperCase());
+                    onChange={(e) => setClienteNome(e.target.value)}
+                    onBlur={() => {
+                      // copia para "Nome no cartão" só quando a pessoa termina de digitar (sai do campo) e se ele ainda estiver vazio
+                      const nome = clienteNome.trim().replace(/\s+/g, " ");
+                      if (nome && !cartaoNome.trim()) setCartaoNome(nome.toUpperCase());
                     }}
                     placeholder="Seu nome completo"
                     className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4C6C54]/50 focus:border-[#4C6C54]"

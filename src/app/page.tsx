@@ -693,10 +693,10 @@ export default function PaginaInicialLanding() {
                     <span className="text-3xl font-black text-slate-900">{formatarReais(PLANOS.trimestral.valor / 3)}</span>
                     <span className="text-xs text-slate-500">/mês no Pix</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-0.5">
                     <span className="text-[11px] text-slate-500">{formatarReais(PLANOS.trimestral.valor)} por trimestre no Pix · ou {formatarReais(PLANOS.trimestral.valorCartao)} no cartão</span>
-                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                      10% OFF
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">
+                      <strong className="font-extrabold">10% OFF</strong> em cima do mensal
                     </span>
                   </div>
                 </div>
@@ -746,10 +746,10 @@ export default function PaginaInicialLanding() {
                     <span className="text-3xl font-black text-slate-900">{formatarReais(PLANOS.anual.valor / 12)}</span>
                     <span className="text-xs text-slate-500">/mês no Pix</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-0.5">
                     <span className="text-[11px] text-slate-500">{formatarReais(PLANOS.anual.valor)} ao ano no Pix · ou {formatarReais(PLANOS.anual.valorCartao)} no cartão (até 12x)</span>
-                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                      15% OFF
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">
+                      <strong className="font-extrabold">15% OFF</strong> em cima do mensal
                     </span>
                   </div>
                 </div>

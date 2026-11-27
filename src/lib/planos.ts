@@ -40,18 +40,6 @@ export function ehPlano(valor: unknown): valor is Plano {
   return valor === "mensal" || valor === "trimestral" || valor === "anual";
 }
 
-/**
- * Cupom de desconto: vale só para o Plano Mensal e só na 1ª cobrança (depois, preço de tabela).
- * Trimestral e Anual já têm desconto automático e não aceitam cupom.
- * NEXT_PUBLIC_CUPOM_EM_TODOS_OS_PLANOS=1 libera o cupom nos outros planos (uso só para ensaios de pagamento; deixe desligado).
- */
-export function cupomValeParaPlano(plano: Plano): boolean {
-  return plano === "mensal" || process.env.NEXT_PUBLIC_CUPOM_EM_TODOS_OS_PLANOS === "1";
-}
-
-export const MENSAGEM_CUPOM_SO_MENSAL =
-  "O cupom vale apenas para o Plano Mensal, no primeiro mês. Os planos Trimestral e Anual já têm desconto automático.";
-
 export function arredondar(valor: number): number {
   return Math.round((valor + Number.EPSILON) * 100) / 100;
 }

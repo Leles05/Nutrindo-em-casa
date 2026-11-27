@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Script from "next/script";
-import { cupomValeParaPlano, formatarReais, MENSAGEM_CUPOM_SO_MENSAL, PARCELAS_PERMITIDAS, PLANOS } from "@/lib/planos";
+import { formatarReais, PARCELAS_PERMITIDAS, PLANOS } from "@/lib/planos";
 import { TERMOS_VERSAO } from "@/lib/termos";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
@@ -279,11 +279,6 @@ function ConteudoCheckout() {
       setCupomErro("Digite o código do cupom.");
       return;
     }
-    // cupom só vale no Plano Mensal (1º mês): Trimestral e Anual já têm desconto automático
-    if (!cupomValeParaPlano(planoSelecionado)) {
-      setCupomErro(MENSAGEM_CUPOM_SO_MENSAL);
-      return;
-    }
 
     setCupomCarregando(true);
     try {
@@ -307,14 +302,6 @@ function ConteudoCheckout() {
     }
   };
 
-  // trocou para Trimestral/Anual com cupom aplicado: tira o cupom e avisa
-  useEffect(() => {
-    if (cupomAplicado && !cupomValeParaPlano(planoSelecionado)) {
-      setCupomAplicado(null);
-      setCupomCodigo("");
-      setCupomErro(MENSAGEM_CUPOM_SO_MENSAL);
-    }
-  }, [planoSelecionado, cupomAplicado]);
 
   const removerCupom = () => {
     setCupomAplicado(null);
@@ -1753,7 +1740,7 @@ function ConteudoCheckout() {
                           Cupom {cupomAplicado.codigo} aplicado!
                         </span>
                         <span className="text-[11px] text-emerald-700">
-                          {cupomAplicado.descontoPercent}% de desconto no primeiro mês
+                          {cupomAplicado.descontoPercent}% de desconto nesta compra
                         </span>
                       </div>
                     </div>
@@ -1800,7 +1787,7 @@ function ConteudoCheckout() {
                       </p>
                     ) : (
                       <p className="text-[11px] text-slate-500">
-                        O cupom vale só para o primeiro mês do Plano Mensal. Depois, o valor é o normal do plano.
+                        O cupom vale só para esta compra. Na renovação, o valor é o normal do plano.
                       </p>
                     )}
                   </div>
@@ -1844,7 +1831,8 @@ function ConteudoCheckout() {
                 {cupomAplicado && (
                   <div className="text-right">
                     <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md inline-block">
-                      Desconto só no 1º mês. A partir do 2º mês: R$ {planoAtivo.precoCobradoTotal.toFixed(2).replace(".", ",")} por mês
+                      Desconto só nesta compra. Na renovação: R$ {planoAtivo.precoCobradoTotal.toFixed(2).replace(".", ",")}{" "}
+                      {planoSelecionado === "mensal" ? "por mês" : planoSelecionado === "trimestral" ? "a cada 3 meses" : "por ano"}
                     </span>
                   </div>
                 )}

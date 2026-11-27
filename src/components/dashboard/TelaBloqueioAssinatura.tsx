@@ -32,10 +32,10 @@ export default function TelaBloqueioAssinatura({
             Acesso Temporariamente Suspenso
           </span>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
-            Sua Assinatura Expirou 🔒
+            Sua assinatura está encerrada 🔒
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
-            Renove seu plano para continuar acessando as aulas, o diário alimentar e o acompanhamento clínico com a <strong>Dra. Laís Leles</strong>.
+            Contrate novamente para voltar às aulas, ao diário alimentar e ao acompanhamento clínico com a <strong>Dra. Laís Leles</strong>. Seu plano alimentar continua disponível para consulta.
           </p>
         </div>
 
@@ -67,8 +67,15 @@ export default function TelaBloqueioAssinatura({
             href="/pagamento?origem=upgrade"
             className="w-full py-3.5 px-6 bg-[#4C6C54] hover:bg-[#3a5340] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 group cursor-pointer"
           >
-            <span>Renovar Assinatura Agora</span>
+            <span>Contratar Novamente</span>
             <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+
+          <Link
+            href="/dashboard/receitas"
+            className="w-full py-2.5 px-4 text-xs font-bold text-[#4C6C54] hover:text-[#3a5340] bg-[#4C6C54]/5 hover:bg-[#4C6C54]/10 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#4C6C54]/20"
+          >
+            <span>Consultar meu plano alimentar</span>
           </Link>
 
           <Link

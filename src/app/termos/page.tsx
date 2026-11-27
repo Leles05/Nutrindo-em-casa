@@ -90,7 +90,22 @@ const SECOES: Secao[] = [
     ],
   },
   {
-    titulo: "7. Consultas online e reagendamento",
+    titulo: "7. Encerramento da assinatura e acesso ao plano alimentar",
+    destaque: true,
+    paragrafos: [
+      "Considera-se encerrada a assinatura quando deixar de existir ciclo contratado vigente, seja por cancelamento seguido do término do período já pago, pelo término de um período não renovado, pela devolução dos valores pagos (inclusive no prazo de garantia de 7 dias) ou pela suspensão por falta de pagamento.",
+      "Encerrada a assinatura, a conta e o prontuário não são excluídos, e o(a) usuário(a) poderá continuar acessando a plataforma com o seu login, exclusivamente para:",
+    ],
+    itens: [
+      "consultar, em modo de leitura, o plano alimentar e as orientações individualizadas já disponibilizados pela Dra. Laís Leles durante a vigência do contrato, podendo imprimi-los ou salvá-los em PDF para uso pessoal e familiar;",
+      "consultar o histórico de faturas e gerenciar os seus dados pessoais, inclusive solicitar a correção, a portabilidade ou a exclusão, nos termos da LGPD;",
+      "contratar novamente um plano, a qualquer tempo, com o mesmo e-mail e CPF.",
+    ],
+    rodape:
+      "O encerramento da assinatura suspende o acesso às demais funcionalidades, em especial as consultas por videochamada, as devolutivas semanais, o chat com a equipe, o Diário da Escada do Comer, as videoaulas e os materiais educativos, bem como a elaboração ou a atualização de planos alimentares. O plano alimentar entregue é de uso pessoal, intransferível e destinado exclusivamente à criança acompanhada, sendo vedadas a sua divulgação e a sua comercialização. Os dados permanecem armazenados com segurança, nos termos da Política de Privacidade, e as demais funcionalidades voltam a ficar disponíveis em caso de nova contratação.",
+  },
+  {
+    titulo: "8. Consultas online e reagendamento",
     paragrafos: [
       "As consultas são realizadas por videoconferência (Google Meet), com duração média de 50 a 60 minutos.",
     ],
@@ -102,14 +117,14 @@ const SECOES: Secao[] = [
     ],
   },
   {
-    titulo: "8. Natureza do serviço e limitações clínicas",
+    titulo: "9. Natureza do serviço e limitações clínicas",
     paragrafos: [
       "O trabalho é de natureza nutricional, comportamental e de terapia alimentar. Os resultados dependem da adesão da família às orientações e variam de criança para criança; não há garantia de resultado clínico específico.",
       "O serviço não substitui o acompanhamento do médico pediatra, exames periódicos ou o atendimento de emergência (como reações alérgicas graves, desidratação ou engasgo). Nesses casos, procure assistência médica imediata.",
     ],
   },
   {
-    titulo: "9. Dados pessoais, dados de saúde e sigilo",
+    titulo: "10. Dados pessoais, dados de saúde e sigilo",
     paragrafos: [
       "O tratamento dos seus dados e dos dados da criança segue a Lei Geral de Proteção de Dados (Lei nº 13.709/2018) e a nossa Política de Privacidade. Dados de saúde e alimentares de crianças são dados sensíveis e só são tratados com o consentimento específico e em destaque de pelo menos um dos pais ou do responsável legal, que você registra ao aceitar estes termos e pode revogar a qualquer momento.",
       "As informações são protegidas pelo sigilo profissional do nutricionista e usadas apenas pela Dra. Laís Leles e por equipe autorizada, para o acompanhamento nutricional. Não vendemos nem compartilhamos dados para publicidade. Prestadores de serviço (pagamentos, hospedagem, e-mail e agenda) tratam dados em nosso nome, sob contrato e para as finalidades descritas na Política de Privacidade.",
@@ -117,38 +132,38 @@ const SECOES: Secao[] = [
     ],
   },
   {
-    titulo: "10. Conteúdo e propriedade intelectual",
+    titulo: "11. Conteúdo e propriedade intelectual",
     paragrafos: [
-      "Videoaulas, materiais, receitas, devolutivas e demais conteúdos da plataforma são protegidos por direitos autorais. Concedemos a você uma licença pessoal, limitada, revogável e intransferível para uso familiar durante a vigência da assinatura.",
+      "Videoaulas, materiais, receitas, devolutivas e demais conteúdos da plataforma são protegidos por direitos autorais. Concedemos a você uma licença pessoal, limitada, revogável e intransferível para uso familiar durante a vigência da assinatura e, quanto ao plano alimentar já entregue, na forma da seção 7.",
       "É proibido copiar, gravar, divulgar, redistribuir ou revender os conteúdos, bem como compartilhar o acesso com outras famílias.",
     ],
   },
   {
-    titulo: "11. Uso adequado e suspensão",
+    titulo: "12. Uso adequado e suspensão",
     paragrafos: [
       "Não é permitido fraudar pagamentos, usar dados de terceiros sem autorização, tentar burlar a segurança da plataforma ou utilizá-la para fins ilícitos. O descumprimento pode levar à suspensão ou ao encerramento do acesso, com aviso ao responsável sempre que possível.",
     ],
   },
   {
-    titulo: "12. Disponibilidade e responsabilidade",
+    titulo: "13. Disponibilidade e responsabilidade",
     paragrafos: [
       "Empregamos esforços razoáveis para manter a plataforma disponível, mas podem ocorrer interrupções para manutenção ou por falhas de terceiros (internet, provedores de infraestrutura). Nada nestes termos limita os direitos que a lei garante ao consumidor.",
     ],
   },
   {
-    titulo: "13. Alterações destes termos",
+    titulo: "14. Alterações destes termos",
     paragrafos: [
       "Podemos atualizar estes termos. Sempre que houver uma nova versão, ela será apresentada no seu próximo acesso e será necessário um novo aceite para continuar usando a plataforma. As versões aceitas ficam registradas.",
     ],
   },
   {
-    titulo: "14. Lei aplicável e foro",
+    titulo: "15. Lei aplicável e foro",
     paragrafos: [
       "Estes termos são regidos pelas leis brasileiras, em especial o Código de Defesa do Consumidor (Lei nº 8.078/1990) e a LGPD. Fica eleito o foro do domicílio do consumidor para dirimir eventuais controvérsias.",
     ],
   },
   {
-    titulo: "15. Contato",
+    titulo: "16. Contato",
     paragrafos: [
       "Fornecedor do serviço: LAIS VIEIRA DE LIMA LELES LTDA (nome fantasia: Nutricionista Laís Leles), CNPJ 65.024.114/0001-17, com sede na Rua Dom Pedro I, nº 1013, apto 401, Cond. Green Valley, bairro Água Verde, Curitiba/PR, CEP 80620-130.",
       "Dúvidas, solicitações de cancelamento, reembolso ou exercício de direitos sobre dados: contato@nutrindoemcasa.com.br. Responsável técnica e encarregada de dados: Dra. Laís Leles (CRN-8 18878). Atendimento online para todo o Brasil.",

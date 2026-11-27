@@ -86,6 +86,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Estado 2: Plano Expirado / Inadimplente -> Bloqueio Total
   if (planoExpirado) {
+    // Termos, seção 7: com a assinatura encerrada só o plano alimentar já entregue continua disponível (leitura)
+    if (pathname.startsWith("/dashboard/receitas")) {
+      return (
+        <div className="min-h-screen bg-[#F0EAE1] font-sans text-slate-800">
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold">
+              Assinatura encerrada: você mantém apenas a consulta ao seu plano alimentar. As demais funcionalidades voltam com uma nova contratação.
+            </span>
+            <span className="flex items-center gap-3 font-bold">
+              <a href="/pagamento?origem=upgrade" className="underline">Contratar novamente</a>
+              <a href="/dashboard" className="underline">Voltar</a>
+            </span>
+          </div>
+          <div className="max-w-6xl mx-auto p-3 sm:p-6">{children}</div>
+        </div>
+      );
+    }
     return <TelaBloqueioAssinatura diasRestantes={diasRestantes} />;
   }
 

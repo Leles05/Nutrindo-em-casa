@@ -28,8 +28,10 @@ import {
   arredondar,
   calcularTotal,
   CREDITO_UPGRADE_TRIMESTRAL_PARA_ANUAL,
+  cupomValeParaPlano,
   ehPlano,
   hojeSP,
+  MENSAGEM_CUPOM_SO_MENSAL,
   MESES_DO_PLANO,
   normalizarParcelas,
   PLANOS,
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
     let percentualCupom = 0;
     const cupomInformado = String(body.cupom || "").trim();
     if (cupomInformado) {
+      if (!cupomValeParaPlano(plano)) return erro(MENSAGEM_CUPOM_SO_MENSAL);
       const cupom = await buscarCupom(admin, cupomInformado);
       if (!cupom) return erro("Cupom inválido ou não encontrado.");
       const status = statusDoCupom(cupom);

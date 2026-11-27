@@ -5,7 +5,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { calcularTotal, formatarReais, MESES_DO_PLANO, PLANOS, valorDoPlano } from "../src/lib/planos.ts";
+import { calcularTotal, cupomValeParaPlano, formatarReais, MESES_DO_PLANO, PLANOS, valorDoPlano } from "../src/lib/planos.ts";
 
 describe("Preços: Pix (incentivo) e cartão (padrão)", () => {
   it("valores combinados com a nutricionista", () => {
@@ -52,5 +52,20 @@ describe("Preços: Pix (incentivo) e cartão (padrão)", () => {
     assert.equal(formatarReais(2009.4), "R$ 2.009,40");
     assert.equal(formatarReais(177.3), "R$ 177,30");
     assert.equal(formatarReais(2142), "R$ 2.142,00");
+  });
+});
+
+describe("Cupom: vale só para o Plano Mensal (1º mês)", () => {
+  it("é aceito no mensal e recusado no trimestral e no anual (que já têm desconto automático)", () => {
+    assert.equal(cupomValeParaPlano("mensal"), true);
+    assert.equal(cupomValeParaPlano("trimestral"), false);
+    assert.equal(cupomValeParaPlano("anual"), false);
+  });
+
+  it("só a 1ª cobrança tem desconto: o mensal com cupom custa menos, o preço de tabela (renovação) não muda", () => {
+    const primeira = calcularTotal({ plano: "mensal", percentualCupom: 50, forma: "CARTAO" });
+    assert.equal(primeira, 105);
+    assert.equal(valorDoPlano("mensal", "CARTAO"), 210);
+    assert.equal(valorDoPlano("mensal", "PIX"), 197);
   });
 });

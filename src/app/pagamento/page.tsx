@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import Script from "next/script";
-import { formatarReais, PARCELAS_PERMITIDAS, PLANOS } from "@/lib/planos";
+import { cupomValeParaPlano, formatarReais, MENSAGEM_CUPOM_SO_MENSAL, PARCELAS_PERMITIDAS, PLANOS } from "@/lib/planos";
 import { TERMOS_VERSAO } from "@/lib/termos";
 import {
   ShieldCheck, Lock, CheckCircle2, Copy, Check, CreditCard,
@@ -272,19 +272,16 @@ function ConteudoCheckout() {
   const [cupomErro, setCupomErro] = useState("");
   const [cupomCarregando, setCupomCarregando] = useState(false);
 
-  const cuponsValidos: Record<string, number> = {
-    NUTRINDO10: 10,
-    PRIMEIRACONSULTA: 15,
-    LAIS20: 20,
-    BEMVINDO: 10,
-    FAMILIA10: 10,
-  };
-
   const aplicarCupom = async () => {
     setCupomErro("");
     const codigoLimpo = cupomCodigo.trim().toUpperCase();
     if (!codigoLimpo) {
       setCupomErro("Digite o código do cupom.");
+      return;
+    }
+    // cupom só vale no Plano Mensal (1º mês): Trimestral e Anual já têm desconto automático
+    if (!cupomValeParaPlano(planoSelecionado)) {
+      setCupomErro(MENSAGEM_CUPOM_SO_MENSAL);
       return;
     }
 
@@ -300,28 +297,24 @@ function ConteudoCheckout() {
         });
         setCupomErro("");
       } else {
-        // Se a API retornou erro específico (expirado, esgotado, etc.)
-        if (data.message && data.message !== "Cupom inválido ou não encontrado.") {
-          setCupomErro(data.message);
-        } else if (cuponsValidos[codigoLimpo]) {
-          // Fallback para códigos pré-definidos se não cadastrado dinamicamente
-          setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
-          setCupomErro("");
-        } else {
-          setCupomErro(data.message || "Cupom inválido ou expirado.");
-        }
+        // só o servidor decide se o cupom existe (o desconto mostrado aqui é o mesmo que será cobrado)
+        setCupomErro(data.message || "Cupom inválido ou expirado.");
       }
     } catch {
-      if (cuponsValidos[codigoLimpo]) {
-        setCupomAplicado({ codigo: codigoLimpo, descontoPercent: cuponsValidos[codigoLimpo] });
-        setCupomErro("");
-      } else {
-        setCupomErro("Erro ao verificar cupom. Tente novamente.");
-      }
+      setCupomErro("Erro ao verificar cupom. Tente novamente.");
     } finally {
       setCupomCarregando(false);
     }
   };
+
+  // trocou para Trimestral/Anual com cupom aplicado: tira o cupom e avisa
+  useEffect(() => {
+    if (cupomAplicado && !cupomValeParaPlano(planoSelecionado)) {
+      setCupomAplicado(null);
+      setCupomCodigo("");
+      setCupomErro(MENSAGEM_CUPOM_SO_MENSAL);
+    }
+  }, [planoSelecionado, cupomAplicado]);
 
   const removerCupom = () => {
     setCupomAplicado(null);
@@ -1760,7 +1753,7 @@ function ConteudoCheckout() {
                           Cupom {cupomAplicado.codigo} aplicado!
                         </span>
                         <span className="text-[11px] text-emerald-700">
-                          {cupomAplicado.descontoPercent}% de desconto imediato
+                          {cupomAplicado.descontoPercent}% de desconto no primeiro mês
                         </span>
                       </div>
                     </div>
@@ -1801,9 +1794,13 @@ function ConteudoCheckout() {
                         {cupomCarregando ? "..." : "Aplicar"}
                       </button>
                     </div>
-                    {cupomErro && (
+                    {cupomErro ? (
                       <p className="text-[11px] text-red-500 font-semibold animation-fade-in">
                         {cupomErro}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">
+                        O cupom vale só para o primeiro mês do Plano Mensal. Depois, o valor é o normal do plano.
                       </p>
                     )}
                   </div>
@@ -1843,6 +1840,14 @@ function ConteudoCheckout() {
                     </span>
                   </div>
                 </div>
+
+                {cupomAplicado && (
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-md inline-block">
+                      Desconto só no 1º mês. A partir do 2º mês: R$ {planoAtivo.precoCobradoTotal.toFixed(2).replace(".", ",")} por mês
+                    </span>
+                  </div>
+                )}
 
                 {jurosDoParcelamento && (
                   <div className="text-right">
